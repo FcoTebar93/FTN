@@ -8,7 +8,7 @@ export type WorkflowStatus =
 export interface PendingActivity {
     id: ActivityId;
     name: string;
-    result: unknown;
+    input: unknown;
 }
 
 export interface CompletedActivity {

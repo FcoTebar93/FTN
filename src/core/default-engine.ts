@@ -40,7 +40,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
 
                 return {
                     ...nextState,
-                    pendingActivities: [...nextState.pendingActivities, { id: activityId, name: activityName, result: undefined }],
+                    pendingActivities: [...nextState.pendingActivities, { id: activityId, name: activityName, input }],
                 }
             }
             case "ActivityCompleted": {
@@ -55,7 +55,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     completedActivities: previous
                     ? [
                         ...nextState.completedActivities,
-                        { id: activityId, name: previous.name, input: previous.result, result },
+                        { id: activityId, name: previous.name, input: previous.input, result },
                     ]
                     : nextState.completedActivities,
                 }
