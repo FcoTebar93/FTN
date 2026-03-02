@@ -1,0 +1,27 @@
+{
+    "name": "ftn-dsl-project",
+    "version": "0.1.0",
+    "description": "A project about DSLs",
+    "author": "Francisco Tébar Navarro",
+    "license": "MIT",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "dependencies": {
+
+    },
+    "devDependencies": {
+        "@types/node": "^22.13.10",
+        "typescript": "^5.7.3",
+        "ts-node": "^10.9.2",
+        "ts-node-dev": "^2.0.0",
+        "nodemon": "^3.1.9"
+    },
+    "scripts": {
+        "start": "node src/main.js",
+        "build": "tsc",
+        "test": "jest",
+        "lint": "eslint src/**/*.ts",
+        "format": "prettier --write \"src/**/*.ts\""
+    }
+}
