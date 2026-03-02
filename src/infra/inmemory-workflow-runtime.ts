@@ -1,7 +1,7 @@
 import type { WorkflowRuntime, WorkflowRuntimeDeps, StartWorkflowOptions, StartWorkflowResult, WorkflowTickResult } from "../modules/workflow-runtime";
 import type { WorkflowId, RunId, Version } from "../shared/types";
 import type { WorkflowEvent } from "../core/events";
-import { WorkflowState } from "../core/workflow-state";
+import type { WorkflowState } from "../core/workflow-state";
 
 function generateWorkflowId(): WorkflowId {
     return `workflow-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
