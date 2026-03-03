@@ -78,7 +78,6 @@ describe("InMemoryWorkflowWorker", () => {
     assert.equal(state?.pendingActivities.length, 1);
     assert.equal(state?.pendingActivities[0].name, "echo-activity");
 
-    // Opcional: podemos ir más allá y dejar que el ActivityWorker complete la actividad
     const activityWorker = new InMemoryActivityWorker({
       taskQueue,
       activities,

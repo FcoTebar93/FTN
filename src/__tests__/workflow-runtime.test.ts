@@ -26,7 +26,7 @@ describe("InMemoryWorkflowRuntime", () => {
     const { workflowId, runId, version } = await runtime.startWorkflow({
       workflowName: "example",
       input: { foo: "bar" },
-      definition: async () => ({ ok: true }), // de momento no se usa en runWorkflowTick
+      definition: async () => ({ ok: true }),
     });
 
     assert.equal(version, 1);
@@ -281,5 +281,35 @@ describe("InMemoryWorkflowRuntime", () => {
   
     const state = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(state);
+  });
+
+  it("marca el workflow como completed y guarda el resultado", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "simple-completion",
+      input: { x: 1 },
+      definition: async (_ftn, input) => {
+        return { sum: input.x + 1 };
+      },
+    });
+  
+    await runtime.runWorkflowTick(workflowId, runId);
+  
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(state?.status, "completed");
+    assert.deepEqual(state?.result, { sum: 2 });
   });
 });
