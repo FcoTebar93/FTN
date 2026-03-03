@@ -5,6 +5,7 @@ import type { WorkflowEngine } from "../core/engine";
 import type { WorkflowDefinition } from "../core/ftn";
 import type { SnapshotStore } from "./snapshot-store";
 import type { EventStore } from "./event-store";
+import type { TaskQueue } from "./task-queue";
 
 export interface WorkflowRuntimeConfig {
     snapshotInterval: number;
@@ -14,6 +15,7 @@ export interface WorkflowRuntimeDeps {
     engine: WorkflowEngine;
     eventStore: EventStore;
     snapshotStore: SnapshotStore;
+    taskQueue: TaskQueue;
     config: WorkflowRuntimeConfig;
 }
 

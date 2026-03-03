@@ -4,6 +4,8 @@ import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
 import type { FTNApi, ActivityHandle, WorkflowDefinition } from "../core/ftn";
 import type { ActivityId } from "../shared/types";
+import type { ActivityTask } from "../shared/tasks";
+
 
 type WorkflowKey = string;
 
@@ -34,12 +36,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     private readonly eventStore;
     private readonly snapshotStore;
     private readonly config;
+    private readonly taskQueue;
     private readonly definitions = new Map<WorkflowKey, StoredDefinition>();
 
     constructor(deps: WorkflowRuntimeDeps) {
         this.engine = deps.engine;
         this.eventStore = deps.eventStore;
         this.snapshotStore = deps.snapshotStore;
+        this.taskQueue = deps.taskQueue;
         this.config = deps.config;
     }
     
@@ -196,9 +200,30 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         );
         lastEventVersion = appended[appended.length - 1].version;
 
+        const activityTasks: ActivityTask[] = [];
+
         for (const ev of appended) {
-            currentState = this.engine.applyEvent(currentState, ev);
-        }
+            if (ev.type === "ActivityScheduled") {
+                const { activityId, activityName, input } = ev.payload;
+                const task: ActivityTask = {
+                id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
+                type: "activity",
+                workflowId: ev.workflowId,
+                runId: ev.runId,
+                activityId,
+                activityName,
+                createdAt: ev.startedAt,
+                scheduledAt: ev.startedAt,
+                workerType: "activity",
+                targetQueue: "activities",
+                };
+                activityTasks.push(task);
+                }
+            }
+
+            for (const task of activityTasks) {
+                await this.taskQueue.enqueue(task);
+            }
         }
 
         return {
