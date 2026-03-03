@@ -4,7 +4,7 @@ import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
-import { InMemoryActivityRegistry } from "../app/activities";
+import { InMemoryActivityRegistry, sendWelcomeEmailActivity } from "../app/activities";
 import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import type { WorkflowTask } from "../shared/tasks";
@@ -15,6 +15,8 @@ const eventStore = new InMemoryEventStore();
 const snapshotStore = new InMemorySnapshotStore();
 const taskQueue = new InMemoryTaskQueue();
 const activities = new InMemoryActivityRegistry();
+
+activities.register("send-welcome-email", sendWelcomeEmailActivity);
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
@@ -185,7 +187,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 server.listen(PORT, () => {
   console.log(`FTN Workflow Engine running on http://localhost:${PORT}`);
 });

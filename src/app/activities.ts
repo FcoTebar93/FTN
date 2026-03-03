@@ -1,3 +1,5 @@
+import { SendWelcomeEmailInput, SendWelcomeEmailResult } from "./workflows";
+
 export type ActivityFn<TInput = unknown, TResult = unknown> = (input: TInput) => Promise<TResult> | TResult;
 
 export interface ActivityRegistry {
@@ -14,4 +16,9 @@ export class InMemoryActivityRegistry implements ActivityRegistry {
     getActivity(name: string): ActivityFn | undefined {
         return this.activities.get(name);
     }
+}
+
+export const sendWelcomeEmailActivity: ActivityFn<SendWelcomeEmailInput, SendWelcomeEmailResult> = async (input) => {
+    console.log(`Sending welcome email to ${input.email}`);
+    return { success: true };
 }
