@@ -192,4 +192,53 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(tick.newEvents[0].type, "TimerScheduled");
     assert.equal(state?.pendingTimers.length, 1);
   });
+
+  it("parallel programa varias actividades y join lee sus resultados tras completarlas", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+    const activities = new InMemoryActivityRegistry();
+  
+    activities.register("echo", async (input: { value: number }) => input.value);
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "parallel-join",
+      input: { a: 1, b: 2 },
+      definition: async (ftn, input) => {
+        const handles = ftn.parallel<number>([
+          () => ftn.activity("echo", { value: input.a }),
+          () => ftn.activity("echo", { value: input.b }),
+        ]);
+  
+        return handles;
+      },
+    });
+  
+    await runtime.runWorkflowTick(workflowId, runId);
+  
+    const activityWorker = new InMemoryActivityWorker({
+      taskQueue,
+      activities,
+      eventStore,
+      snapshotStore,
+      engine,
+      activityQueueName: "activities",
+    });
+  
+    await activityWorker.runOnce();
+    await activityWorker.runOnce();
+  
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(state?.completedActivities.length, 2);
+  });
 });
