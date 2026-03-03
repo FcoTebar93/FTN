@@ -82,4 +82,11 @@ export class InMemoryActivityWorker {
 
       await this.deps.taskQueue.completeTask(lease.leaseId);
     }
+
+    async runForever(cancellationSignal: { aborted: boolean }): Promise<void> {
+      while (!cancellationSignal.aborted) {
+        await this.runOnce();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
 }
