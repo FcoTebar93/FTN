@@ -155,12 +155,33 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             return { id: activityId, name };
           },
 
-          parallel: async () => {
-            throw new Error("Not implemented");
+          parallel<TResult>(
+            branches: Array<() => ActivityHandle<TResult>>
+          ): ActivityHandle<TResult>[] {
+            const handles: ActivityHandle<TResult>[] = [];
+            for (const branch of branches) {
+              const handle = branch();
+              handles.push(handle);
+            }
+            return handles;
           },
 
-          join: async () => {
-            throw new Error("Not implemented");
+          async join<TResult>(handles: ActivityHandle<TResult>[]): Promise<TResult[]> {
+            const results: TResult[] = [];
+        
+            for (const handle of handles) {
+              const completed = currentState.completedActivities.find(
+                (a) => a.id === handle.id
+              );
+              if (!completed) {
+                throw new Error(
+                  `Activity ${handle.id} is not completed yet; join must be called after completion`
+                );
+              }
+              results.push(completed.result as TResult);
+            }
+        
+            return results;
           },
 
           conditional: async () => {

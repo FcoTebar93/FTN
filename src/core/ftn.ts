@@ -17,7 +17,7 @@ export interface ParallelOptions {
 export interface FTNApi {
     activity<TInput, TResult>(name: string, input: TInput): ActivityHandle<TResult>;
 
-    parallel<TInput, TResult>(branches: Array<() => Promise<TResult>>, options?: ParallelOptions): Promise<TResult[]>;
+    parallel<TResult>(branches: Array<() => void>): ActivityHandle<TResult>[];
 
     join<TResult>(handles: ActivityHandle<TResult>[]): Promise<TResult[]>;
 
