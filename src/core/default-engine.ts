@@ -20,6 +20,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             failureReason: undefined,
             pendingActivities: [],
             completedActivities: [],
+            pendingTimers: [],
             stepState: undefined
         };
     }
@@ -91,6 +92,13 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     ...nextState,
                     version: snapshotVersion,
                 }
+            }
+            case "TimerScheduled": {
+                const { wakeAt } = event.payload;
+                return {
+                  ...nextState,
+                  pendingTimers: [...nextState.pendingTimers, { wakeAt }],
+                };
             }
             case "SignalReceived":
             case "StepForked":

@@ -11,6 +11,10 @@ export interface PendingActivity {
     input: unknown;
 }
 
+export interface PendingTimer {
+    wakeAt: string;
+}
+
 export interface CompletedActivity {
     id: ActivityId;
     name: string;
@@ -30,6 +34,7 @@ export interface WorkflowState {
 
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];
+    pendingTimers: PendingTimer[];
 
     stepState: unknown;
 }

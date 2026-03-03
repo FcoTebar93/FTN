@@ -10,7 +10,8 @@ export type WorkflowEventType =
     | "StepForked"
     | "StepJoined"
     | "SignalReceived"
-    | "SnapshotCreated";
+    | "SnapshotCreated"
+    | "TimerScheduled";
 
 export interface BaseWorkflowEvent {
     id: EventId;
@@ -102,6 +103,13 @@ export interface SnapshotCreatedEvent extends BaseWorkflowEvent {
     };
 }
 
+export interface TimerScheduledEvent extends BaseWorkflowEvent {
+    type: "TimerScheduled";
+    payload: {
+      wakeAt: string;
+    };
+}
+
 export type WorkflowEvent =
     | WorkflowStartedEvent
     | ActivityScheduledEvent
@@ -112,4 +120,5 @@ export type WorkflowEvent =
     | SignalReceivedEvent
     | WorkflowCompletedEvent
     | WorkflowFailedEvent
-    | SnapshotCreatedEvent;
+    | SnapshotCreatedEvent
+    | TimerScheduledEvent;

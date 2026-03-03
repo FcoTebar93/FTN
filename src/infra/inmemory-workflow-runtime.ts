@@ -171,8 +171,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             throw new Error("Not implemented");
           },
 
-          sleep: async () => {
-            throw new Error("Not implemented");
+          sleep: async (ms: number): Promise<void> => {
+            const wakeAt = new Date(Date.now() + ms).toISOString();
+            newDomainEvents.push({
+              type: "TimerScheduled",
+              workflowId,
+              runId,
+              payload: { wakeAt },
+            });
           },
 
           signal: async () => {
