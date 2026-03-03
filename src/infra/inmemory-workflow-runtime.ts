@@ -2,6 +2,16 @@ import type { WorkflowRuntime, WorkflowRuntimeDeps, StartWorkflowOptions, StartW
 import type { WorkflowId, RunId, Version } from "../shared/types";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
+import type { FTNApi, ActivityHandle, WorkflowDefinition } from "../core/ftn";
+import type { ActivityId } from "../shared/types";
+
+type WorkflowKey = string;
+
+type StoredDefinition = {
+    name: string;
+    definition: WorkflowDefinition<any, any>;
+    input: unknown;
+};
 
 function generateWorkflowId(): WorkflowId {
     return `workflow-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -11,11 +21,20 @@ function generateRunId(): RunId {
     return `run-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 }
 
+function makeWorkflowKey(workflowId: WorkflowId, runId: RunId): WorkflowKey {
+    return `${workflowId}:${runId}`
+}
+
+function generateActivityId(): ActivityId {
+    return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
 export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     private readonly engine;
     private readonly eventStore;
     private readonly snapshotStore;
     private readonly config;
+    private readonly definitions = new Map<WorkflowKey, StoredDefinition>();
 
     constructor(deps: WorkflowRuntimeDeps) {
         this.engine = deps.engine;
@@ -56,6 +75,13 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const runId = generateRunId();
 
         const { workflowName, input } = options;
+
+        const key = makeWorkflowKey(workflowId, runId);
+        this.definitions.set(key, {
+            name: workflowName,
+            definition: options.definition as WorkflowDefinition<any, any>,
+            input: options.input as unknown,
+        });
         
         const startEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
             type: "WorkflowStarted",
@@ -100,11 +126,85 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             events,
             snapshot?.state
         );
-        
-        return {
-            state: rehydrated.state,
-            newEvents: [],
-            snapshotCreated: false,
+
+        let currentState = rehydrated.state;
+        let lastEventVersion = rehydrated.lastEventVersion;
+
+        const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
+
+        const ftn: FTNApi = {
+          activity<TInput, TResult>(
+            name: string,
+            input: TInput
+          ): ActivityHandle<TResult> {
+            const activityId = generateActivityId();
+            newDomainEvents.push({
+              type: "ActivityScheduled",
+              workflowId,
+              runId,
+              payload: {
+                activityId,
+                activityName: name,
+                input,
+              },
+            });
+            return { id: activityId, name };
+          },
+
+          parallel: async () => {
+            throw new Error("Not implemented");
+          },
+
+          join: async () => {
+            throw new Error("Not implemented");
+          },
+
+          conditional: async () => {
+            throw new Error("Not implemented");
+          },
+
+          retry: async () => {
+            throw new Error("Not implemented");
+          },
+
+          sleep: async () => {
+            throw new Error("Not implemented");
+          },
+
+          signal: async () => {
+            throw new Error("Not implemented");
+          }
         };
+
+        const key = makeWorkflowKey(workflowId, runId);
+        const defEntry = this.definitions.get(key);
+
+        const shouldExecuteDefinition = !!defEntry && events.length <= 1;
+        
+        if (shouldExecuteDefinition && defEntry) {
+            await defEntry.definition(ftn, defEntry.input);
+        }
+
+        let appended: WorkflowEvent[] = [];
+
+        if (newDomainEvents.length > 0) {
+        appended = await this.eventStore.appendEvents(
+            workflowId,
+            runId,
+            lastEventVersion,
+            newDomainEvents
+        );
+        lastEventVersion = appended[appended.length - 1].version;
+
+        for (const ev of appended) {
+            currentState = this.engine.applyEvent(currentState, ev);
+        }
+        }
+
+        return {
+            state: currentState,
+            newEvents: appended,
+            snapshotCreated: false
+          };
     }
 }
