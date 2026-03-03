@@ -75,6 +75,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     ...nextState,
                     status: "completed",
                     completedAt: event.startedAt,
+                    result: event.payload.result,
                 }
             }
             case "WorkflowFailed": {

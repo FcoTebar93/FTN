@@ -135,6 +135,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         let lastEventVersion = rehydrated.lastEventVersion;
 
         const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
+        let definitionResult: unknown;
 
         const ftn: FTNApi = {
           activity<TInput, TResult>(
@@ -227,9 +228,9 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const defEntry = this.definitions.get(key);
 
         const shouldExecuteDefinition = !!defEntry && events.length <= 1;
-        
+
         if (shouldExecuteDefinition && defEntry) {
-            await defEntry.definition(ftn, defEntry.input);
+          definitionResult = await defEntry.definition(ftn, defEntry.input);
         }
 
         let appended: WorkflowEvent[] = [];
@@ -267,6 +268,28 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             for (const task of activityTasks) {
                 await this.taskQueue.enqueue(task);
             }
+        }
+
+        if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
+          const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
+            type: "WorkflowCompleted",
+            workflowId,
+            runId,
+            payload: {
+              result: definitionResult,
+            },
+          };
+        
+          const [persistedCompleted] = await this.eventStore.appendEvents(
+            workflowId,
+            runId,
+            lastEventVersion,
+            [completedEvent]
+          );
+        
+          lastEventVersion = persistedCompleted.version;
+          currentState = this.engine.applyEvent(currentState, persistedCompleted);
+          appended = [...appended, persistedCompleted];
         }
 
         return {

@@ -36,6 +36,8 @@ export interface WorkflowState {
     completedActivities: CompletedActivity[];
     pendingTimers: PendingTimer[];
 
+    result?: unknown;
+
     stepState: unknown;
 }
 
