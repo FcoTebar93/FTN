@@ -35,4 +35,36 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.ok(state);
     assert.ok(state?.startedAt);
   });
+
+  it("programa una actividad usando ftn.activity", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "send-email",
+      input: { userId: "u1", email: "test@example.com" },
+      definition: async (ftn, input) => {
+        ftn.activity("send-welcome-email", input);
+        return { ok: true };
+      },
+    });
+  
+    const tick = await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+  
+    assert.equal(tick.newEvents.length, 1);
+    assert.equal(tick.newEvents[0].type, "ActivityScheduled");
+  
+    assert.ok(state);
+    assert.equal(state?.pendingActivities.length, 1);
+    assert.equal(state?.pendingActivities[0].name, "send-welcome-email");
+  });
 });
