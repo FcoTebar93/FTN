@@ -243,10 +243,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             newDomainEvents
         );
         lastEventVersion = appended[appended.length - 1].version;
-
         const activityTasks: ActivityTask[] = [];
 
         for (const ev of appended) {
+            currentState = this.engine.applyEvent(currentState, ev);
+
             if (ev.type === "ActivityScheduled") {
                 const { activityId, activityName, input } = ev.payload;
                 const task: ActivityTask = {
@@ -270,7 +271,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             }
         }
 
-        if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
+        if (currentState.status === "running" && currentState.pendingActivities.length === 0 && currentState.pendingTimers.length === 0) {
           const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
             type: "WorkflowCompleted",
             workflowId,
@@ -292,10 +293,28 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           appended = [...appended, persistedCompleted];
         }
 
+        const snapshotBaseVersion = snapshot?.version ?? 0;
+        const eventsSinceSnapshot = lastEventVersion - snapshotBaseVersion;
+        let snapshotCreated = false;
+
+        if (
+          eventsSinceSnapshot >= this.config.snapshotInterval &&
+          lastEventVersion > snapshotBaseVersion
+        ) {
+          await this.snapshotStore.saveSnapshot({
+            workflowId,
+            runId,
+            version: lastEventVersion,
+            state: currentState,
+            createdAt: new Date().toISOString(),
+          });
+          snapshotCreated = true;
+        }
+
         return {
             state: currentState,
             newEvents: appended,
-            snapshotCreated: false
+            snapshotCreated
           };
     }
 }

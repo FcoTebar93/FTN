@@ -36,7 +36,7 @@ describe("InMemoryWorkflowRuntime", () => {
 
     assert.equal(tick.state.id, workflowId);
     assert.equal(tick.state.runId, runId);
-    assert.equal(tick.state.status, "running");
+    assert.equal(tick.state.status, "completed");
     assert.ok(state);
     assert.ok(state?.startedAt);
   });
@@ -311,5 +311,39 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.ok(state);
     assert.equal(state?.status, "completed");
     assert.deepEqual(state?.result, { sum: 2 });
+  });
+
+  it("crea un snapshot cuando se superan snapshotInterval eventos", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 2 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "snapshot-test",
+      input: {},
+      definition: async (ftn) => {
+        ftn.activity("noop", {});
+        return;
+      },
+    });
+  
+    const tick1 = await runtime.runWorkflowTick(workflowId, runId);
+    assert.equal(tick1.snapshotCreated, true);
+  
+    const tick2 = await runtime.runWorkflowTick(workflowId, runId);
+    assert.equal(tick2.snapshotCreated, false);
+  
+    const snapshot = await snapshotStore.loadLatestSnapshot(workflowId, runId);
+    assert.ok(snapshot);
+    assert.equal(snapshot?.version, 2);
   });
 });
