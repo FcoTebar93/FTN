@@ -202,9 +202,25 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             });
           },
 
-          signal: async () => {
-            throw new Error("Not implemented");
-          }
+          signal: async <TData = unknown>(name: string): Promise<TData> => {
+            const allEventsForSignal: WorkflowEvent[] =
+              await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
+          
+            const signalEvent = [...allEventsForSignal]
+              .reverse()
+              .find(
+                (e) =>
+                  e.type === "SignalReceived" && e.payload.signalName === name
+              );
+          
+              if (!signalEvent || signalEvent.type !== "SignalReceived") {
+                throw new Error(
+                  `Signal "${name}" not found for workflow ${workflowId}/${runId}`
+                );
+              }
+              
+              return signalEvent.payload.data as TData;
+          },
         };
 
         const key = makeWorkflowKey(workflowId, runId);

@@ -11,15 +11,15 @@ export interface PendingActivity {
     input: unknown;
 }
 
-export interface PendingTimer {
-    wakeAt: string;
-}
-
 export interface CompletedActivity {
     id: ActivityId;
     name: string;
     input: unknown;
     result: unknown;
+}
+
+export interface PendingTimer {
+    wakeAt: string;
 }
 
 export interface WorkflowState {

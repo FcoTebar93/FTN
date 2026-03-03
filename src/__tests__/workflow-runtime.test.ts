@@ -241,4 +241,45 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.ok(state);
     assert.equal(state?.completedActivities.length, 2);
   });
+
+  it("ftn.signal lee la última señal SignalReceived del event log", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "signal-workflow",
+      input: {},
+      definition: async (ftn) => {
+        const data = await ftn.signal<{ foo: string }>("my-signal");
+        return data;
+      },
+    });
+  
+    await eventStore.appendEvents(workflowId, runId, 1, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: {
+          signalName: "my-signal",
+          data: { foo: "bar" },
+        },
+      },
+    ]);
+  
+    const tick = await runtime.runWorkflowTick(workflowId, runId);
+  
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+  });
 });
