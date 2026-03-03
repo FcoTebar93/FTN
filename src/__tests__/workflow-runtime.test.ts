@@ -160,4 +160,36 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state?.completedActivities.length, 1);
     assert.deepEqual(state?.completedActivities[0].result, { value: 42 });
   });
+
+  it("ftn.sleep programa un TimerScheduled y añade un pendingTimer", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "sleep-workflow",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.sleep(1000);
+        return { done: true };
+      },
+    });
+  
+    const tick = await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+  
+    assert.ok(state);
+    assert.equal(tick.newEvents.length, 1);
+    assert.equal(tick.newEvents[0].type, "TimerScheduled");
+    assert.equal(state?.pendingTimers.length, 1);
+  });
 });
