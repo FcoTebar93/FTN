@@ -1,7 +1,7 @@
 import type { WorkflowEngine, RehydratedWorkflow } from "./engine";
 import type { WorkflowState } from "./workflow-state";
 import type { WorkflowEvent } from "./events";
-import type { WorkflowId, RunId } from "../shared/types";
+import type { WorkflowId, RunId, ActivityStep, SleepStep } from "../shared/types";
 
 export class DefaultWorkflowEngine implements WorkflowEngine {
     initializeFromStartEvent(event: WorkflowEvent): WorkflowState {
@@ -39,28 +39,50 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             }
             case "ActivityScheduled": {
                 const { activityId, activityName, input } = event.payload;
-
+              
+                const activityStep: ActivityStep = {
+                  id: activityId,           
+                  kind: "activity",
+                  status: "running",
+                  activityId,
+                  activityName,
+                };
+              
                 return {
-                    ...nextState,
-                    pendingActivities: [...nextState.pendingActivities, { id: activityId, name: activityName, input }],
-                }
+                  ...nextState,
+                  pendingActivities: [
+                    ...nextState.pendingActivities,
+                    { id: activityId, name: activityName, input },
+                  ],
+                  steps: [...nextState.steps, activityStep],
+                };
             }
             case "ActivityCompleted": {
                 const { activityId, result } = event.payload;
-
+              
                 const pending = nextState.pendingActivities.filter(a => a.id !== activityId);
                 const previous = nextState.pendingActivities.find(a => a.id === activityId);
-
+              
                 return {
-                    ...nextState,
-                    pendingActivities: pending,
-                    completedActivities: previous
+                  ...nextState,
+                  pendingActivities: pending,
+                  completedActivities: previous
                     ? [
                         ...nextState.completedActivities,
-                        { id: activityId, name: previous.name, input: previous.input, result },
-                    ]
+                        {
+                          id: activityId,
+                          name: previous.name,
+                          input: previous.input,
+                          result,
+                        },
+                      ]
                     : nextState.completedActivities,
-                }
+                  steps: nextState.steps.map(step =>
+                    step.kind === "activity" && step.activityId === activityId
+                      ? { ...step, status: "completed" }
+                      : step
+                  ),
+                };
             }
             case "ActivityFailed": {
                 const { reason } = event.payload;
@@ -97,9 +119,18 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             }
             case "TimerScheduled": {
                 const { wakeAt } = event.payload;
+              
+                const sleepStep: SleepStep = {
+                  id: `sleep-${event.version}`,
+                  kind: "sleep",
+                  status: "waiting",
+                  wakeAt,
+                };
+              
                 return {
                   ...nextState,
                   pendingTimers: [...nextState.pendingTimers, { wakeAt }],
+                  steps: [...nextState.steps, sleepStep],
                 };
             }
             case "ConditionalBranchChosen": {
@@ -114,11 +145,33 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     ),
                 };
             }
+            case "RetryAttemptStarted": {
+                const { stepId, attempt } = event.payload;
+              
+                return {
+                  ...nextState,
+                  steps: nextState.steps.map((step) =>
+                    step.id === stepId && step.kind === "retry"
+                      ? { ...step, attempts: attempt, status: "running" }
+                      : step
+                  ),
+                };
+            }
+            case "RetryGivenUp": {
+                const { stepId, attempts, reason } = event.payload;
+              
+                return {
+                  ...nextState,
+                  steps: nextState.steps.map((step) =>
+                    step.id === stepId && step.kind === "retry"
+                      ? { ...step, attempts, status: "failed" }
+                      : step
+                  ),
+                };
+            }
             case "SignalReceived":
             case "StepForked":
-            case "StepJoined":
-            case "RetryAttemptStarted":
-            case "RetryGivenUp": {
+            case "StepJoined": {
                 return nextState;
             }
             default: {

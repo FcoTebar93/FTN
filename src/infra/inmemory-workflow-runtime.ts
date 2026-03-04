@@ -1,5 +1,5 @@
 import type { WorkflowRuntime, WorkflowRuntimeDeps, StartWorkflowOptions, StartWorkflowResult, WorkflowTickResult } from "../modules/workflow-runtime";
-import type { WorkflowId, RunId, Version, StepId } from "../shared/types";
+import type { WorkflowId, RunId, Version, StepId, ConditionalStep } from "../shared/types";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
 import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from "../core/ftn";
@@ -196,6 +196,24 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           ): Promise<TResult> => {
             const stepId = generateStepId();
           
+            const existingStep = currentState.steps.find(
+              (step) => step.id === stepId && step.kind === "conditional"
+            );
+          
+            if (!existingStep) {
+              const newConditionalStep: ConditionalStep = {
+                id: stepId,
+                kind: "conditional",
+                status: "running",
+                branchChosen: undefined,
+              };
+          
+              currentState = {
+                ...currentState,
+                steps: [...currentState.steps, newConditionalStep],
+              };
+            }
+          
             const allEvents: WorkflowEvent[] = await this.eventStore.loadEvents(
               workflowId,
               runId,
@@ -244,7 +262,8 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             operation: () => Promise<TResult>
           ): Promise<TResult> => {
             const stepId = generateStepId();
-            const maxAttempts = options.maxAttempts ?? 3;
+            const maxAttempts = options.maxAttempts;
+            const backOffMs = options.backOffMs ?? 0;
           
             const allEvents = await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
             const attemptsSoFar = allEvents.filter(
@@ -254,7 +273,9 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             ).length;
           
             if (attemptsSoFar >= maxAttempts) {
-              throw new Error(`Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`);
+              throw new Error(
+                `Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`
+              );
             }
           
             newDomainEvents.push({
@@ -267,7 +288,36 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               },
             });
           
-            return operation();
+            try {
+              return await operation();
+            } catch (err) {
+              if (attemptsSoFar + 1 >= maxAttempts) {
+                newDomainEvents.push({
+                  type: "RetryGivenUp",
+                  workflowId,
+                  runId,
+                  payload: {
+                    stepId,
+                    attempts: attemptsSoFar + 1,
+                    reason: (err as Error).message,
+                  },
+                });
+          
+                throw err;
+              }
+          
+              if (backOffMs > 0) {
+                const wakeAt = new Date(Date.now() + backOffMs).toISOString();
+                newDomainEvents.push({
+                  type: "TimerScheduled",
+                  workflowId,
+                  runId,
+                  payload: { wakeAt },
+                });
+              }
+          
+              throw err;
+            }
           },
 
           sleep: async (ms: number): Promise<void> => {
