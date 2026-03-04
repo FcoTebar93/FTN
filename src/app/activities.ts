@@ -1,4 +1,4 @@
-import { SendWelcomeEmailInput, SendWelcomeEmailResult } from "./workflows";
+let chargeAttempts = 0;
 
 export type ActivityFn<TInput = unknown, TResult = unknown> = (input: TInput) => Promise<TResult> | TResult;
 
@@ -18,7 +18,19 @@ export class InMemoryActivityRegistry implements ActivityRegistry {
     }
 }
 
-export const sendWelcomeEmailActivity: ActivityFn<SendWelcomeEmailInput, SendWelcomeEmailResult> = async (input) => {
-    console.log(`Sending welcome email to ${input.email}`);
-    return { success: true };
-}
+export const validateOrderActivity: ActivityFn<{orderId: string;userId: string;amount: number;}, void> = async (input) => {
+    console.log("[activity] validate-order", input);
+};
+
+export const chargePaymentActivity: ActivityFn<{orderId: string;amount: number;}, void> = async (input) => {
+  chargeAttempts += 1;
+  console.log("[activity] charge-payment attempt", chargeAttempts, input);
+
+  if (chargeAttempts < 2) {
+    throw new Error("Simulated payment gateway failure");
+  }
+};
+
+export const createShipmentActivity: ActivityFn<{orderId: string; userId: string;}, void> = async (input) => {
+    console.log("[activity] create-shipment", input);
+};

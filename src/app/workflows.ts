@@ -4,26 +4,37 @@ type WorkflowMap = Map<string, WorkflowDefinition<any, any>>;
 
 const workflows: WorkflowMap = new Map();
 
-export function registerWorkflow<TInput, TResult>(name: string, def: WorkflowDefinition<TInput, TResult>): void {
-  workflows.set(name, def as WorkflowDefinition<any, any>);
+export function registerWorkflow<TInput, TResult>(name: string,definition: WorkflowDefinition<TInput, TResult>): void {
+  workflows.set(name, definition as WorkflowDefinition<any, any>);
 }
 
 export function getWorkflow(name: string): WorkflowDefinition<any, any> | undefined {
   return workflows.get(name);
 }
 
-export interface SendWelcomeEmailInput {
-    userId: string;
-    email: string;
-}
-  
-export interface SendWelcomeEmailResult {
-    success: boolean;
+export interface OrderInput {
+  orderId: string;
+  userId: string;
+  amount: number;
 }
 
-export const sendWelcomeEmailWorkflow: WorkflowDefinition<SendWelcomeEmailInput, SendWelcomeEmailResult> = async (ftn, input) => {
-    ftn.activity<SendWelcomeEmailInput, void>("send-welcome-email", input);
-    return { success: true };
+export interface OrderResult {
+  orderId: string;
+  charged: boolean;
+  shipped: boolean;
 }
 
-registerWorkflow("send-welcome-email", sendWelcomeEmailWorkflow);
+export const orderProcessingWorkflow: WorkflowDefinition<
+  OrderInput,
+  OrderResult
+> = async (ftn, input) => {
+  ftn.activity<OrderInput, void>("validate-order", input);
+  ftn.activity<OrderInput, void>("charge-payment", input);
+  ftn.activity<OrderInput, void>("create-shipment", input);
+  return { orderId: input.orderId, charged: true, shipped: true };
+};
+
+registerWorkflow<OrderInput, OrderResult>(
+  "order-processing",
+  orderProcessingWorkflow
+);

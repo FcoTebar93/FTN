@@ -4,7 +4,7 @@ import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
-import { InMemoryActivityRegistry, sendWelcomeEmailActivity } from "../app/activities";
+import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity } from "../app/activities";
 import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import type { WorkflowTask } from "../shared/tasks";
@@ -16,7 +16,9 @@ const snapshotStore = new InMemorySnapshotStore();
 const taskQueue = new InMemoryTaskQueue();
 const activities = new InMemoryActivityRegistry();
 
-activities.register("send-welcome-email", sendWelcomeEmailActivity);
+activities.register("validate-order", validateOrderActivity);
+activities.register("charge-payment", chargePaymentActivity);
+activities.register("create-shipment", createShipmentActivity);
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
