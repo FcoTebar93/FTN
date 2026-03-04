@@ -1,8 +1,8 @@
 import type { WorkflowRuntime, WorkflowRuntimeDeps, StartWorkflowOptions, StartWorkflowResult, WorkflowTickResult } from "../modules/workflow-runtime";
-import type { WorkflowId, RunId, Version } from "../shared/types";
+import type { WorkflowId, RunId, Version, StepId } from "../shared/types";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
-import type { FTNApi, ActivityHandle, WorkflowDefinition } from "../core/ftn";
+import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from "../core/ftn";
 import type { ActivityId } from "../shared/types";
 import type { ActivityTask } from "../shared/tasks";
 
@@ -17,6 +17,10 @@ type StoredDefinition = {
 
 function generateWorkflowId(): WorkflowId {
     return `workflow-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+}
+
+function generateStepId(): StepId {
+  return `step-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
 function generateRunId(): RunId {
@@ -185,12 +189,85 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             return results;
           },
 
-          conditional: async () => {
-            throw new Error("Not implemented");
+          conditional: async <TResult>(
+            condition: () => boolean,
+            thenBranch: () => Promise<TResult>,
+            elseBranch?: () => Promise<TResult>
+          ): Promise<TResult> => {
+            const stepId = generateStepId();
+          
+            const allEvents: WorkflowEvent[] = await this.eventStore.loadEvents(
+              workflowId,
+              runId,
+              0 as Version
+            );
+          
+            const branchEvent = [...allEvents]
+              .reverse()
+              .find(
+                (e) =>
+                  e.type === "ConditionalBranchChosen" &&
+                  e.payload.stepId === stepId
+              );
+          
+            let branch: "then" | "else";
+          
+            if (branchEvent && branchEvent.type === "ConditionalBranchChosen") {
+              branch = branchEvent.payload.branch;
+            } else {
+              const cond = condition();
+              branch = cond ? "then" : "else";
+          
+              newDomainEvents.push({
+                type: "ConditionalBranchChosen",
+                workflowId,
+                runId,
+                payload: {
+                  stepId,
+                  branch,
+                },
+              });
+            }
+          
+            if (branch === "then") {
+              return thenBranch();
+            } else {
+              if (!elseBranch) {
+                return undefined as unknown as TResult;
+              }
+              return elseBranch();
+            }
           },
 
-          retry: async () => {
-            throw new Error("Not implemented");
+          retry: async <TResult>(
+            options: RetryOptions,
+            operation: () => Promise<TResult>
+          ): Promise<TResult> => {
+            const stepId = generateStepId();
+            const maxAttempts = options.maxAttempts ?? 3;
+          
+            const allEvents = await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
+            const attemptsSoFar = allEvents.filter(
+              (e) =>
+                e.type === "RetryAttemptStarted" &&
+                e.payload.stepId === stepId
+            ).length;
+          
+            if (attemptsSoFar >= maxAttempts) {
+              throw new Error(`Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`);
+            }
+          
+            newDomainEvents.push({
+              type: "RetryAttemptStarted",
+              workflowId,
+              runId,
+              payload: {
+                stepId,
+                attempt: attemptsSoFar + 1,
+              },
+            });
+          
+            return operation();
           },
 
           sleep: async (ms: number): Promise<void> => {

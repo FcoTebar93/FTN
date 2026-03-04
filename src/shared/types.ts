@@ -50,5 +50,4 @@ export type StepRecord =
     | ActivityStep
     | SleepStep
     | ConditionalStep
-    | RetryStep
-    | Timestamped;
+    | RetryStep;

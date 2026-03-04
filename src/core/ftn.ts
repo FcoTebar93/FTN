@@ -25,12 +25,12 @@ export interface FTNApi {
         condition: () => boolean,
         thenBranch: () => Promise<TResult>,
         elseBranch?: () => Promise<TResult>
-      ): Promise<TResult>;
+    ): Promise<TResult>;
 
-      retry<TResult>(
+    retry<TResult>(
         options: RetryOptions,
         operation: () => Promise<TResult>
-      ): Promise<TResult>;
+    ): Promise<TResult>;
 
     sleep(ms: number): Promise<void>;
 

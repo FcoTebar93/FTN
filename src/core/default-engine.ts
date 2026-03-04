@@ -21,6 +21,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             pendingActivities: [],
             completedActivities: [],
             pendingTimers: [],
+            steps: [],
             stepState: undefined
         };
     }
@@ -101,9 +102,23 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                   pendingTimers: [...nextState.pendingTimers, { wakeAt }],
                 };
             }
+            case "ConditionalBranchChosen": {
+                const { stepId, branch } = event.payload;
+
+                return {
+                    ...nextState,
+                    steps: nextState.steps.map((step) =>
+                    step.id === stepId && step.kind === "conditional"
+                        ? { ...step, status: "completed", branchChosen: branch }
+                        : step
+                    ),
+                };
+            }
             case "SignalReceived":
             case "StepForked":
-            case "StepJoined": {
+            case "StepJoined":
+            case "RetryAttemptStarted":
+            case "RetryGivenUp": {
                 return nextState;
             }
             default: {

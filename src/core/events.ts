@@ -14,7 +14,8 @@ export type WorkflowEventType =
     | "TimerScheduled"
     | "ConditionalBranchChosen"
     | "RetryAttemptStarted"
-    | "RetryGivenUp";
+    | "RetryGivenUp"
+    | "ConditionalBranchChosen";
 
 export interface BaseWorkflowEvent {
     id: EventId;
@@ -138,6 +139,14 @@ export interface RetryGivenUpEvent extends BaseWorkflowEvent {
     };
 }
 
+export interface ConditionalBranchChosen extends BaseWorkflowEvent {
+    type: "ConditionalBranchChosen";
+    payload: {
+        stepId: StepId;
+        branch: "then" | "else";
+    };
+}
+
 export type WorkflowEvent =
     | WorkflowStartedEvent
     | ActivityScheduledEvent
@@ -149,4 +158,7 @@ export type WorkflowEvent =
     | WorkflowCompletedEvent
     | WorkflowFailedEvent
     | SnapshotCreatedEvent
-    | TimerScheduledEvent;
+    | TimerScheduledEvent
+    | ConditionalBranchChosenEvent
+    | RetryAttemptStartedEvent
+    | RetryGivenUpEvent;
