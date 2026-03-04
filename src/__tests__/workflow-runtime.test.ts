@@ -242,7 +242,7 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state?.completedActivities.length, 2);
   });
 
-  it("ftn.signal lee la última señal SignalReceived del event log", async () => {
+  it("ftn.signal reads the last SignalReceived event from the event log", async () => {
     const engine = new DefaultWorkflowEngine();
     const eventStore = new InMemoryEventStore();
     const snapshotStore = new InMemorySnapshotStore();
@@ -420,5 +420,49 @@ describe("InMemoryWorkflowRuntime", () => {
     const events = await eventStore.loadEvents(workflowId, runId, 0);
     const retryEvents = events.filter((e) => e.type === "RetryAttemptStarted");
     assert.equal(retryEvents.length, 2);
+  });
+
+  it("retry executes a failed operation until it is successful", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    let calls = 0;
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "retry-success",
+      input: {},
+      definition: async (ftn) => {
+        return ftn.retry(
+          { maxAttempts: 3 },
+          async () => {
+            calls += 1;
+            if (calls < 2) {
+              throw new Error("fail once");
+            }
+            return "ok";
+          }
+        );
+      },
+    });
+  
+    await runtime.runWorkflowTick(workflowId, runId);
+  
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    const retryEvents = events.filter((e) => e.type === "RetryAttemptStarted");
+    const giveUpEvents = events.filter((e) => e.type === "RetryGivenUp");
+  
+    assert.ok(calls >= 2);
+    assert.ok(retryEvents.length >= 2);
+    assert.equal(giveUpEvents.length, 0);
   });
 });
