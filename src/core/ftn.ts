@@ -21,9 +21,16 @@ export interface FTNApi {
 
     join<TResult>(handles: ActivityHandle<TResult>[]): Promise<TResult[]>;
 
-    conditional<TResult>(condition: boolean, then: () => Promise<TResult>, ifBranch: () => Promise<TResult>, elseBranch: () => Promise<TResult>): Promise<TResult>;
+    conditional<TResult>(
+        condition: () => boolean,
+        thenBranch: () => Promise<TResult>,
+        elseBranch?: () => Promise<TResult>
+      ): Promise<TResult>;
 
-    retry<TResult>(options: RetryOptions, operation: () => Promise<TResult>): Promise<TResult>;
+      retry<TResult>(
+        options: RetryOptions,
+        operation: () => Promise<TResult>
+      ): Promise<TResult>;
 
     sleep(ms: number): Promise<void>;
 

@@ -1,4 +1,4 @@
-import type { WorkflowId, RunId, ActivityId, WorkerId, EventId, Version } from "../shared/types";
+import type { WorkflowId, RunId, ActivityId, WorkerId, EventId, Version, StepId } from "../shared/types";
 
 export type WorkflowEventType =
     | "WorkflowStarted"
@@ -11,7 +11,10 @@ export type WorkflowEventType =
     | "StepJoined"
     | "SignalReceived"
     | "SnapshotCreated"
-    | "TimerScheduled";
+    | "TimerScheduled"
+    | "ConditionalBranchChosen"
+    | "RetryAttemptStarted"
+    | "RetryGivenUp";
 
 export interface BaseWorkflowEvent {
     id: EventId;
@@ -107,6 +110,31 @@ export interface TimerScheduledEvent extends BaseWorkflowEvent {
     type: "TimerScheduled";
     payload: {
       wakeAt: string;
+    };
+}
+
+export interface ConditionalBranchChosenEvent extends BaseWorkflowEvent {
+    type: "ConditionalBranchChosen";
+    payload: {
+      stepId: StepId;
+      branch: "then" | "else";
+    };
+}
+
+export interface RetryAttemptStartedEvent extends BaseWorkflowEvent {
+    type: "RetryAttemptStarted";
+    payload: {
+        stepId: StepId;
+        attempt: number;
+    };
+}
+
+export interface RetryGivenUpEvent extends BaseWorkflowEvent {
+    type: "RetryGivenUp";
+    payload: {
+        stepId: StepId;
+        attempts: number;
+        reason: string;
     };
 }
 

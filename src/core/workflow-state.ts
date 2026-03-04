@@ -1,4 +1,4 @@
-import type { WorkflowId, RunId, ActivityId, Version } from "../shared/types";
+import type { WorkflowId, RunId, ActivityId, Version, StepRecord } from "../shared/types";
 
 export type WorkflowStatus =
     | "running"
@@ -18,7 +18,7 @@ export interface CompletedActivity {
     result: unknown;
 }
 
-export interface PendingTimer {
+export interface PendingTimer { 
     wakeAt: string;
 }
 
@@ -35,6 +35,7 @@ export interface WorkflowState {
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];
     pendingTimers: PendingTimer[];
+    steps: StepRecord[];
 
     result?: unknown;
 
