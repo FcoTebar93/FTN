@@ -346,4 +346,79 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.ok(snapshot);
     assert.equal(snapshot?.version, 2);
   });
+
+  it("conditional chooses a branch deterministically", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "conditional-test",
+      input: { flag: true },
+      definition: async (ftn, input: { flag: boolean }) => {
+        return ftn.conditional(
+          () => input.flag,
+          async () => "then-branch",
+          async () => "else-branch"
+        );
+      },
+    });
+  
+    const tick = await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+  
+    assert.ok(state);
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    const chosen = events.find((e) => e.type === "ConditionalBranchChosen");
+    assert.ok(chosen);
+  });
+
+  it("retry retries a failing operation up to maxAttempts", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+  
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+  
+    let calls = 0;
+  
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "retry-test",
+      input: {},
+      definition: async (ftn) => {
+        return ftn.retry(
+          { maxAttempts: 2 },
+          async () => {
+            calls += 1;
+            if (calls < 2) {
+              throw new Error("fail once");
+            }
+            return "ok";
+          }
+        );
+      },
+    });
+  
+    await runtime.runWorkflowTick(workflowId, runId);
+  
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    const retryEvents = events.filter((e) => e.type === "RetryAttemptStarted");
+    assert.equal(retryEvents.length, 2);
+  });
 });
