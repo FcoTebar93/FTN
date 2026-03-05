@@ -24,13 +24,13 @@ export interface OrderResult {
   shipped: boolean;
 }
 
-export const orderProcessingWorkflow: WorkflowDefinition<
-  OrderInput,
-  OrderResult
-> = async (ftn, input) => {
-  ftn.activity<OrderInput, void>("validate-order", input);
-  ftn.activity<OrderInput, void>("charge-payment", input);
-  ftn.activity<OrderInput, void>("create-shipment", input);
+export const orderProcessingWorkflow: WorkflowDefinition<OrderInput,OrderResult> = async (ftn, input) => {
+  const [validateHandle, chargeHandle, shipmentHandle] = ftn.parallel([
+    () => ftn.activity<OrderInput, void>("validate-order", input),
+    () => ftn.activity<OrderInput, void>("charge-payment", input),
+    () => ftn.activity<OrderInput, void>("create-shipment", input),
+  ]);
+  await ftn.join([validateHandle, chargeHandle, shipmentHandle]);
   return { orderId: input.orderId, charged: true, shipped: true };
 };
 
