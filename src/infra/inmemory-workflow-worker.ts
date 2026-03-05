@@ -32,14 +32,23 @@ export class InMemoryWorkflowWorker {
             return;
         }
 
-        await this.runtime.runWorkflowTick(task.workflowId, task.runId);
+        try {
+            await this.runtime.runWorkflowTick(task.workflowId, task.runId);
+        } catch (error) {
+            console.error("[workflow-worker] runWorkflowTick error:", error);
+        }
         await this.taskQueue.completeTask(lease.leaseId);
     }
 
     async runForever(cancellationSignal: { aborted: boolean }): Promise<void> {
-        while (!cancellationSignal.aborted){
-            await this.runOnce();
-            await new Promise(resolve => setTimeout(resolve, this.config.pollIntervalMs));
+        try {
+            while (!cancellationSignal.aborted){
+                await this.runOnce();
+                await new Promise(resolve => setTimeout(resolve, this.config.pollIntervalMs));
+            }           
+        } catch (error) {
+            console.error("[workflow-worker] runForever error:", error);
         }
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
 }

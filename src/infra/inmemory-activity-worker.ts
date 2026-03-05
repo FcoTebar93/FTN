@@ -64,28 +64,51 @@ export class InMemoryActivityWorker {
         return;
       }
 
-      const result = await fn(pending.input);
+      try {
+        const result = await fn(pending.input);
 
-      const activityCompleted: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
-        type: "ActivityCompleted",
-        workflowId,
-        runId,
-        payload: {
-          activityId,
-          result,
-        },
-      };
+        const activityCompleted: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
+          type: "ActivityCompleted",
+          workflowId,
+          runId,
+          payload: {
+            activityId,
+            result,
+          },
+        };
 
-      const [persisted] = await this.deps.eventStore.appendEvents(workflowId, runId, lastEventVersion, [activityCompleted]) as WorkflowEvent[];
+        const [persisted] = await this.deps.eventStore.appendEvents(workflowId, runId, lastEventVersion, [activityCompleted]) as WorkflowEvent[];
+        this.deps.engine.applyEvent(state, persisted);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const details = error instanceof Error ? { name: error.name, stack: error.stack } : undefined;
 
-      this.deps.engine.applyEvent(state, persisted);
+        const activityFailed: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
+          type: "ActivityFailed",
+          workflowId,
+          runId,
+          payload: {
+            activityId,
+            reason,
+            details,
+          },
+        };
+
+        const [persisted] = await this.deps.eventStore.appendEvents(workflowId, runId, lastEventVersion, [activityFailed]) as WorkflowEvent[];
+        this.deps.engine.applyEvent(state, persisted);
+      }
 
       await this.deps.taskQueue.completeTask(lease.leaseId);
     }
 
     async runForever(cancellationSignal: { aborted: boolean }): Promise<void> {
       while (!cancellationSignal.aborted) {
-        await this.runOnce();
+        try {
+          await this.runOnce();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error("[activity-worker] runOnce error:", error);
+        }
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
