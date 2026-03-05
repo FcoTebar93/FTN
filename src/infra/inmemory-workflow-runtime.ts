@@ -357,7 +357,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const shouldExecuteDefinition = !!defEntry && events.length <= 1;
 
         if (shouldExecuteDefinition && defEntry) {
-          definitionResult = await defEntry.definition(ftn, defEntry.input);
+          try {
+            definitionResult = await defEntry.definition(ftn, defEntry.input);
+          } catch {
+            definitionResult = undefined;
+          }
         }
 
         let appended: WorkflowEvent[] = [];

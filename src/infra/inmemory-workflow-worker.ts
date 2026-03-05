@@ -1,5 +1,5 @@
 import type { WorkflowWorkerDeps } from "../workers/workflow-worker";
-import type { TaskLease } from "../shared/tasks";
+import type { TaskLease, WorkflowTask } from "../shared/tasks";
 
 export class InMemoryWorkflowWorker {
     private readonly workerId;
@@ -32,12 +32,31 @@ export class InMemoryWorkflowWorker {
             return;
         }
 
+        let tickResult;
         try {
-            await this.runtime.runWorkflowTick(task.workflowId, task.runId);
+            tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId);
         } catch (error) {
             console.error("[workflow-worker] runWorkflowTick error:", error);
+            await this.taskQueue.completeTask(lease.leaseId);
+            return;
         }
         await this.taskQueue.completeTask(lease.leaseId);
+
+        const { state } = tickResult;
+        const hasPending = state.pendingActivities.length > 0 || state.pendingTimers.length > 0;
+        if (hasPending && state.status === "running") {
+            const nextTask: WorkflowTask = {
+                id: `wf-task-${task.workflowId}-${task.runId}-${Date.now()}`,
+                type: "workflow",
+                workflowId: task.workflowId,
+                runId: task.runId,
+                createdAt: new Date().toISOString(),
+                scheduledAt: new Date().toISOString(),
+                workerType: "workflow",
+                targetQueue: this.config.queueName,
+            };
+            await this.taskQueue.enqueue(nextTask);
+        }
     }
 
     async runForever(cancellationSignal: { aborted: boolean }): Promise<void> {
