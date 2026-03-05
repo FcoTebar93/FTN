@@ -144,8 +144,33 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const ftn: FTNApi = {
           activity<TInput, TResult>(
             name: string,
-            input: TInput
+            input: TInput,
+            attempt?: number
           ): ActivityHandle<TResult> {
+            if (attempt !== undefined) {
+              const activityId = generateActivityId();
+              newDomainEvents.push({
+                type: "ActivityScheduled",
+                workflowId,
+                runId,
+                payload: {
+                  activityId,
+                  activityName: name,
+                  input,
+                },
+              });
+              return { id: activityId, name };
+            }
+            const existing =
+              currentState.pendingActivities.find(
+                (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
+              ) ??
+              currentState.completedActivities.find(
+                (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
+              );
+            if (existing) {
+              return { id: existing.id, name: existing.name };
+            }
             const activityId = generateActivityId();
             newDomainEvents.push({
               type: "ActivityScheduled",
@@ -259,53 +284,56 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
           retry: async <TResult>(
             options: RetryOptions,
-            operation: () => Promise<TResult>
+            operation: (attempt: number) => Promise<TResult>
           ): Promise<TResult> => {
-            const stepId = generateStepId();
             const maxAttempts = options.maxAttempts;
             const backOffMs = options.backOffMs ?? 0;
-          
+
             const allEvents = await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
-            const attemptsSoFar = allEvents.filter(
-              (e) =>
-                e.type === "RetryAttemptStarted" &&
-                e.payload.stepId === stepId
+            const retryStartedEvents = allEvents.filter(
+              (e): e is Extract<typeof e, { type: "RetryAttemptStarted" }> =>
+                e.type === "RetryAttemptStarted"
+            );
+            const existingStepId = retryStartedEvents[0]?.payload.stepId;
+            const stepId = existingStepId ?? `retry-${workflowId}-${runId}`;
+
+            const attemptsSoFar = retryStartedEvents.filter(
+              (e) => e.payload.stepId === stepId
             ).length;
-          
+
             if (attemptsSoFar >= maxAttempts) {
               throw new Error(
                 `Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`
               );
             }
-          
+
+            const attempt = attemptsSoFar + 1;
             newDomainEvents.push({
               type: "RetryAttemptStarted",
               workflowId,
               runId,
               payload: {
                 stepId,
-                attempt: attemptsSoFar + 1,
+                attempt,
               },
             });
-          
+
             try {
-              return await operation();
+              return await operation(attempt);
             } catch (err) {
-              if (attemptsSoFar + 1 >= maxAttempts) {
+              if (attempt >= maxAttempts) {
                 newDomainEvents.push({
                   type: "RetryGivenUp",
                   workflowId,
                   runId,
                   payload: {
                     stepId,
-                    attempts: attemptsSoFar + 1,
+                    attempts: attempt,
                     reason: (err as Error).message,
                   },
                 });
-          
                 throw err;
               }
-          
               if (backOffMs > 0) {
                 const wakeAt = new Date(Date.now() + backOffMs).toISOString();
                 newDomainEvents.push({
@@ -315,7 +343,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   payload: { wakeAt },
                 });
               }
-          
               throw err;
             }
           },
@@ -354,7 +381,8 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const key = makeWorkflowKey(workflowId, runId);
         const defEntry = this.definitions.get(key);
 
-        const shouldExecuteDefinition = !!defEntry && events.length <= 1;
+        const lastEvent = events[events.length - 1];
+        const shouldExecuteDefinition = !!defEntry && (events.length <= 1 || lastEvent?.type === "ActivityFailed");
 
         if (shouldExecuteDefinition && defEntry) {
           try {

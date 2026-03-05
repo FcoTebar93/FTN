@@ -15,7 +15,7 @@ export interface ParallelOptions {
 }
 
 export interface FTNApi {
-    activity<TInput, TResult>(name: string, input: TInput): ActivityHandle<TResult>;
+    activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult>;
 
     parallel<TResult>(branches: Array<() => void>): ActivityHandle<TResult>[];
 
@@ -27,10 +27,7 @@ export interface FTNApi {
         elseBranch?: () => Promise<TResult>
     ): Promise<TResult>;
 
-    retry<TResult>(
-        options: RetryOptions,
-        operation: () => Promise<TResult>
-    ): Promise<TResult>;
+    retry<TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult>;
 
     sleep(ms: number): Promise<void>;
 
