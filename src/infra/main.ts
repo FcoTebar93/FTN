@@ -127,6 +127,51 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && req.url === "/workflows") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const parsed = JSON.parse(body || "{}");
+          const { name, input } = parsed;
+
+          const definition = getWorkflow(name);
+          if (!definition) {
+            res.statusCode = 404;
+            res.end(`Workflow definition "${name}" not found`);
+            return;
+          }
+
+          const { workflowId, runId } = await runtime.startWorkflow({
+            workflowName: name,
+            input,
+            definition,
+          });
+
+          const task: WorkflowTask = {
+            id: `wf-task-${workflowId}-${runId}`,
+            type: "workflow",
+            workflowId,
+            runId,
+            createdAt: new Date().toISOString(),
+            scheduledAt: new Date().toISOString(),
+            workerType: "workflow",
+            targetQueue: "workflows",
+          };
+          await taskQueue.enqueue(task);
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ workflowId, runId }));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(`Error starting workflow: ${(e as Error).message}`);
+        }
+      });
+      return;
+    }
+
     if (req.method === "POST" && req.url.startsWith("/workflows/") && req.url.endsWith("/signals")) {
       const parts = req.url.split("/");
       if (parts.length !== 5) {
