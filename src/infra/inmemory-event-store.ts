@@ -52,4 +52,11 @@ export class InMemoryEventStore implements EventStore {
 
         return appended;
     }
+
+    async listRunKeys(): Promise<Array<{ workflowId: string; runId: string }>> {
+        return Array.from(this.streams.keys()).map((key) => {
+            const [workflowId, runId] = key.split(":");
+            return { workflowId, runId };
+        });
+    }
 }

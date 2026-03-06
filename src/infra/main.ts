@@ -70,116 +70,50 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && req.url.startsWith("/workflows/") && req.url.endsWith("/events")) {
-      const parts = req.url.split("/");
-      if (parts.length !== 4) {
-        res.statusCode = 400;
-        res.end("Expected /workflows/:workflowId/:runId/events");
-        return;
-      }
+    if (req.method === "GET" && (req.url === "/workflows" || req.url.startsWith("/workflows?"))) {
+      const [path, queryString] = req.url.split("?");
+      const params = new URLSearchParams(queryString ?? "");
+      const statusFilter = params.get("status") as "running" | "completed" | "failed" | null;
+      const limit = Math.min(100, Math.max(1, parseInt(params.get("limit") ?? "50", 10)));
+      const offset = Math.max(0, parseInt(params.get("offset") ?? "0", 10));
 
-      const workflowId = parts[2];
-      const runId = parts[3];
+      const runKeys = await (eventStore as import("./inmemory-event-store").InMemoryEventStore).listRunKeys();
+      const slice = runKeys.slice(offset, offset + limit);
+      const summaries: Array<{
+        workflowId: string;
+        runId: string;
+        name: string;
+        status: string;
+        startedAt: string | undefined;
+        completedAt: string | undefined;
+        failedAt: string | undefined;
+        failureReason: string | undefined;
+      }> = [];
 
-      const events = await eventStore.loadEvents(workflowId, runId, 0);
-      if (!events || events.length === 0) {
-        res.statusCode = 404;
-        res.end("No events found");
-        return;
-      }
-
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(events));
-      return;
-    }
-
-    if (req.method === "POST" && req.url === "/workflows") {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", async () => {
-        try {
-          const parsed = JSON.parse(body || "{}");
-          const { name, input } = parsed;
-
-          const definition = getWorkflow(name);
-          if (!definition) {
-            res.statusCode = 404;
-            res.end(`Workflow definition "${name}" not found`);
-            return;
-          }
-
-          const { workflowId, runId } = await runtime.startWorkflow({
-            workflowName: name,
-            input,
-            definition,
-          });
-
-          const task: WorkflowTask = {
-            id: `wf-task-${workflowId}-${runId}`,
-            type: "workflow",
-            workflowId,
-            runId,
-            createdAt: new Date().toISOString(),
-            scheduledAt: new Date().toISOString(),
-            workerType: "workflow",
-            targetQueue: "workflows",
-          };
-          await taskQueue.enqueue(task);
-
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ workflowId, runId }));
-        } catch (e) {
-          res.statusCode = 500;
-          res.end(`Error starting workflow: ${(e as Error).message}`);
-        }
-      });
-      return;
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/workflows/") && req.url.endsWith("/steps")) {
-      const parts = req.url.split("/");
-      if (parts.length !== 4) {
-        res.statusCode = 400;
-        res.end("Expected /workflows/:workflowId/:runId/steps");
-        return;
-      }
-
-      const workflowId = parts[2];
-      const runId = parts[3];
-
-      const state = await runtime.loadCurrentState(workflowId, runId);
-      if (!state) {
-        res.statusCode = 404;
-        res.end("Workflow not found");
-        return;
+      for (const { workflowId, runId } of slice) {
+        const state = await runtime.loadCurrentState(workflowId, runId);
+        if (!state) continue;
+        const events = await eventStore.loadEvents(workflowId, runId, 0);
+        const startEvent = events.find((e) => e.type === "WorkflowStarted");
+        const name =
+          startEvent && startEvent.type === "WorkflowStarted"
+            ? startEvent.payload.name
+            : "unknown";
+        if (statusFilter && state.status !== statusFilter) continue;
+        summaries.push({
+          workflowId,
+          runId,
+          name,
+          status: state.status,
+          startedAt: state.startedAt,
+          completedAt: state.completedAt,
+          failedAt: state.failedAt,
+          failureReason: state.failureReason,
+        });
       }
 
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(state?.steps));
-      return;
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/workflows/")) {
-      const parts = req.url.split("/");
-      if (parts.length !== 4) {
-        res.statusCode = 400;
-        res.end("Expected /workflows/:workflowId/:runId");
-        return;
-      }
-      const workflowId = parts[2];
-      const runId = parts[3];
-
-      const state = await runtime.loadCurrentState(workflowId, runId);
-      if (!state) {
-        res.statusCode = 404;
-        res.end("Workflow not found");
-        return;
-      }
-
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(state));
+      res.end(JSON.stringify(summaries));
       return;
     }
 
@@ -202,7 +136,7 @@ const server = http.createServer(async (req, res) => {
           const parsed = JSON.parse(body || "{}");
           const { signalName, data } = parsed;
 
-          await eventStore.appendEvents(workflowId, runId, /* expectedVersion */ 1, [
+          await eventStore.appendEvents(workflowId, runId, 1, [
             {
               type: "SignalReceived",
               workflowId,
