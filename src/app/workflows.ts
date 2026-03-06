@@ -29,7 +29,7 @@ export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult
   const shipmentHandle = ftn.activity<OrderInput, void>("create-shipment", input);
 
   await ftn.retry(
-    { maxAttempts: 3, backOffMs: 500 },
+    { maxAttempts: 3 },
     async (attempt) => {
       const chargeHandle = ftn.activity<OrderInput, void>("charge-payment", input, attempt);
       await ftn.join([chargeHandle]);
