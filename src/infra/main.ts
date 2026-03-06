@@ -70,6 +70,29 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && req.url.startsWith("/workflows/") && req.url.endsWith("/events")) {
+      const parts = req.url.split("/");
+      if (parts.length !== 4) {
+        res.statusCode = 400;
+        res.end("Expected /workflows/:workflowId/:runId/events");
+        return;
+      }
+
+      const workflowId = parts[2];
+      const runId = parts[3];
+
+      const events = await eventStore.loadEvents(workflowId, runId, 0);
+      if (!events || events.length === 0) {
+        res.statusCode = 404;
+        res.end("No events found");
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(events));
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/workflows") {
       let body = "";
       req.on("data", (chunk) => {
@@ -112,6 +135,29 @@ const server = http.createServer(async (req, res) => {
           res.end(`Error starting workflow: ${(e as Error).message}`);
         }
       });
+      return;
+    }
+
+    if (req.method === "GET" && req.url.startsWith("/workflows/") && req.url.endsWith("/steps")) {
+      const parts = req.url.split("/");
+      if (parts.length !== 4) {
+        res.statusCode = 400;
+        res.end("Expected /workflows/:workflowId/:runId/steps");
+        return;
+      }
+
+      const workflowId = parts[2];
+      const runId = parts[3];
+
+      const state = await runtime.loadCurrentState(workflowId, runId);
+      if (!state) {
+        res.statusCode = 404;
+        res.end("Workflow not found");
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(state?.steps));
       return;
     }
 
