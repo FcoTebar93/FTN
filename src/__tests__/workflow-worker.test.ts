@@ -9,6 +9,7 @@ import { InMemoryActivityRegistry } from "../app/activities";
 import { InMemoryActivityWorker } from "../infra/inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "../infra/inmemory-workflow-worker";
 import { getWorkflow } from "../app/workflows";
+import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
 
 describe("InMemoryWorkflowWorker", () => {
     it("toma una WorkflowTask de la cola y ejecuta un tick que programa una actividad", async () => {
@@ -174,5 +175,53 @@ describe("InMemoryWorkflowWorker", () => {
     assert.ok(state, "state must exist");
     assert.equal(state?.status, "completed", "workflow must complete after retry");
     assert.equal(chargeCalls, 2, "charge-payment must run twice (fail then succeed)");
+  });
+
+  it("ftn.sleep enqueues a TimerTask and TimeWorker creates a WorkflowTask", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 }
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "sleep-workflow",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.sleep(1000);
+        return { done: true };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const timerWorker = new InMemoryTimerWorker({
+      taskQueue,
+      queueName: "timers",
+      workflowQueueName: "workflows",
+      pollIntervalMs: 10,
+    });
+
+    await timerWorker.runOnce();
+
+    const nextLease = await taskQueue.leaseNextTask(
+      "timer-worker-1",
+      "timers",
+      1000
+    );
+    
+    assert.ok(nextLease, "must exist a workflow task after timer task is completed");
+    assert.equal(nextLease!.task.type, "workflow");
+    assert.equal(nextLease!.task.workflowId, workflowId);
+    assert.equal(nextLease!.task.runId, runId);
+
+    await taskQueue.completeTask(nextLease!.leaseId);
   });
 });
