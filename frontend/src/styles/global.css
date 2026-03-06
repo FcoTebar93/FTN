@@ -294,8 +294,7 @@
   .step-item .status-waiting { background: rgba(148, 163, 184, 0.15); color: #475569; }
   .step-item .status-failed { background: rgba(220, 38, 38, 0.08); color: var(--danger); }
   .step-item .status-idle { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
-  /* Eventos: lista expandible y JSON */
-.events-list--expandable {
+  .events-list--expandable {
     gap: 6px;
   }
   .event-item--expandable {
@@ -385,4 +384,81 @@
   }
   .event-item--expandable:hover .event-payload-detail--open .event-payload-json {
     border-top-color: rgba(249, 115, 22, 0.35);
+  }
+.steps-table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: rgba(248, 250, 252, 0.8);
+  }
+  .steps-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .steps-th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  .steps-tr {
+    transition: background 0.12s ease;
+  }
+  .steps-tr:hover {
+    background: rgba(249, 115, 22, 0.05);
+  }
+  .steps-td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+    vertical-align: middle;
+  }
+  .steps-tr:last-child .steps-td {
+    border-bottom: none;
+  }
+  .steps-td--id {
+    max-width: 140px;
+  }
+  .steps-id {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: inline-block;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .steps-td--kind {
+    font-weight: 500;
+  }
+  .steps-td--activity .steps-activity-id {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .step-status--cell {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .steps-td--status .status-completed { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+  .steps-td--status .status-running { background: var(--accent-soft); color: var(--accent-strong); }
+  .steps-td--status .status-waiting { background: rgba(148, 163, 184, 0.15); color: #475569; }
+  .steps-td--status .status-failed { background: rgba(220, 38, 38, 0.08); color: var(--danger); }
+  .steps-td--status .status-idle { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
+  .steps-td--wake,
+  .steps-td--branch,
+  .steps-td--attempts {
+    color: var(--text-muted);
+    font-size: 11px;
   }

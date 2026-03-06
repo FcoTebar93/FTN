@@ -135,7 +135,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
           </section>
         )}
 
-{activeTab === "eventos" && (
+        {activeTab === "eventos" && (
           <section class="workflow-section">
             <h3>Eventos</h3>
             {sortedEvents.length === 0 ? (
@@ -179,26 +179,52 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
           </section>
         )}
 
-        {activeTab === "steps" && (
+{activeTab === "steps" && (
           <section class="workflow-section">
             <h3>Steps</h3>
             {!steps || steps.length === 0 ? (
               <p class="detail-muted">No hay steps.</p>
             ) : (
-              <ul class="steps-list">
-                {steps.map((s) => (
-                  <li key={s.id} class="step-item">
-                    <span class={`step-status status-${s.status}`}>{s.status}</span>
-                    <span class="step-kind">{s.kind}</span>
-                    {s.activityName != null && <span>{s.activityName}</span>}
-                    {s.wakeAt != null && <span>wakeAt: {s.wakeAt}</span>}
-                    {s.branchChosen != null && <span>branch: {s.branchChosen}</span>}
-                    {s.attempts != null && (
-                      <span>intentos: {s.attempts}{s.maxAttempts != null ? `/${s.maxAttempts}` : ""}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div class="steps-table-wrap">
+                <table class="steps-table">
+                  <thead>
+                    <tr>
+                      <th class="steps-th steps-th--id">Id</th>
+                      <th class="steps-th steps-th--kind">Kind</th>
+                      <th class="steps-th steps-th--status">Status</th>
+                      <th class="steps-th steps-th--activity">Activity</th>
+                      <th class="steps-th steps-th--wake">Wake at</th>
+                      <th class="steps-th steps-th--branch">Branch</th>
+                      <th class="steps-th steps-th--attempts">Attempts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {steps.map((s) => (
+                      <tr key={s.id} class="steps-tr">
+                        <td class="steps-td steps-td--id" title={s.id}>
+                          <code class="steps-id">{s.id}</code>
+                        </td>
+                        <td class="steps-td steps-td--kind">{s.kind}</td>
+                        <td class="steps-td steps-td--status">
+                          <span class={`step-status step-status--cell status-${s.status}`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td class="steps-td steps-td--activity">
+                          {s.activityName ?? (s.activityId ? <code class="steps-activity-id">{s.activityId}</code> : "—")}
+                        </td>
+                        <td class="steps-td steps-td--wake">{s.wakeAt ?? "—"}</td>
+                        <td class="steps-td steps-td--branch">{s.branchChosen ?? "—"}</td>
+                        <td class="steps-td steps-td--attempts">
+                          {s.attempts != null
+                            ? `${s.attempts}${s.maxAttempts != null ? ` / ${s.maxAttempts}` : ""}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         )}
