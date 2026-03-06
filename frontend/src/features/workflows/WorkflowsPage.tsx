@@ -1,12 +1,22 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState, useRef } from "preact/hooks";
 import { getWorkflows, getWorkflowState, getWorkflowEvents, getWorkflowSteps } from "../../api/workflows";
 import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
 import { WorkflowsList } from "./WorkflowsList";
 import { WorkflowDetail } from "./WorkflowsDetails";
 
+const POLL_INTERVAL_MS = 4000;
+
 interface SelectedRun {
   workflowId: string;
   runId: string;
+}
+
+function fetchDetail(workflowId: string, runId: string) {
+  return Promise.all([
+    getWorkflowState(workflowId, runId),
+    getWorkflowEvents(workflowId, runId),
+    getWorkflowSteps(workflowId, runId),
+  ]);
 }
 
 export function WorkflowsPage() {
@@ -38,11 +48,8 @@ export function WorkflowsPage() {
     if (!selected) return;
 
     setLoadingDetail(true);
-    Promise.all([
-      getWorkflowState(selected.workflowId, selected.runId),
-      getWorkflowEvents(selected.workflowId, selected.runId),
-      getWorkflowSteps(selected.workflowId, selected.runId),
-    ])
+    setErrorDetail(null);
+    fetchDetail(selected.workflowId, selected.runId)
       .then(([st, evs, s]) => {
         setState(st);
         setEvents(evs);
@@ -51,6 +58,22 @@ export function WorkflowsPage() {
       .catch((err) => setErrorDetail(err as Error))
       .finally(() => setLoadingDetail(false));
   }, [selected?.workflowId, selected?.runId]);
+
+  useEffect(() => {
+    if (!selected || state?.status !== "running") return;
+
+    const id = setInterval(() => {
+      fetchDetail(selected.workflowId, selected.runId)
+        .then(([st, evs, s]) => {
+          setState(st);
+          setEvents(evs);
+          setSteps(s);
+        })
+        .catch((err) => setErrorDetail(err as Error));
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, [selected?.workflowId, selected?.runId, state?.status]);
 
   return (
     <div class="app-layout">

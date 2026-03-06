@@ -24,6 +24,7 @@ function payloadSummary(payload: unknown): string {
 
 export function WorkflowDetail({ selected, state, events, steps, loading, error }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("estado");
+  const [showStateJson, setShowStateJson] = useState(false);
 
   if (!selected) {
     return <div class="panel">Selecciona un workflow para ver el detalle.</div>;
@@ -66,7 +67,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
       </div>
 
       <div class="tab-panel">
-        {activeTab === "estado" && (
+      {activeTab === "estado" && (
           <section class="workflow-section">
             <h3>Resumen</h3>
             <ul class="detail-list">
@@ -109,6 +110,18 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
                 ))}
               </ul>
             )}
+            <div class="workflow-section">
+              <button
+                type="button"
+                class="btn-toggle-json"
+                onClick={() => setShowStateJson((v) => !v)}
+              >
+                {showStateJson ? "Ocultar JSON" : "Ver JSON completo"}
+              </button>
+              {showStateJson && (
+                <pre class="state-json-block">{JSON.stringify(state, null, 2)}</pre>
+              )}
+            </div>
           </section>
         )}
 

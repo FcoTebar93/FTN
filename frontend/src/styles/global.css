@@ -294,3 +294,27 @@
   .step-item .status-waiting { background: rgba(148, 163, 184, 0.15); color: #475569; }
   .step-item .status-failed { background: rgba(220, 38, 38, 0.08); color: var(--danger); }
   .step-item .status-idle { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
+  .btn-toggle-json {
+    margin-top: 12px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+    border: 1px solid rgba(249, 115, 22, 0.35);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .btn-toggle-json:hover {
+    background: rgba(249, 115, 22, 0.15);
+  }
+  .state-json-block {
+    margin: 8px 0 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #0f172a;
+    color: #e5e7eb;
+    border: 1px solid rgba(15, 23, 42, 0.85);
+    font-size: 11px;
+    max-height: 320px;
+    overflow: auto;
+  }
