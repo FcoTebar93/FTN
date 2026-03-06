@@ -1,0 +1,200 @@
+:root {
+    --bg: #f5f5f7;
+    --bg-elevated: #ffffff;
+    --border-subtle: #e2e8f0;
+    --accent: #f97316; /* naranja cálido tipo cloud */
+    --accent-soft: rgba(249, 115, 22, 0.09);
+    --accent-strong: #ea580c;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --danger: #dc2626;
+    --radius-lg: 14px;
+    --radius-md: 9px;
+    --shadow-soft: 0 22px 60px rgba(15, 23, 42, 0.08);
+    --shadow-subtle: 0 14px 40px rgba(15, 23, 42, 0.06);
+  }
+  
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+      "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, #ffffff 0, #f5f5f7 45%, #e5e9f1 100%);
+    color: var(--text);
+  }
+  
+  /* Layout principal */
+  
+  .app-layout {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 24px;
+    padding: 24px;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+  
+  /* Sidebar y contenido */
+  
+  .sidebar {
+    border-radius: var(--radius-lg);
+    background: linear-gradient(145deg, #ffffff, #f8fafc);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+    padding: 18px 20px;
+  }
+  
+  .content {
+    border-radius: var(--radius-lg);
+    background: linear-gradient(145deg, #ffffff, #f9fafb);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+    padding: 20px 22px;
+  }
+  
+  /* Paneles */
+  
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  
+  /* Lista de workflows */
+  
+  .workflow-list {
+    list-style: none;
+    margin: 8px 0 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .workflow-list-item {
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    row-gap: 4px;
+    column-gap: 8px;
+    cursor: pointer;
+    transition: transform 140ms ease, box-shadow 140ms ease,
+      border-color 140ms ease, background 140ms ease;
+  }
+  
+  .workflow-list-item:hover {
+    transform: translateY(-1px);
+    border-color: rgba(148, 163, 184, 0.5);
+    box-shadow: var(--shadow-subtle);
+  }
+  
+  .workflow-list-item.selected {
+    border-color: var(--accent-strong);
+    background: linear-gradient(
+      135deg,
+      rgba(249, 115, 22, 0.06),
+      #ffffff 40%,
+      rgba(249, 115, 22, 0.08)
+    );
+    box-shadow:
+      0 0 0 1px rgba(249, 115, 22, 0.35),
+      0 18px 50px rgba(15, 23, 42, 0.15);
+  }
+  
+  .workflow-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  .workflow-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  
+  /* Badges de estado */
+  
+  .workflow-status {
+    align-self: flex-start;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+  
+  .status-running {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    border: 1px solid rgba(249, 115, 22, 0.45);
+  }
+  
+  .status-completed {
+    background: rgba(22, 163, 74, 0.06);
+    color: #15803d;
+    border: 1px solid rgba(22, 163, 74, 0.25);
+  }
+  
+  .status-failed {
+    background: rgba(220, 38, 38, 0.05);
+    color: #b91c1c;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+  }
+  
+  /* Detalle */
+  
+  .workflow-detail-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  
+  /* Secciones del detalle */
+  
+  .workflow-section {
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(203, 213, 225, 0.8);
+  }
+  
+  .workflow-section h3 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin: 0 0 4px 0;
+  }
+  
+  .workflow-section pre {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #0f172a;
+    color: #e5e7eb;
+    border: 1px solid rgba(15, 23, 42, 0.85);
+    font-size: 11px;
+    max-height: 260px;
+    overflow: auto;
+  }
