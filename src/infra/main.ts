@@ -63,6 +63,16 @@ activityWorker.runForever(cancellation).catch(console.error);
 timerWorker.runForever(cancellation).catch(console.error);
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   try {
     if (!req.url || !req.method) {
       res.statusCode = 400;
