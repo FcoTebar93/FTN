@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "preact/hooks";
 import { getWorkflows, getWorkflowState, getWorkflowEvents, getWorkflowSteps } from "../../api/workflows";
-import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
-import { WorkflowsList } from "./WorkflowsList";
+import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord, WorkflowStatus } from "../../api/types";import { WorkflowsList } from "./WorkflowsList";
 import { WorkflowDetail } from "./WorkflowsDetails";
 
 const POLL_INTERVAL_MS = 4000;
@@ -24,6 +23,7 @@ export function WorkflowsPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [errorList, setErrorList] = useState<Error | null>(null);
   const [selected, setSelected] = useState<SelectedRun | null>(null);
+  const [statusFilter, setStatusFilter] = useState<WorkflowStatus | "">("");
 
   const [state, setState] = useState<WorkflowState | null>(null);
   const [events, setEvents] = useState<WorkflowEvent[]>([]);
@@ -33,16 +33,18 @@ export function WorkflowsPage() {
 
   useEffect(() => {
     setLoadingList(true);
-    getWorkflows()
+    getWorkflows(statusFilter ? { status: statusFilter } : undefined)
       .then((ws) => {
         setWorkflows(ws);
         if (!selected && ws.length > 0) {
           setSelected({ workflowId: ws[0].workflowId, runId: ws[0].runId });
+        } else if (selected && !ws.some((w) => w.workflowId === selected.workflowId && w.runId === selected.runId)) {
+          setSelected(ws.length > 0 ? { workflowId: ws[0].workflowId, runId: ws[0].runId } : null);
         }
       })
       .catch((err) => setErrorList(err as Error))
       .finally(() => setLoadingList(false));
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (!selected) return;
@@ -78,12 +80,14 @@ export function WorkflowsPage() {
   return (
     <div class="app-layout">
       <div class="sidebar">
-        <WorkflowsList
+      <WorkflowsList
           workflows={workflows}
           loading={loadingList}
           error={errorList}
           selected={selected}
           onSelect={setSelected}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
         />
       </div>
       <div class="content">
