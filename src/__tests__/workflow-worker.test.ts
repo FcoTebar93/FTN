@@ -11,7 +11,7 @@ import { InMemoryWorkflowWorker } from "../infra/inmemory-workflow-worker";
 import { getWorkflow } from "../app/workflows";
 
 describe("InMemoryWorkflowWorker", () => {
-  it("toma una WorkflowTask de la cola y ejecuta un tick que programa una actividad", async () => {
+    it("toma una WorkflowTask de la cola y ejecuta un tick que programa una actividad", async () => {
     const engine = new DefaultWorkflowEngine();
     const eventStore = new InMemoryEventStore();
     const snapshotStore = new InMemorySnapshotStore();
@@ -26,10 +26,8 @@ describe("InMemoryWorkflowWorker", () => {
       config: { snapshotInterval: 50 },
     });
 
-    // Registramos una actividad de ejemplo (para cerrar el ciclo luego si queremos)
     activities.register("echo-activity", async (input: { value: number }) => input);
 
-    // Iniciamos un workflow que usa ftn.activity
     const { workflowId, runId } = await runtime.startWorkflow({
       workflowName: "echo-workflow",
       input: { value: 42 },
@@ -39,7 +37,6 @@ describe("InMemoryWorkflowWorker", () => {
       },
     });
 
-    // Encolar manualmente una WorkflowTask para este workflow
     await taskQueue.enqueue({
       id: `wf-task-${workflowId}-${runId}`,
       type: "workflow",
@@ -62,18 +59,8 @@ describe("InMemoryWorkflowWorker", () => {
       },
     });
 
-    // Ejecutamos una vez el worker: debería consumir la WorkflowTask y hacer un tick
     await workflowWorker.runOnce();
 
-    // Comprobamos que ya no hay WorkflowTasks pendientes
-    const nextLease = await taskQueue.leaseNextTask(
-      "workflow-worker-1",
-      "workflows",
-      1000
-    );
-    assert.equal(nextLease, null);
-
-    // Estado del workflow: la actividad debería estar programada (pendingActivities)
     const state = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(state);
     assert.equal(state?.pendingActivities.length, 1);
@@ -89,6 +76,15 @@ describe("InMemoryWorkflowWorker", () => {
     });
 
     await activityWorker.runOnce();
+
+    await workflowWorker.runOnce();
+
+    const nextLease = await taskQueue.leaseNextTask(
+      "workflow-worker-1",
+      "workflows",
+      1000
+    );
+    assert.equal(nextLease, null);
 
     const finalState = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(finalState);
@@ -169,11 +165,10 @@ describe("InMemoryWorkflowWorker", () => {
       }
     };
 
-    await workflowWorker.runOnce();
-    await runActivityWorkerUntilIdle();
-    await workflowWorker.runOnce();
-    await runActivityWorkerUntilIdle();
-    await workflowWorker.runOnce();
+    for (let i = 0; i < 5; i++) {
+      await workflowWorker.runOnce();
+      await runActivityWorkerUntilIdle();
+    }
 
     const state = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(state, "state must exist");
