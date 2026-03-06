@@ -1,6 +1,6 @@
 import type { WorkflowId, RunId, ActivityId, WorkerId } from "./types";
 
-export type TaskType = "workflow" | "activity";
+export type TaskType = "workflow" | "activity" | "timer";
 
 export interface BaseTask {
     id: string;
@@ -25,7 +25,14 @@ export interface ActivityTask extends BaseTask {
     activityName: string;
 }
 
-export type Task = WorkflowTask | ActivityTask;
+export interface TimerTask extends BaseTask {
+    type: "timer";
+    workflowId: WorkflowId;
+    runId: RunId;
+    wakeAt: string;
+}
+
+export type Task = WorkflowTask | ActivityTask | TimerTask;
 
 export interface TaskLease {
     task: Task;

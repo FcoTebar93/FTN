@@ -9,6 +9,7 @@ import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import type { WorkflowTask } from "../shared/tasks";
 import { getWorkflow } from "../app/workflows";
+import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
@@ -48,10 +49,18 @@ const activityWorker = new InMemoryActivityWorker({
   activityQueueName: "activities",
 });
 
+const timerWorker = new InMemoryTimerWorker({
+  taskQueue,
+  queueName: "timers",
+  workflowQueueName: "workflows",
+  pollIntervalMs: 500,
+});
+
 const cancellation = { aborted: false };
 
 workflowWorker.runForever(cancellation).catch(console.error);
 activityWorker.runForever(cancellation).catch(console.error);
+timerWorker.runForever(cancellation).catch(console.error);
 
 const server = http.createServer(async (req, res) => {
   try {

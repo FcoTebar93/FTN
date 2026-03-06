@@ -342,6 +342,18 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   runId,
                   payload: { wakeAt },
                 });
+
+                await this.taskQueue.enqueue({
+                  id: `timer-${workflowId}-${runId}-${Date.now()}`,
+                  type: "timer",
+                  workflowId,
+                  runId,
+                  wakeAt,
+                  createdAt: new Date().toISOString(),
+                  scheduledAt: wakeAt,
+                  workerType: "workflow",
+                  targetQueue: "timers",
+                });
               }
               throw err;
             }
@@ -354,6 +366,18 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               workflowId,
               runId,
               payload: { wakeAt },
+            });
+
+            await this.taskQueue.enqueue({
+              id: `timer-${workflowId}-${runId}-${Date.now()}`,
+              type: "timer",
+              workflowId,
+              runId,
+              wakeAt,
+              createdAt: new Date().toISOString(),
+              scheduledAt: wakeAt,
+              workerType: "workflow",
+              targetQueue: "timers",
             });
           },
 
@@ -430,7 +454,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             }
         }
 
-        if (currentState.status === "running" && currentState.pendingActivities.length === 0 && currentState.pendingTimers.length === 0) {
+        if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
           const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
             type: "WorkflowCompleted",
             workflowId,
