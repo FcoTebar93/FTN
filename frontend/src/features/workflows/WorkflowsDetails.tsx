@@ -1,4 +1,7 @@
+import { useState } from "preact/hooks";
 import type { WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
+
+type TabId = "estado" | "eventos" | "steps";
 
 interface Props {
   selected: { workflowId: string; runId: string } | null;
@@ -9,7 +12,19 @@ interface Props {
   error: Error | null;
 }
 
+function payloadSummary(payload: unknown): string {
+  if (payload == null) return "—";
+  try {
+    const s = JSON.stringify(payload);
+    return s.length > 80 ? s.slice(0, 80) + "…" : s;
+  } catch {
+    return String(payload);
+  }
+}
+
 export function WorkflowDetail({ selected, state, events, steps, loading, error }: Props) {
+  const [activeTab, setActiveTab] = useState<TabId>("estado");
+
   if (!selected) {
     return <div class="panel">Selecciona un workflow para ver el detalle.</div>;
   }
@@ -17,6 +32,12 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
   if (loading) return <div class="panel">Cargando detalle…</div>;
   if (error) return <div class="panel panel-error">Error: {error.message}</div>;
   if (!state) return <div class="panel">No se ha encontrado el estado.</div>;
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: "estado", label: "Estado" },
+    { id: "eventos", label: "Eventos" },
+    { id: "steps", label: "Steps" },
+  ];
 
   return (
     <div class="panel">
@@ -31,26 +52,109 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
         {state.failureReason && <span>Razón: {state.failureReason}</span>}
       </div>
 
-      {/* Aquí luego puedes convertir en tabs */}
-      <section class="workflow-section">
-        <h3>Actividades</h3>
-        <pre>{JSON.stringify({ pending: state.pendingActivities, completed: state.completedActivities }, null, 2)}</pre>
-      </section>
+      <div class="tabs">
+        {tabs.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            class={activeTab === id ? "tab active" : "tab"}
+            onClick={() => setActiveTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <section class="workflow-section">
-        <h3>Timers</h3>
-        <pre>{JSON.stringify(state.pendingTimers, null, 2)}</pre>
-      </section>
+      <div class="tab-panel">
+        {activeTab === "estado" && (
+          <section class="workflow-section">
+            <h3>Resumen</h3>
+            <ul class="detail-list">
+              <li>Versión: {state.version}</li>
+              {state.result !== undefined && (
+                <li>Resultado: <code class="inline-code">{payloadSummary(state.result)}</code></li>
+              )}
+            </ul>
+            <h3>Actividades pendientes</h3>
+            {state.pendingActivities.length === 0 ? (
+              <p class="detail-muted">Ninguna</p>
+            ) : (
+              <ul class="detail-list">
+                {state.pendingActivities.map((a) => (
+                  <li key={a.id}>
+                    <strong>{a.name}</strong> (id: {a.id}) — input: {payloadSummary(a.input)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <h3>Actividades completadas</h3>
+            {state.completedActivities.length === 0 ? (
+              <p class="detail-muted">Ninguna</p>
+            ) : (
+              <ul class="detail-list">
+                {state.completedActivities.map((a) => (
+                  <li key={a.id}>
+                    <strong>{a.name}</strong> (id: {a.id}) — result: {payloadSummary(a.result)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <h3>Timers pendientes</h3>
+            {state.pendingTimers.length === 0 ? (
+              <p class="detail-muted">Ninguno</p>
+            ) : (
+              <ul class="detail-list">
+                {state.pendingTimers.map((t, i) => (
+                  <li key={i}>Despierta: {t.wakeAt}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
-      <section class="workflow-section">
-        <h3>Steps</h3>
-        <pre>{JSON.stringify(steps ?? [], null, 2)}</pre>
-      </section>
+        {activeTab === "eventos" && (
+          <section class="workflow-section">
+            <h3>Eventos</h3>
+            {!events || events.length === 0 ? (
+              <p class="detail-muted">No hay eventos.</p>
+            ) : (
+              <ul class="events-list">
+                {events.map((ev) => (
+                  <li key={ev.id} class="event-item">
+                    <span class="event-type">{ev.type}</span>
+                    <span class="event-meta">v{ev.version} · {ev.startedAt}</span>
+                    <span class="event-payload">{payloadSummary(ev.payload)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
-      <section class="workflow-section">
-        <h3>Eventos</h3>
-        <pre>{JSON.stringify(events ?? [], null, 2)}</pre>
-      </section>
+        {activeTab === "steps" && (
+          <section class="workflow-section">
+            <h3>Steps</h3>
+            {!steps || steps.length === 0 ? (
+              <p class="detail-muted">No hay steps.</p>
+            ) : (
+              <ul class="steps-list">
+                {steps.map((s) => (
+                  <li key={s.id} class="step-item">
+                    <span class={`step-status status-${s.status}`}>{s.status}</span>
+                    <span class="step-kind">{s.kind}</span>
+                    {s.activityName != null && <span>{s.activityName}</span>}
+                    {s.wakeAt != null && <span>wakeAt: {s.wakeAt}</span>}
+                    {s.branchChosen != null && <span>branch: {s.branchChosen}</span>}
+                    {s.attempts != null && (
+                      <span>intentos: {s.attempts}{s.maxAttempts != null ? `/${s.maxAttempts}` : ""}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
