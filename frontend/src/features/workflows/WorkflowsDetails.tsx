@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useState, useMemo } from "preact/hooks";
 import type { WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
 
 type TabId = "estado" | "eventos" | "steps";
@@ -25,6 +25,7 @@ function payloadSummary(payload: unknown): string {
 export function WorkflowDetail({ selected, state, events, steps, loading, error }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("estado");
   const [showStateJson, setShowStateJson] = useState(false);
+  const [expandedPayloadIds, setExpandedPayloadIds] = useState<Record<string, boolean>>({});
 
   if (!selected) {
     return <div class="panel">Selecciona un workflow para ver el detalle.</div>;
@@ -39,6 +40,15 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
     { id: "eventos", label: "Eventos" },
     { id: "steps", label: "Steps" },
   ];
+
+  const sortedEvents = useMemo(() => {
+    if (!events || events.length === 0) return [];
+    return [...events].sort(
+      (a, b) =>
+        a.version - b.version ||
+        (a.startedAt || "").localeCompare(b.startedAt || "")
+    );
+  }, [events]);
 
   return (
     <div class="panel">
@@ -125,20 +135,45 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
           </section>
         )}
 
-        {activeTab === "eventos" && (
+{activeTab === "eventos" && (
           <section class="workflow-section">
             <h3>Eventos</h3>
-            {!events || events.length === 0 ? (
+            {sortedEvents.length === 0 ? (
               <p class="detail-muted">No hay eventos.</p>
             ) : (
-              <ul class="events-list">
-                {events.map((ev) => (
-                  <li key={ev.id} class="event-item">
-                    <span class="event-type">{ev.type}</span>
-                    <span class="event-meta">v{ev.version} · {ev.startedAt}</span>
-                    <span class="event-payload">{payloadSummary(ev.payload)}</span>
-                  </li>
-                ))}
+              <ul class="events-list events-list--expandable">
+                {sortedEvents.map((ev) => {
+                  const isExpanded = expandedPayloadIds[ev.id];
+                  return (
+                    <li
+                      key={ev.id}
+                      class={`event-item event-item--expandable ${isExpanded ? "event-item--expanded" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        class="event-item-trigger"
+                        onClick={() =>
+                          setExpandedPayloadIds((prev) => ({
+                            ...prev,
+                            [ev.id]: !prev[ev.id],
+                          }))
+                        }
+                      >
+                        <span class="event-item-chevron" aria-hidden="true">›</span>
+                        <span class="event-type">{ev.type}</span>
+                        <span class="event-meta">v{ev.version} · {ev.startedAt}</span>
+                        <span class="event-payload-preview">{payloadSummary(ev.payload)}</span>
+                      </button>
+                      <div class={`event-payload-detail ${isExpanded ? "event-payload-detail--open" : ""}`}>
+                        <pre class="event-payload-json">
+                          {typeof ev.payload === "string"
+                            ? ev.payload
+                            : JSON.stringify(ev.payload, null, 2)}
+                        </pre>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
