@@ -24,6 +24,7 @@ export function WorkflowsPage() {
   const [errorList, setErrorList] = useState<Error | null>(null);
   const [selected, setSelected] = useState<SelectedRun | null>(null);
   const [statusFilter, setStatusFilter] = useState<WorkflowStatus | "">("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [state, setState] = useState<WorkflowState | null>(null);
   const [events, setEvents] = useState<WorkflowEvent[]>([]);
@@ -80,7 +81,7 @@ export function WorkflowsPage() {
   return (
     <div class="app-layout">
       <div class="sidebar">
-      <WorkflowsList
+        <WorkflowsList
           workflows={workflows}
           loading={loadingList}
           error={errorList}
@@ -88,6 +89,8 @@ export function WorkflowsPage() {
           onSelect={setSelected}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
         />
       </div>
       <div class="content">

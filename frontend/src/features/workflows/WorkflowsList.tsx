@@ -8,9 +8,11 @@ interface Props {
     onSelect: (sel: { workflowId: string; runId: string }) => void;
     statusFilter: WorkflowStatus | "";
     onStatusFilterChange: (status: WorkflowStatus | "") => void;
+    searchQuery: string;
+    onSearchQueryChange: (q: string) => void;
 }
 
-export function WorkflowsList({ workflows, loading, error, selected, onSelect, statusFilter, onStatusFilterChange }: Props) {
+export function WorkflowsList({ workflows, loading, error, selected, onSelect, statusFilter, onStatusFilterChange, searchQuery, onSearchQueryChange }: Props) {
   if (loading){
     return <div class="panel">Cargando workflows…</div>;
   } 
@@ -25,6 +27,17 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
     { value: "failed", label: "Failed" },
     { value: "pending", label: "Pending" },
   ];
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredWorkflows =
+    !workflows ? [] : q === ""
+      ? workflows
+      : workflows.filter(
+          (w) =>
+            (w.name ?? "").toLowerCase().includes(q) ||
+            (w.workflowId ?? "").toLowerCase().includes(q) ||
+            (w.runId ?? "").toLowerCase().includes(q)
+  );
 
   return (
     <div class="panel">
@@ -41,13 +54,26 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
           </button>
         ))}
       </div>
+      <div class="workflow-search-wrap">
+        <input
+          type="text"
+          class="workflow-search-input"
+          placeholder="Buscar por nombre, id…"
+          value={searchQuery}
+          onInput={(e) => onSearchQueryChange((e.target as HTMLInputElement).value)}
+        />
+      </div>
       {(!workflows || workflows.length === 0) ? (
         <p class="workflow-list-empty">
           {statusFilter ? `No hay workflows con estado "${statusFilter}".` : "No hay workflows aún."}
         </p>
+      ) : filteredWorkflows.length === 0 ? (
+        <p class="workflow-list-empty">
+          Ningún workflow coincide con la búsqueda.
+        </p>
       ) : (
         <ul class="workflow-list">
-          {workflows.map((w) => {
+          {filteredWorkflows.map((w) => {
             const isSelected =
               selected?.workflowId === w.workflowId && selected?.runId === w.runId;
             return (
