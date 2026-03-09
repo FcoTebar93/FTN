@@ -4,6 +4,7 @@ import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord, Workflo
 import { WorkflowDetail } from "./WorkflowsDetails";
 
 const POLL_INTERVAL_MS = 4000;
+const PAGE_SIZE = 20;
 
 interface SelectedRun {
   workflowId: string;
@@ -53,12 +54,15 @@ export function WorkflowsPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorDetail, setErrorDetail] = useState<Error | null>(null);
 
+  const [page, setPage] = useState(0);
+
   useEffect(() => {
     setLoadingList(true);
-    getWorkflows(statusFilter ? { status: statusFilter } : undefined)
-    .then((ws) => {
-      setWorkflows(ws);
-      if (!selected && ws.length > 0) {
+    getWorkflows(
+      statusFilter ? { status: statusFilter, limit: PAGE_SIZE, offset: page * PAGE_SIZE } : { limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+      .then((ws) => {
+        setWorkflows(ws);
+        if (!selected && ws.length > 0) {
           const first = { workflowId: ws[0].workflowId, runId: ws[0].runId };
           setSelected(first);
           writeSelectedToUrl(first);
@@ -70,7 +74,7 @@ export function WorkflowsPage() {
       })
       .catch((err) => setErrorList(err as Error))
       .finally(() => setLoadingList(false));
-  }, [statusFilter]);
+  }, [statusFilter, page]);
 
   useEffect(() => {
     if (!selected) return;
@@ -113,9 +117,11 @@ export function WorkflowsPage() {
           selected={selected}
           onSelect={(sel) => { setSelected(sel); writeSelectedToUrl(sel); }}
           statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
+          onStatusFilterChange={(value) => { setPage(0); setStatusFilter(value); }}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
+          page={page}
+          onPageChange={setPage}
         />
       </div>
       <div class="content">

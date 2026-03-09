@@ -10,9 +10,11 @@ interface Props {
     onStatusFilterChange: (status: WorkflowStatus | "") => void;
     searchQuery: string;
     onSearchQueryChange: (q: string) => void;
+    page: number;
+    onPageChange: (page: number) => void;
 }
 
-export function WorkflowsList({ workflows, loading, error, selected, onSelect, statusFilter, onStatusFilterChange, searchQuery, onSearchQueryChange }: Props) {
+export function WorkflowsList({ workflows, loading, error, selected, onSelect, statusFilter, onStatusFilterChange, searchQuery, onSearchQueryChange, page, onPageChange }: Props) {
   if (loading){
     return <div class="panel">Cargando workflows…</div>;
   } 
