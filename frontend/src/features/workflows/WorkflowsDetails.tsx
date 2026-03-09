@@ -94,7 +94,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             </ul>
             <h3>Actividades pendientes</h3>
             {state.pendingActivities.length === 0 ? (
-              <p class="detail-muted">Ninguna</p>
+              <p class="detail-muted">No hay actividades pendientes en este momento.</p>
             ) : (
               <ul class="detail-list">
                 {state.pendingActivities.map((a) => (
@@ -106,7 +106,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             )}
             <h3>Actividades completadas</h3>
             {state.completedActivities.length === 0 ? (
-              <p class="detail-muted">Ninguna</p>
+              <p class="detail-muted">Todavía no se ha completado ninguna actividad.</p>
             ) : (
               <ul class="detail-list">
                 {state.completedActivities.map((a) => (
@@ -118,7 +118,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             )}
             <h3>Timers pendientes</h3>
             {state.pendingTimers.length === 0 ? (
-              <p class="detail-muted">Ninguno</p>
+              <p class="detail-muted">No hay timers programados.</p>
             ) : (
               <ul class="detail-list">
                 {state.pendingTimers.map((t, i) => (
@@ -145,7 +145,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
           <section class="workflow-section">
             <h3>Eventos</h3>
             {sortedEvents.length === 0 ? (
-              <p class="detail-muted">No hay eventos.</p>
+              <p class="detail-muted">Aún no se han registrado eventos para este run. Cuando el workflow avance, los verás aquí en orden cronológico.</p>
             ) : (
               <ul class="events-list events-list--expandable">
                 {sortedEvents.map((ev) => {
@@ -189,7 +189,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
           <section class="workflow-section">
             <h3>Steps</h3>
             {!steps || steps.length === 0 ? (
-              <p class="detail-muted">No hay steps.</p>
+              <p class="detail-muted">Este workflow todavía no ha creado ningún step registrado en el motor.</p>
             ) : (
               <div class="steps-table-wrap">
                 <table class="steps-table">

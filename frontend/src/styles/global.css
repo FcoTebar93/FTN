@@ -13,13 +13,11 @@
     --shadow-soft: 0 22px 60px rgba(15, 23, 42, 0.08);
     --shadow-subtle: 0 14px 40px rgba(15, 23, 42, 0.06);
   }
-  
   *,
   *::before,
   *::after {
     box-sizing: border-box;
   }
-  
   body {
     margin: 0;
     min-height: 100vh;
@@ -29,9 +27,6 @@
       radial-gradient(circle at top left, #ffffff 0, #f5f5f7 45%, #e5e9f1 100%);
     color: var(--text);
   }
-  
-  /* Layout principal */
-  
   .app-layout {
     display: grid;
     grid-template-columns: 320px minmax(0, 1fr);
@@ -40,17 +35,13 @@
     max-width: 1440px;
     margin: 0 auto;
   }
-  
-  /* Sidebar y contenido */
-  
   .sidebar {
     border-radius: var(--radius-lg);
     background: linear-gradient(145deg, #ffffff, #f8fafc);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-soft);
     padding: 18px 20px;
-  }
-  
+  }  
   .content {
     border-radius: var(--radius-lg);
     background: linear-gradient(145deg, #ffffff, #f9fafb);
@@ -58,15 +49,11 @@
     box-shadow: var(--shadow-soft);
     padding: 20px 22px;
   }
-  
-  /* Paneles */
-  
   .panel {
     display: flex;
     flex-direction: column;
     gap: 12px;
-  }
-  
+  }  
   .panel-title {
     font-size: 13px;
     font-weight: 600;
@@ -74,9 +61,6 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  
-  /* Lista de workflows */
-  
   .workflow-list {
     list-style: none;
     margin: 8px 0 0 0;
@@ -84,8 +68,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-  }
-  
+  }  
   .workflow-list-item {
     border-radius: var(--radius-md);
     padding: 10px 12px;
@@ -128,9 +111,6 @@
     font-size: 11px;
     color: var(--text-muted);
   }
-  
-  /* Badges de estado */
-  
   .workflow-status {
     align-self: flex-start;
     padding: 2px 9px;
@@ -139,27 +119,21 @@
     text-transform: uppercase;
     letter-spacing: 0.09em;
   }
-  
   .status-running {
     background: var(--accent-soft);
     color: var(--accent-strong);
     border: 1px solid rgba(249, 115, 22, 0.45);
   }
-  
   .status-completed {
     background: rgba(22, 163, 74, 0.06);
     color: #15803d;
     border: 1px solid rgba(22, 163, 74, 0.25);
   }
-  
   .status-failed {
     background: rgba(220, 38, 38, 0.05);
     color: #b91c1c;
     border: 1px solid rgba(220, 38, 38, 0.3);
   }
-  
-  /* Detalle */
-  
   .workflow-detail-header {
     display: flex;
     flex-wrap: wrap;
@@ -171,22 +145,17 @@
     font-size: 12px;
     color: var(--text-muted);
   }
-  
-  /* Secciones del detalle */
-  
   .workflow-section {
     margin-top: 16px;
     padding-top: 8px;
     border-top: 1px dashed rgba(203, 213, 225, 0.8);
   }
-  
   .workflow-section h3 {
     font-size: 13px;
     font-weight: 500;
     color: var(--text-muted);
     margin: 0 0 4px 0;
   }
-  
   .workflow-section pre {
     margin: 0;
     padding: 8px 10px;
@@ -198,8 +167,6 @@
     max-height: 260px;
     overflow: auto;
   }
-
-  /* Tabs del detalle */
 .tabs {
     display: flex;
     gap: 0;
@@ -228,8 +195,6 @@
     padding: 1rem 0;
     min-height: 120px;
   }
-  
-  /* Contenido de pestañas */
   .detail-list {
     margin: 0 0 12px 0;
     padding-left: 1.25rem;
@@ -247,8 +212,7 @@
     background: var(--accent-soft);
     padding: 1px 4px;
     border-radius: 4px;
-  }
-  
+  }  
   .events-list, .steps-list {
     list-style: none;
     margin: 0;
@@ -565,4 +529,17 @@
       transform: scale(1);
       box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
     }
+  }
+  .detail-muted {
+    margin: 4px 0 12px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .detail-muted-box {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px dashed rgba(203, 213, 225, 0.9);
+    font-size: 12px;
+    color: var(--text-muted);
   }
