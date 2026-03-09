@@ -85,13 +85,32 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                 };
             }
             case "ActivityFailed": {
-                const { activityId } = event.payload;
-                const pending = nextState.pendingActivities.filter(a => a.id !== activityId);
+                const { activityId, reason, details } = event.payload;
+              
+                const pending = nextState.pendingActivities.filter((a) => a.id !== activityId);
+                const previous = nextState.pendingActivities.find((a) => a.id === activityId);
+              
                 return {
-                    ...nextState,
-                    pendingActivities: pending,
+                  ...nextState,
+                  pendingActivities: pending,
+                  completedActivities: previous
+                    ? [
+                        ...nextState.completedActivities,
+                        {
+                          id: activityId,
+                          name: previous.name,
+                          input: previous.input,
+                          result: { error: reason, details },
+                        },
+                      ]
+                    : nextState.completedActivities,
+                  steps: nextState.steps.map((step) =>
+                    step.kind === "activity" && step.activityId === activityId
+                      ? { ...step, status: "failed" }
+                      : step
+                  ),
                 };
-            }
+              }
             case "WorkflowCompleted": {
                 return {
                     ...nextState,
