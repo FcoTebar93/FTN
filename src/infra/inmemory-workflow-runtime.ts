@@ -35,6 +35,10 @@ function generateActivityId(): ActivityId {
     return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
+function makeDeterministicActivityId(workflowId: WorkflowId, runId: RunId, name: string, attempt: number): ActivityId {
+  return `activity-${workflowId}-${runId}-${name}-${attempt}`;
+}
+
 export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     private readonly engine;
     private readonly eventStore;
@@ -142,9 +146,18 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         let definitionResult: unknown;
 
         const ftn: FTNApi = {
-          activity<TInput, TResult>(name: string,input: TInput,attempt?: number): ActivityHandle<TResult> {
+          activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
             if (attempt !== undefined) {
-              const activityId = generateActivityId();
+              const activityId = makeDeterministicActivityId(workflowId, runId, name, attempt);
+          
+              const existingById =
+                currentState.pendingActivities.find((a) => a.id === activityId) ??
+                currentState.completedActivities.find((a) => a.id === activityId);
+          
+              if (existingById) {
+                return { id: existingById.id, name: existingById.name };
+              }
+          
               newDomainEvents.push({
                 type: "ActivityScheduled",
                 workflowId,
@@ -157,6 +170,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               });
               return { id: activityId, name };
             }
+
             const existing =
               currentState.pendingActivities.find(
                 (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
