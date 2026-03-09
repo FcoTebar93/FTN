@@ -322,6 +322,9 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             try {
               return await operation(attempt);
             } catch (err) {
+              const error = err as Error;
+              const reason = error.message;
+            
               if (attempt >= maxAttempts) {
                 newDomainEvents.push({
                   type: "RetryGivenUp",
@@ -330,11 +333,23 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   payload: {
                     stepId,
                     attempts: attempt,
-                    reason: (err as Error).message,
+                    reason,
                   },
                 });
-                throw err;
+            
+                newDomainEvents.push({
+                  type: "WorkflowFailed",
+                  workflowId,
+                  runId,
+                  payload: {
+                    reason,
+                    details: { name: error.name, stack: error.stack },
+                  },
+                });
+            
+                throw error;
               }
+            
               if (backOffMs > 0) {
                 const wakeAt = new Date(Date.now() + backOffMs).toISOString();
                 newDomainEvents.push({
@@ -355,19 +370,12 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   targetQueue: "timers",
                 });
               }
-              throw err;
+              throw error;
             }
           },
 
           sleep: async (ms: number): Promise<void> => {
             const wakeAt = new Date(Date.now() + ms).toISOString();
-            newDomainEvents.push({
-              type: "TimerScheduled",
-              workflowId,
-              runId,
-              payload: { wakeAt },
-            });
-
             await this.taskQueue.enqueue({
               id: `timer-${workflowId}-${runId}-${Date.now()}`,
               type: "timer",
