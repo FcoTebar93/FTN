@@ -320,7 +320,18 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             });
           
             try {
-              return await operation(attempt);
+              const result = await operation(attempt);
+              newDomainEvents.push({
+                type: "RetryCompleted",
+                workflowId,
+                runId,
+                payload: {
+                  stepId,
+                  attempts: attempt,
+                },
+              });
+              
+              return result;
             } catch (err) {
               const error = err as Error;
               const reason = error.message;

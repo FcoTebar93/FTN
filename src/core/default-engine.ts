@@ -174,8 +174,8 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                       : step
                   ),
                 };
-              }
-              case "RetryGivenUp": {
+            }
+            case "RetryGivenUp": {
                 const { stepId, attempts, reason } = event.payload;
               
                 return {
@@ -187,14 +187,14 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                   ),
                 };
             }
-            case "RetryGivenUp": {
-                const { stepId, attempts, reason } = event.payload;
+            case "RetryCompleted": {
+                const { stepId, attempts } = event.payload;
               
                 return {
                   ...nextState,
                   steps: nextState.steps.map((step) =>
                     step.id === stepId && step.kind === "retry"
-                      ? { ...step, attempts, status: "failed" }
+                      ? { ...step, attempts, status: "completed" }
                       : step
                   ),
                 };
