@@ -18,6 +18,27 @@ function fetchDetail(workflowId: string, runId: string) {
   ]);
 }
 
+function readSelectedFromUrl(): SelectedRun | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const workflowId = params.get("workflowId");
+  const runId = params.get("runId");
+  return workflowId && runId ? { workflowId, runId } : null;
+}
+
+function writeSelectedToUrl(sel: SelectedRun | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (sel) {
+    url.searchParams.set("workflowId", sel.workflowId);
+    url.searchParams.set("runId", sel.runId);
+  } else {
+    url.searchParams.delete("workflowId");
+    url.searchParams.delete("runId");
+  }
+  window.history.replaceState({}, "", url.toString());
+}
+
 export function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -35,12 +56,16 @@ export function WorkflowsPage() {
   useEffect(() => {
     setLoadingList(true);
     getWorkflows(statusFilter ? { status: statusFilter } : undefined)
-      .then((ws) => {
-        setWorkflows(ws);
-        if (!selected && ws.length > 0) {
-          setSelected({ workflowId: ws[0].workflowId, runId: ws[0].runId });
+    .then((ws) => {
+      setWorkflows(ws);
+      if (!selected && ws.length > 0) {
+          const first = { workflowId: ws[0].workflowId, runId: ws[0].runId };
+          setSelected(first);
+          writeSelectedToUrl(first);
         } else if (selected && !ws.some((w) => w.workflowId === selected.workflowId && w.runId === selected.runId)) {
-          setSelected(ws.length > 0 ? { workflowId: ws[0].workflowId, runId: ws[0].runId } : null);
+          const next = ws.length > 0 ? { workflowId: ws[0].workflowId, runId: ws[0].runId } : null;
+          setSelected(next);
+          writeSelectedToUrl(next);
         }
       })
       .catch((err) => setErrorList(err as Error))
@@ -86,7 +111,7 @@ export function WorkflowsPage() {
           loading={loadingList}
           error={errorList}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={(sel) => { setSelected(sel); writeSelectedToUrl(sel); }}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           searchQuery={searchQuery}
