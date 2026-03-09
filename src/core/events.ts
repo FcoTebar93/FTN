@@ -41,6 +41,7 @@ export interface ActivityScheduledEvent extends BaseWorkflowEvent {
         activityId: ActivityId;
         activityName: string;
         input: unknown;
+        attempt?: number;
     };
 }
 

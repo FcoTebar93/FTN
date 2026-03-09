@@ -38,21 +38,22 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                 return nextState;
             }
             case "ActivityScheduled": {
-                const { activityId, activityName, input } = event.payload;
+                const { activityId, activityName, input, attempt } = event.payload;
               
                 const activityStep: ActivityStep = {
-                  id: activityId,           
+                  id: activityId,
                   kind: "activity",
                   status: "running",
                   activityId,
                   activityName,
+                  attempts: attempt ?? 1,
                 };
               
                 return {
                   ...nextState,
                   pendingActivities: [
                     ...nextState.pendingActivities,
-                    { id: activityId, name: activityName, input },
+                    { id: activityId, name: activityName, input, attempt },
                   ],
                   steps: [...nextState.steps, activityStep],
                 };

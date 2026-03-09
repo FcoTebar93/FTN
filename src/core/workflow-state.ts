@@ -22,6 +22,21 @@ export interface PendingTimer {
     wakeAt: string;
 }
 
+export interface PendingActivity {
+    id: ActivityId;
+    name: string;
+    input: unknown;
+    attempt?: number;
+}
+
+export interface CompletedActivity {
+    id: ActivityId;
+    name: string;
+    input: unknown;
+    result: unknown;
+    attempt?: number;
+}
+
 export interface WorkflowState {
     id: WorkflowId;
     runId: RunId;

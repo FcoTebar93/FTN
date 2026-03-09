@@ -18,6 +18,7 @@ export interface ActivityStep extends BaseStep {
     kind: "activity";
     activityId: ActivityId;
     activityName: string;
+    attempts: number;
 }
 
 export interface SleepStep extends BaseStep {
@@ -44,6 +45,21 @@ export type CancellationSignal = {
 
 export interface Timestamped {
     timestamp: string;
+}
+
+export interface PendingActivity {
+    id: string;
+    name: string;
+    input: unknown;
+    attempt?: number;
+}
+  
+export interface CompletedActivity {
+    id: string;
+    name: string;
+    input: unknown;
+    result: unknown;
+    attempt?: number;
 }
 
 export type StepRecord =

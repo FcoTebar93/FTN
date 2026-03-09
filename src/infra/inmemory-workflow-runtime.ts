@@ -190,6 +190,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                 activityId,
                 activityName: name,
                 input,
+                attempt,
               },
             });
             return { id: activityId, name };
@@ -330,7 +331,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   attempts: attempt,
                 },
               });
-              
+
               return result;
             } catch (err) {
               const error = err as Error;

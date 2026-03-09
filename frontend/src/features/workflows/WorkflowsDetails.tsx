@@ -98,10 +98,12 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             ) : (
               <ul class="detail-list">
                 {state.pendingActivities.map((a) => (
-                  <li key={a.id}>
-                    <strong>{a.name}</strong> (id: {a.id}) — input: {payloadSummary(a.input)}
-                  </li>
-                ))}
+                <li key={a.id}>
+                  <strong>{a.name}</strong> (id: {a.id}
+                  {a.attempt != null ? ` · intento ${a.attempt}` : ""})
+                  — input: {payloadSummary(a.input)}
+                </li>
+              ))}
               </ul>
             )}
             <h3>Actividades completadas</h3>
@@ -110,10 +112,12 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             ) : (
               <ul class="detail-list">
                 {state.completedActivities.map((a) => (
-                  <li key={a.id}>
-                    <strong>{a.name}</strong> (id: {a.id}) — result: {payloadSummary(a.result)}
-                  </li>
-                ))}
+                <li key={a.id}>
+                  <strong>{a.name}</strong> (id: {a.id}
+                  {a.attempt != null ? ` · intento ${a.attempt}` : ""})
+                  — result: {payloadSummary(a.result)}
+                </li>
+              ))}
               </ul>
             )}
             <h3>Timers pendientes</h3>
