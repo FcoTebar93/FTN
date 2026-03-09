@@ -1,3 +1,5 @@
+import type { SendEmailInput, GenerateQrCodeInput } from "./activity-types";
+
 let chargeAttempts = 0;
 
 export type ActivityFn<TInput = unknown, TResult = unknown> = (input: TInput) => Promise<TResult> | TResult;
@@ -33,4 +35,12 @@ export const chargePaymentActivity: ActivityFn<{orderId: string;amount: number;}
 
 export const createShipmentActivity: ActivityFn<{orderId: string; userId: string;}, void> = async (input) => {
     console.log("[activity] create-shipment", input);
+};
+
+export const sendEmailActivity: ActivityFn<SendEmailInput, void> = async (input) => {
+  return Promise.resolve();
+};
+
+export const generateQrCodeActivity: ActivityFn<GenerateQrCodeInput, string> = async (input) => {
+  return Promise.resolve("data:image/png;base64,...");
 };
