@@ -61,6 +61,12 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
         {state.completedAt && <span>Completado: {state.completedAt}</span>}
         {state.failedAt && <span>Falló: {state.failedAt}</span>}
         {state.failureReason && <span>Razón: {state.failureReason}</span>}
+        {state.status === "running" && (
+          <span class="workflow-live-pill">
+            <span class="workflow-live-dot" />
+            Actualizando cada 4 s
+          </span>
+        )}
       </div>
 
       <div class="tabs">
