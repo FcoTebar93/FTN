@@ -3,8 +3,7 @@ import * as QRCode from "qrcode";
 import Stripe from "stripe";
 import type { StripeCreateCheckoutSessionInput, StripeCreateCheckoutSessionResult } from "./activity-types";
 import { Pool } from "pg";
-import * as sgMail from "@sendgrid/mail";
-import { MailDataRequired } from "@sendgrid/mail";
+import sgMail from "@sendgrid/mail";
 
 let chargeAttempts = 0;
 let pool: Pool | null = null;
@@ -74,7 +73,7 @@ export const sendEmailActivity: ActivityFn<SendEmailInput, void> = async (input)
     ...(input.textBody ? { text: input.textBody } : {}),
     ...(input.htmlBody ? { html: input.htmlBody } : {}),
   };
-  await sgMail.send(msg as MailDataRequired);
+  await sgMail.send(msg as any);
 };
 
 export const generateQrCodeActivity: ActivityFn<GenerateQrCodeInput, string> = async (input) => {

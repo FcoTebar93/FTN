@@ -410,7 +410,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const defEntry = this.definitions.get(key);
 
         const lastEvent = events[events.length - 1];
-        const shouldExecuteDefinition = !!defEntry && (events.length <= 1 || lastEvent?.type === "ActivityFailed");
+        const shouldExecuteDefinition = !!defEntry && currentState.status === "running";
 
         if (shouldExecuteDefinition && defEntry) {
           try {
