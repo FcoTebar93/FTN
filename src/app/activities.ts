@@ -1,10 +1,10 @@
 import type { SendEmailInput, GenerateQrCodeInput, DbExecuteInput, DbExecuteResult } from "./activity-types";
 import * as QRCode from "qrcode";
-import * as nodemailer from "nodemailer";
 import Stripe from "stripe";
 import type { StripeCreateCheckoutSessionInput, StripeCreateCheckoutSessionResult } from "./activity-types";
 import { Pool } from "pg";
-
+import * as sgMail from "@sendgrid/mail";
+import { MailDataRequired } from "@sendgrid/mail";
 
 let chargeAttempts = 0;
 let pool: Pool | null = null;
@@ -53,29 +53,28 @@ export const createShipmentActivity: ActivityFn<{orderId: string; userId: string
 };
 
 export const sendEmailActivity: ActivityFn<SendEmailInput, void> = async (input) => {
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-
-    if (!user || !pass) {
-    throw new Error("SMTP_USER/SMTP_PASS no están configuradas");
-    }
-
-    const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? "localhost",
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: false,
-    auth: { user, pass },
-    });
-    
-    const to = Array.isArray(input.to) ? input.to.join(",") : input.to;
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from = process.env.EMAIL_FROM ?? process.env.SMTP_FROM;
   
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to,
-      subject: input.subject ?? "[FTN] Notificación",
-      text: input.textBody,
-      html: input.htmlBody,
-    });
+  if (!apiKey){
+    throw new Error("SENDGRID_API_KEY no está configurada");
+  } 
+  
+  if (!from){
+    throw new Error("EMAIL_FROM/SMTP_FROM no está configurado");
+  }
+  
+  sgMail.setApiKey(apiKey);
+  
+  const to = Array.isArray(input.to) ? input.to : [input.to];
+  const msg = {
+    from,
+    to,
+    subject: input.subject ?? "[FTN] Notificación",
+    ...(input.textBody ? { text: input.textBody } : {}),
+    ...(input.htmlBody ? { html: input.htmlBody } : {}),
+  };
+  await sgMail.send(msg as MailDataRequired);
 };
 
 export const generateQrCodeActivity: ActivityFn<GenerateQrCodeInput, string> = async (input) => {
