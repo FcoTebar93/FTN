@@ -15,7 +15,7 @@ export interface ParallelOptions {
 }
 
 export interface FTNApi {
-    activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult>;
+    activity<TInput, TResult>(name: string, input: TInput, options?: { retry?: RetryOptions; timeoutMs?: number }): Promise<TResult>;
 
     parallel<TResult>(branches: Array<() => void>): ActivityHandle<TResult>[];
 
