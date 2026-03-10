@@ -1,4 +1,7 @@
 import type { SendEmailInput, GenerateQrCodeInput } from "./activity-types";
+import * as QRCode from "qrcode";
+import * as nodemailer from "nodemailer";
+
 
 let chargeAttempts = 0;
 
@@ -38,9 +41,44 @@ export const createShipmentActivity: ActivityFn<{orderId: string; userId: string
 };
 
 export const sendEmailActivity: ActivityFn<SendEmailInput, void> = async (input) => {
-  return Promise.resolve();
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    if (!user || !pass) {
+    throw new Error("SMTP_USER/SMTP_PASS no están configuradas");
+    }
+
+    const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST ?? "localhost",
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: false,
+    auth: { user, pass },
+    });
+    
+    const to = Array.isArray(input.to) ? input.to.join(",") : input.to;
+  
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to,
+      subject: input.subject ?? "[FTN] Notificación",
+      text: input.textBody,
+      html: input.htmlBody,
+    });
 };
 
 export const generateQrCodeActivity: ActivityFn<GenerateQrCodeInput, string> = async (input) => {
-  return Promise.resolve("data:image/png;base64,...");
+    const size = input.size ?? 256;
+    const format = input.format ?? "png";
+  
+    if (format === "png") {
+      const dataUrl = await QRCode.toDataURL(input.data, { width: size });
+      return dataUrl;
+    }
+  
+    if (format === "svg") {
+      const svg = await QRCode.toString(input.data, { type: "svg", width: size });
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    }
+  
+    throw new Error(`Unsupported QR format: ${format}`);
 };
