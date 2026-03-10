@@ -3,6 +3,7 @@ import { GenerateQrCodeInput, PaymentCompletedSignalData, SendEmailInput } from 
 
 type WorkflowMap = Map<string, WorkflowDefinition<any, any>>;
 
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
 const workflows: WorkflowMap = new Map();
 
 export function registerWorkflow<TInput, TResult>(
@@ -39,8 +40,6 @@ export interface PaymentSignupResult {
   sessionId: string;
 }
 
-const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
-
 export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult> = async (ftn, input) => {
   const validateHandle = ftn.activity<OrderInput, void>("validate-order", input);
   const shipmentHandle = ftn.activity<OrderInput, void>("create-shipment", input);
@@ -58,7 +57,12 @@ export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult
 };
 
 export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, PaymentSignupResult> = async (ftn, input) => {
+  const wfId = ftn.workflowId();
+  const runId = ftn.runId();
+
   const url = new URL("/pagar", FRONTEND_BASE_URL);
+  url.searchParams.set("workflowId", wfId);
+  url.searchParams.set("runId", runId);
   url.searchParams.set("email", input.email);
   url.searchParams.set("planName", input.planName);
   url.searchParams.set("priceCents", String(input.priceCents));
