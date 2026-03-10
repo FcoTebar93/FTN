@@ -1,4 +1,4 @@
-import type { ActivityId } from "../shared/types";
+import type { ActivityId, WorkflowId, RunId } from "../shared/types";
 
 export interface ActivityHandle<TResult> {
     id: ActivityId;
@@ -32,6 +32,9 @@ export interface FTNApi {
     sleep(ms: number): Promise<void>;
 
     signal<TData = unknown>(name: string): Promise<TData>;
+
+    workflowId(): WorkflowId;
+    runId(): RunId;
 }
 
 export type WorkflowDefinition<TInput, TResult> = (ftn: FTNApi, input: TInput) => Promise<TResult> | TResult;

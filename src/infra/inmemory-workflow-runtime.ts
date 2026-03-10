@@ -35,10 +35,6 @@ function generateActivityId(): ActivityId {
     return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-function makeDeterministicActivityId(workflowId: WorkflowId, runId: RunId, name: string, attempt: number): ActivityId {
-  return `activity-${workflowId}-${runId}-${name}-${attempt}`;
-}
-
 export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     private readonly engine;
     private readonly eventStore;
@@ -148,16 +144,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const ftn: FTNApi = {
           activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
             if (attempt !== undefined) {
-              const activityId = makeDeterministicActivityId(workflowId, runId, name, attempt);
-          
-              const existingById =
-                currentState.pendingActivities.find((a) => a.id === activityId) ??
-                currentState.completedActivities.find((a) => a.id === activityId);
-          
-              if (existingById) {
-                return { id: existingById.id, name: existingById.name };
-              }
-          
+              const activityId = generateActivityId();
               newDomainEvents.push({
                 type: "ActivityScheduled",
                 workflowId,
@@ -170,7 +157,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               });
               return { id: activityId, name };
             }
-
             const existing =
               currentState.pendingActivities.find(
                 (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
@@ -190,13 +176,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                 activityId,
                 activityName: name,
                 input,
-                attempt,
               },
             });
             return { id: activityId, name };
           },
 
-          parallel<TResult>(branches: Array<() => ActivityHandle<TResult>>): ActivityHandle<TResult>[] {
+          parallel<TResult>(
+            branches: Array<() => ActivityHandle<TResult>>
+          ): ActivityHandle<TResult>[] {
             const handles: ActivityHandle<TResult>[] = [];
             for (const branch of branches) {
               const handle = branch();
@@ -223,7 +210,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             return results;
           },
 
-          conditional: async <TResult>(condition: () => boolean, thenBranch: () => Promise<TResult>, elseBranch?: () => Promise<TResult>): Promise<TResult> => {
+          conditional: async <TResult>(
+            condition: () => boolean,
+            thenBranch: () => Promise<TResult>,
+            elseBranch?: () => Promise<TResult>
+          ): Promise<TResult> => {
             const stepId = generateStepId();
           
             const existingStep = currentState.steps.find(
@@ -287,10 +278,13 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             }
           },
 
-          retry: async <TResult>(options: RetryOptions,operation: (attempt: number) => Promise<TResult>): Promise<TResult> => {
+          retry: async <TResult>(
+            options: RetryOptions,
+            operation: (attempt: number) => Promise<TResult>
+          ): Promise<TResult> => {
             const maxAttempts = options.maxAttempts;
             const backOffMs = options.backOffMs ?? 0;
-          
+
             const allEvents = await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
             const retryStartedEvents = allEvents.filter(
               (e): e is Extract<typeof e, { type: "RetryAttemptStarted" }> =>
@@ -298,17 +292,17 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             );
             const existingStepId = retryStartedEvents[0]?.payload.stepId;
             const stepId = existingStepId ?? `retry-${workflowId}-${runId}`;
-          
+
             const attemptsSoFar = retryStartedEvents.filter(
               (e) => e.payload.stepId === stepId
             ).length;
-          
+
             if (attemptsSoFar >= maxAttempts) {
               throw new Error(
                 `Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`
               );
             }
-          
+
             const attempt = attemptsSoFar + 1;
             newDomainEvents.push({
               type: "RetryAttemptStarted",
@@ -319,24 +313,10 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                 attempt,
               },
             });
-          
-            try {
-              const result = await operation(attempt);
-              newDomainEvents.push({
-                type: "RetryCompleted",
-                workflowId,
-                runId,
-                payload: {
-                  stepId,
-                  attempts: attempt,
-                },
-              });
 
-              return result;
+            try {
+              return await operation(attempt);
             } catch (err) {
-              const error = err as Error;
-              const reason = error.message;
-            
               if (attempt >= maxAttempts) {
                 newDomainEvents.push({
                   type: "RetryGivenUp",
@@ -345,23 +325,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   payload: {
                     stepId,
                     attempts: attempt,
-                    reason,
+                    reason: (err as Error).message,
                   },
                 });
-            
-                newDomainEvents.push({
-                  type: "WorkflowFailed",
-                  workflowId,
-                  runId,
-                  payload: {
-                    reason,
-                    details: { name: error.name, stack: error.stack },
-                  },
-                });
-            
-                throw error;
+                throw err;
               }
-            
               if (backOffMs > 0) {
                 const wakeAt = new Date(Date.now() + backOffMs).toISOString();
                 newDomainEvents.push({
@@ -370,6 +338,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   runId,
                   payload: { wakeAt },
                 });
+
                 await this.taskQueue.enqueue({
                   id: `timer-${workflowId}-${runId}-${Date.now()}`,
                   type: "timer",
@@ -382,12 +351,19 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
                   targetQueue: "timers",
                 });
               }
-              throw error;
+              throw err;
             }
           },
 
           sleep: async (ms: number): Promise<void> => {
             const wakeAt = new Date(Date.now() + ms).toISOString();
+            newDomainEvents.push({
+              type: "TimerScheduled",
+              workflowId,
+              runId,
+              payload: { wakeAt },
+            });
+
             await this.taskQueue.enqueue({
               id: `timer-${workflowId}-${runId}-${Date.now()}`,
               type: "timer",
@@ -420,6 +396,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               
               return signalEvent.payload.data as TData;
           },
+
+          workflowId(): WorkflowId {
+            return workflowId;
+          },
+
+          runId(): RunId {
+            return runId;
+          }
         };
 
         const key = makeWorkflowKey(workflowId, runId);
