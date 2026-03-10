@@ -22,6 +22,8 @@
     },
     "dependencies": {
         "nodemailer": "^8.0.2",
-        "qrcode": "^1.5.4"
+        "qrcode": "^1.5.4",
+        "pg": "^8.14.1",
+        "stripe": "^18.3.0"
     }
 }
