@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ftn-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ftn
+    ports:
+      - "5435:5435"
+    volumes:
+      - ftn_pgdata:/var/lib/postgresql/data
+    networks:
+      - ftn-net
+
+  backend:
+    container_name: ftn-backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    env_file:
+      - .env
+    environment:
+      # Sobrescribe DATABASE_URL para que el backend vea el contenedor postgres
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/ftn
+      PORT: 4000
+    depends_on:
+      - postgres
+    ports:
+      - "4000:4000"
+    networks:
+      - ftn-net
+
+  frontend:
+    container_name: ftn-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    networks:
+      - ftn-net
+
+networks:
+  ftn-net:
+
+volumes:
+  ftn_pgdata:
