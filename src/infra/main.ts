@@ -4,12 +4,13 @@ import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
-import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity, sendEmailActivity, generateQrCodeActivity, stripeCreateCheckoutSessionActivity } from "../app/activities";
+import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity, sendEmailActivity, generateQrCodeActivity, stripeCreateCheckoutSessionActivity, dbExecuteActivity } from "../app/activities";
 import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import type { WorkflowTask } from "../shared/tasks";
 import { getWorkflow } from "../app/workflows";
 import { InMemoryTimerWorker } from "./inmemory-timer-worker";
+import Stripe from "stripe";
 
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
@@ -23,6 +24,7 @@ activities.register("create-shipment", createShipmentActivity);
 activities.register("send-email", sendEmailActivity);
 activities.register("generate-qr-code", generateQrCodeActivity);
 activities.register("stripe-create-checkout-session", stripeCreateCheckoutSessionActivity);
+activities.register("db-execute", dbExecuteActivity);
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
@@ -286,6 +288,123 @@ const server = http.createServer(async (req, res) => {
           res.end(`Error sending signal: ${(e as Error).message}`);
         }
       });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/pay/checkout") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const parsed = JSON.parse(body || "{}");
+          const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsed;
+          const key = process.env.STRIPE_SECRET_KEY;
+          if (!key) {
+            res.statusCode = 500;
+            res.end("STRIPE_SECRET_KEY not configured");
+            return;
+          }
+          const stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
+          const session = await stripe.checkout.sessions.create({
+            mode: "payment",
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer_email: customerEmail,
+            currency,
+            line_items: lineItems.map((li: any) => ({
+              quantity: li.quantity,
+              price_data: {
+                currency,
+                unit_amount: li.unitAmountCents,
+                product_data: { name: li.name },
+              },
+            })),
+            metadata,
+          });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ sessionId: session.id, url: session.url }));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(`Error creating checkout: ${(e as Error).message}`);
+        }
+      });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/stripe/webhook") {
+      const sig = req.headers["stripe-signature"];
+      let body = "";
+
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+
+      req.on("end", async () => {
+        try {
+          const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+          if (!webhookSecret || !stripeSecretKey) {
+            res.statusCode = 500;
+            res.end("Stripe secrets not configured");
+            return;
+          }
+
+          const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" as any });
+
+          const event = stripe.webhooks.constructEvent(
+            body,
+            sig as string,
+            webhookSecret
+          );
+
+          if (event.type === "checkout.session.completed") {
+            const session: any = event.data.object;
+            const metadata = session.metadata || {};
+            const workflowId = metadata.workflowId;
+            const runId = metadata.runId;
+
+            if (workflowId && runId) {
+              await eventStore.appendEvents(workflowId, runId, 1, [
+                {
+                  type: "SignalReceived",
+                  workflowId,
+                  runId,
+                  payload: {
+                    signalName: "payment-completed",
+                    data: {
+                      sessionId: session.id,
+                      amountTotal: session.amount_total,
+                      currency: session.currency,
+                      customerEmail: session.customer_details?.email,
+                    },
+                  },
+                },
+              ]);
+
+              const task: WorkflowTask = {
+                id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
+                type: "workflow",
+                workflowId,
+                runId,
+                createdAt: new Date().toISOString(),
+                scheduledAt: new Date().toISOString(),
+                workerType: "workflow",
+                targetQueue: "workflows",
+              };
+              await taskQueue.enqueue(task);
+            }
+          }
+
+          res.statusCode = 200;
+          res.end("[OK] webhook processed");
+        } catch (err) {
+          res.statusCode = 400;
+          res.end(`Webhook error: ${(err as Error).message}`);
+        }
+      });
+
       return;
     }
 

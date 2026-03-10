@@ -33,7 +33,6 @@ export interface StripeCreateCheckoutSessionResult {
 }
 
 export interface DbExecuteInput {
-    connectionString: string;
     sql: string;
     params?: unknown[];
 }
