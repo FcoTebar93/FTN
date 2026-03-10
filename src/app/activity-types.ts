@@ -41,3 +41,10 @@ export interface DbExecuteResult {
     rowCount: number;
     rows: unknown[];
 }
+
+export interface PaymentCompletedSignalData {
+    sessionId: string;
+    amountTotal?: number;
+    currency?: string;
+    customerEmail?: string;
+}

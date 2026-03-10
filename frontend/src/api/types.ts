@@ -12,12 +12,14 @@ export interface WorkflowSummary {
 }
 
 export interface PendingActivity {
+    attempt: null;
     id: string;
     name: string;
     input: unknown;
 }
 
 export interface CompletedActivity {
+    attempt: null;
     id: string;
     name: string;
     input: unknown;
