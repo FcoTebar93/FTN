@@ -1,9 +1,21 @@
-import type { SendEmailInput, GenerateQrCodeInput } from "./activity-types";
+import type { SendEmailInput, GenerateQrCodeInput, DbExecuteInput, DbExecuteResult } from "./activity-types";
 import * as QRCode from "qrcode";
 import * as nodemailer from "nodemailer";
+import Stripe from "stripe";
+import type { StripeCreateCheckoutSessionInput, StripeCreateCheckoutSessionResult } from "./activity-types";
+import { Pool } from "pg";
 
 
 let chargeAttempts = 0;
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+    if (pool) return pool;
+    const cs = process.env.DATABASE_URL;
+    if (!cs) throw new Error("DATABASE_URL no está configurada");
+    pool = new Pool({ connectionString: cs });
+    return pool;
+}
 
 export type ActivityFn<TInput = unknown, TResult = unknown> = (input: TInput) => Promise<TResult> | TResult;
 
@@ -81,4 +93,36 @@ export const generateQrCodeActivity: ActivityFn<GenerateQrCodeInput, string> = a
     }
   
     throw new Error(`Unsupported QR format: ${format}`);
+};
+
+export const stripeCreateCheckoutSessionActivity: ActivityFn<StripeCreateCheckoutSessionInput,StripeCreateCheckoutSessionResult> = async (input) => {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY no está configurada");
+
+  const stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    customer_email: input.customerEmail,
+    currency: input.currency,
+    line_items: input.lineItems.map((li) => ({
+      quantity: li.quantity,
+      price_data: {
+        currency: input.currency,
+        unit_amount: li.unitAmountCents,
+        product_data: { name: li.name },
+      },
+    })),
+    metadata: input.metadata,
+  });
+
+  if (!session.url) throw new Error("Stripe session sin url");
+  return { sessionId: session.id, url: session.url };
+};
+
+export const dbExecuteActivity: ActivityFn<DbExecuteInput, DbExecuteResult> = async (input) => {
+    const res = await getPool().query(input.sql, input.params ?? []);
+    return { rowCount: res.rowCount ?? 0, rows: res.rows ?? [] };
 };

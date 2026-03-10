@@ -4,7 +4,7 @@ import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
-import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity, sendEmailActivity, generateQrCodeActivity } from "../app/activities";
+import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity, sendEmailActivity, generateQrCodeActivity, stripeCreateCheckoutSessionActivity } from "../app/activities";
 import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import type { WorkflowTask } from "../shared/tasks";
@@ -22,6 +22,7 @@ activities.register("charge-payment", chargePaymentActivity);
 activities.register("create-shipment", createShipmentActivity);
 activities.register("send-email", sendEmailActivity);
 activities.register("generate-qr-code", generateQrCodeActivity);
+activities.register("stripe-create-checkout-session", stripeCreateCheckoutSessionActivity);
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
