@@ -543,3 +543,41 @@
     font-size: 12px;
     color: var(--text-muted);
   }
+  .payment-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+  }
+  .payment-modal {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 24px 28px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+  }
+  .payment-modal h2 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+  }
+  .payment-modal p {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: #4b5563;
+  }
+  .payment-modal button {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .payment-modal button:hover {
+    background: #eef2ff;
+    border-color: #6366f1;
+  }
