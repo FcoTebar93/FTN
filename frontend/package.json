@@ -9,7 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "preact": "^10.27.2"
+    "preact": "^10.27.2",
+    "pg": "^8.14.1",
+    "stripe": "^18.3.0",
+    "nodemailer": "^8.0.2",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",
