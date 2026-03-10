@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from "../core/ftn";
-import { GenerateQrCodeInput, SendEmailInput } from "./activity-types";
+import { GenerateQrCodeInput, PaymentCompletedSignalData, SendEmailInput } from "./activity-types";
 
 type WorkflowMap = Map<string, WorkflowDefinition<any, any>>;
 
@@ -52,29 +52,29 @@ export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult
   return { orderId: input.orderId, charged: true, shipped: true };
 };
 
-export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, PaymentSignupResult> =
-  async (ftn, input) => {
-    const qrHandle = ftn.activity<GenerateQrCodeInput, string>("generate-qr-code", {
-      data: `https://tu-front/pagar?email=${encodeURIComponent(input.email)}`,
-      size: 256,
-      format: "png",
-    });
-    const emailHandle = ftn.activity<SendEmailInput, void>("send-email", {
-      to: input.email,
-      subject: "Completa tu pago",
-      htmlBody: `<p>Escanea este código para pagar:</p><img src="${(await ftn.join([qrHandle]))[0]}" />`,
-    });
-    await ftn.join([emailHandle]);
-    const payment = await ftn.signal<PaymentSignupResult>("payment-completed");
-    await ftn.activity("db-execute", {
-      sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
-      params: [input.email, payment.sessionId],
-    });
-    return {
-      email: input.email,
-      sessionId: payment.sessionId,
-    };
-}; 
+export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput,PaymentSignupResult> = async (ftn, input) => {
+  const qrHandle = ftn.activity<GenerateQrCodeInput, string>("generate-qr-code", {
+    data: `https://localhost:5173/pay?email=${encodeURIComponent(input.email)}`,
+    size: 256,
+    format: "png",
+  });
+  const [qrUrl] = await ftn.join([qrHandle]);
+  const emailHandle = ftn.activity<SendEmailInput, void>("send-email", {
+    to: input.email,
+    subject: "Completa tu pago",
+    htmlBody: `<p>Escanea este código para pagar:</p><img src="${qrUrl}" />`,
+  });
+  await ftn.join([emailHandle]);
+  const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
+  await ftn.activity("db-execute", {
+    sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
+    params: [input.email, payment.sessionId],
+  });
+  return {
+    email: input.email,
+    sessionId: payment.sessionId,
+  };
+};
 
 registerWorkflow<OrderInput, OrderResult>(
   "order-processing",
