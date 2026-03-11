@@ -4,6 +4,7 @@ import type { AnyActivityDefinition } from "../../../core/activities";
 import { stripeCreateCheckoutSessionActivityDefinition } from "./stripe-create-checkout-session";
 import { validateOrderActivityDefinition } from "./validate-order";
 import { chargePaymentActivityDefinition } from "./charge-payment";
+import { getPaymentStatusActivityDefinition } from "./get-payment-status";
 
 export interface PaymentsConfig {
   enabled: boolean;
@@ -26,6 +27,7 @@ export const PaymentsModule: IntegrationModule = {
 
     if (config.stripeSecretKey) {
       defs.push(stripeCreateCheckoutSessionActivityDefinition(config));
+      defs.push(getPaymentStatusActivityDefinition(config));
     }
 
     for (const def of defs) {

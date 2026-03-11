@@ -32,3 +32,14 @@ export interface ChargePaymentInput {
   orderId: string;
   amount: number;
 }
+
+export interface GetPaymentStatusInput {
+  sessionId: string;
+}
+
+export interface GetPaymentStatusResult {
+  status: "open" | "complete" | "expired";
+  amountTotal?: number;
+  currency?: string;
+  customerEmail?: string;
+}
