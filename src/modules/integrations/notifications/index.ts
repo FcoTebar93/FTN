@@ -4,6 +4,7 @@ import type { AnyActivityDefinition } from "../../../core/activities";
 import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
 import { sendWebhookActivityDefinition } from "./send-webhook-activity";
+import { sendSmsActivityDefinition } from "./send-sms-activity";
 
 export interface NotificationsConfig {
   enabled: boolean;
@@ -29,6 +30,7 @@ export const NotificationsModule: IntegrationModule = {
 
     if (config.enabled) {
       defs.push(sendWebhookActivityDefinition(config));
+      defs.push(sendSmsActivityDefinition(config));
     }
 
     for (const def of defs) {

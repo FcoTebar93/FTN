@@ -29,6 +29,12 @@ export interface SendWebhookInput {
   timeoutMs?: number
 }
 
+export interface SendSmsInput {
+  to: string;
+  text: string;
+}
+
+export type SendSmsResult = void;
 export type SendSlackMessageResult = void;
 export type SendEmailResult = void;
 export type SendWebhookResult = {
