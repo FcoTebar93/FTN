@@ -15,3 +15,10 @@ export interface StripeCreateCheckoutSessionResult {
     sessionId: string;
     url: string;
 }
+
+export interface PaymentCompletedSignalData {
+  sessionId: string;
+  amountTotal?: number;
+  currency?: string;
+  customerEmail?: string;
+}

@@ -1,5 +1,8 @@
 import type { WorkflowDefinition } from "../core/ftn";
-import { GenerateQrCodeInput, PaymentCompletedSignalData, SendEmailInput } from "./activity-types";
+import type { GenerateQrCodeInput } from "../modules/integrations/documents/types";
+import type { SendEmailInput } from "../modules/integrations/notifications/types";
+import type { DbExecuteInput, DbExecuteResult } from "../modules/integrations/storage/types";
+import type { PaymentCompletedSignalData } from "../modules/integrations/payments/types";
 
 type WorkflowMap = Map<string, WorkflowDefinition<any, any>>;
 
@@ -41,60 +44,59 @@ export interface PaymentSignupResult {
 }
 
 export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult> = async (ftn, input) => {
-  const validateHandle = ftn.activity<OrderInput, void>("validate-order", input);
-  const shipmentHandle = ftn.activity<OrderInput, void>("create-shipment", input);
+  const validatePromise = ftn.activity<OrderInput, void>("validate-order", input);
+  const shipmentPromise = ftn.activity<OrderInput, void>("documents.createShipment:v1", input);
 
   await ftn.retry(
     { maxAttempts: 3, backOffMs: 500 },
-    async (attempt) => {
-      const chargeHandle = ftn.activity<OrderInput, void>("charge-payment", input, attempt);
-      await ftn.join([chargeHandle]);
+    async () => {
+      await ftn.activity<OrderInput, void>("charge-payment", input);
     }
   );
 
-  await ftn.join([validateHandle, shipmentHandle]);
+  await Promise.all([validatePromise, shipmentPromise]);
   return { orderId: input.orderId, charged: true, shipped: true };
 };
 
-export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, PaymentSignupResult> = async (ftn, input) => {
-  const wfId = ftn.workflowId();
-  const runId = ftn.runId();
+export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, PaymentSignupResult> =
+  async (ftn, input) => {
+    const wfId = ftn.workflowId();
+    const runId = ftn.runId();
 
-  const url = new URL("/pagar", FRONTEND_BASE_URL);
-  url.searchParams.set("workflowId", wfId);
-  url.searchParams.set("runId", runId);
-  url.searchParams.set("email", input.email);
-  url.searchParams.set("planName", input.planName);
-  url.searchParams.set("priceCents", String(input.priceCents));
+    const url = new URL("/pagar", FRONTEND_BASE_URL);
+    url.searchParams.set("workflowId", wfId);
+    url.searchParams.set("runId", runId);
+    url.searchParams.set("email", input.email);
+    url.searchParams.set("planName", input.planName);
+    url.searchParams.set("priceCents", String(input.priceCents));
 
-  const qrHandle = ftn.activity<GenerateQrCodeInput, string>("generate-qr-code", {
-    data: url.toString(),
-    size: 256,
-    format: "png",
-  });
+    const qrPromise = ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
+      data: url.toString(),
+      size: 256,
+      format: "png",
+    });
 
-  const [qrUrl] = await ftn.join([qrHandle]);
+    const [qrUrl] = await qrPromise;
 
-  const emailHandle = ftn.activity<SendEmailInput, void>("send-email", {
-    to: input.email,
-    subject: "Completa tu pago",
-    htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
-  });
+    const emailHandle = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+      to: input.email,
+      subject: "Completa tu pago",
+      htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
+    });
 
-  await ftn.join([emailHandle]);
+    const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
 
-  const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
+    await ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+      to: input.email,
+      subject: "Completa tu pago",
+      htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
+    });
 
-  await ftn.activity("db-execute", {
-    sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
-    params: [input.email, payment.sessionId],
-  });
-
-  return {
-    email: input.email,
-    sessionId: payment.sessionId,
+    return {
+      email: input.email,
+      sessionId: payment.sessionId,
+    };
   };
-};
 
 registerWorkflow<OrderInput, OrderResult>(
   "order-processing",
