@@ -1,0 +1,79 @@
+import { Pool } from "pg";
+import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
+import type { UpsertUserInput, UpsertUserResult } from "./types";
+import type { CrmConfig } from "./index";
+
+export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinition<UpsertUserInput, UpsertUserResult> {
+  const { databaseUrl } = config;
+
+  if (!databaseUrl) {
+    throw new Error("Config inválida para crm.upsertUser: falta databaseUrl");
+  }
+
+  const pool = new Pool({ connectionString: databaseUrl });
+
+  return {
+    name: "crm.upsertUser:v1",
+    maxAttempts: 3,
+    timeoutMs: 10_000,
+    tags: ["crm", "users"],
+    version: "v1",
+    async execute(input: UpsertUserInput, ctx: ActivityExecutionContext): Promise<UpsertUserResult> {
+      ctx.log("Upsert de usuario en CRM", {
+        userId: input.userId,
+        email: input.email,
+        planName: input.planName,
+      });
+
+      if (input.userId) {
+        const res = await pool.query(
+          `
+          update users
+          set email = $2,
+              name = $3,
+              plan_name = $4,
+              metadata = $5,
+              updated_at = now()
+          where id = $1
+          returning id
+          `,
+          [
+            input.userId,
+            input.email,
+            input.name ?? null,
+            input.planName ?? null,
+            input.metadata ? JSON.stringify(input.metadata) : null,
+          ]
+        );
+
+        if (res.rowCount && res.rowCount > 0) {
+          return { userId: res.rows[0].id };
+        }
+        // Si no existe, caemos al flujo de insert por email
+      }
+
+      // Upsert por email: si ya existe, actualiza; si no, crea nuevo
+      const res = await pool.query(
+        `
+        insert into users (email, name, plan_name, metadata)
+        values ($1, $2, $3, $4)
+        on conflict (email)
+        do update set
+          name = excluded.name,
+          plan_name = excluded.plan_name,
+          metadata = excluded.metadata,
+          updated_at = now()
+        returning id
+        `,
+        [
+          input.email,
+          input.name ?? null,
+          input.planName ?? null,
+          input.metadata ? JSON.stringify(input.metadata) : null,
+        ]
+      );
+
+      return { userId: res.rows[0].id };
+    },
+  };
+}
