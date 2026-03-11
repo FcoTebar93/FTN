@@ -22,3 +22,13 @@ export interface PaymentCompletedSignalData {
   currency?: string;
   customerEmail?: string;
 }
+
+export interface ValidateOrderInput {
+  orderId: string;
+  userId: string;
+  amount: number;
+}
+export interface ChargePaymentInput {
+  orderId: string;
+  amount: number;
+}
