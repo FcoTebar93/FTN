@@ -1,4 +1,5 @@
 import type { WorkflowId, RunId, ActivityId, WorkerId } from "./types";
+import type { ActivityTask as ActivityPayload } from "./activity-types";
 
 export type TaskType = "workflow" | "activity" | "timer";
 
@@ -23,17 +24,7 @@ export interface ActivityTask extends BaseTask {
     runId: RunId;
     activityId: ActivityId;
     activityName: string;
-}
-
-export interface ActivityTaskMessage {
-    taskId: string;
-    workflowId: string;
-    runId: string;
-    activityId: string;
-    activityName: string;
-    input: unknown;
-    attempt: number;
-    scheduledAt: string;
+    payload: ActivityPayload;
 }
 
 export interface TimerTask extends BaseTask {

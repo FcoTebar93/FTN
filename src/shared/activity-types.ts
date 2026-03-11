@@ -1,5 +1,5 @@
 export interface ActivityTask {
-    taskId: string;
+    id: string;
     workflowId: string;
     runId: string;
     activityId: string;
