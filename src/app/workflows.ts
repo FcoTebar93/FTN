@@ -44,16 +44,29 @@ export interface PaymentSignupResult {
 }
 
 export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult> = async (ftn, input) => {
-  const validatePromise = ftn.activity<OrderInput, void>("validate-order", input);
-  const shipmentPromise = ftn.activity<OrderInput, void>("documents.createShipment:v1", input);
+  const validateHandle = ftn.activity<OrderInput, void>("validate-order", input);
+  const shipmentHandle = ftn.activity<OrderInput, void>("create-shipment", input);
 
   await ftn.retry(
     { maxAttempts: 3, backOffMs: 500 },
     async () => {
-      await ftn.activity<OrderInput, void>("charge-payment", input);
+      await ftn.activity<{ orderId: string; amount: number }, void>(
+        "payments.chargePayment:v1",
+        { orderId: input.orderId, amount: input.amount }
+      );
     }
   );
-
+  
+  const validatePromise = ftn.activity<{ orderId: string; userId: string; amount: number }, void>(
+    "payments.validateOrder:v1",
+    { orderId: input.orderId, userId: input.userId, amount: input.amount }
+  );
+  
+  const shipmentPromise = ftn.activity<{ orderId: string; userId: string }, void>(
+    "logistics.createShipment:v1",
+    { orderId: input.orderId, userId: input.userId }
+  );
+  
   await Promise.all([validatePromise, shipmentPromise]);
   return { orderId: input.orderId, charged: true, shipped: true };
 };
