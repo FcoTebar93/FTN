@@ -10,14 +10,14 @@ export interface DocumentsConfig {
 export const DocumentsModule: IntegrationModule = {
     name: "documents",
     registerActivities(registry: ActivityRegistry, config: DocumentsConfig) {
-        if (!config.enabled){ 
-            return;
-        }
-
-        const defs: AnyActivityDefinition[] = [generateQrCodeActivityDefinition()];
-        
-        for (const def of defs) {
-            registry.register(def);
-        }
-    }
-};
+      if (!config.enabled) {
+        return;
+      }
+      const defs: AnyActivityDefinition[] = [
+        generateQrCodeActivityDefinition()
+      ];
+      for (const def of defs) {
+        registry.register(def);
+      }
+    },
+  };

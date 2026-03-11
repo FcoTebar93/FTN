@@ -43,6 +43,9 @@ const integrationsConfig: IntegrationsConfig = {
     enabled: !!process.env.STRIPE_SECRET_KEY,
     stripeSecretKey: process.env.STRIPE_SECRET_KEY,
   },
+  identity: {
+    enabled: true,
+  }
 };
 
 const activities = new InMemoryActivityRegistry();

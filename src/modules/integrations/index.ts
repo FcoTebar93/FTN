@@ -4,12 +4,14 @@ import { StorageConfig, StorageModule } from "./storage";
 import { DocumentsConfig, DocumentsModule } from "./documents";
 import { NotificationsConfig, NotificationsModule } from "./notifications";
 import { PaymentsConfig, PaymentsModule } from "./payments";
+import { IdentityConfig, IdentityModule } from "./identity";
 
 export interface IntegrationsConfig {
     storage: StorageConfig;
     documents: DocumentsConfig;
     notifications: NotificationsConfig;
     payments: PaymentsConfig;
+    identity: IdentityConfig;
 }
 
 export function registerIntegrations(registry: ActivityRegistry, config: IntegrationsConfig) {
@@ -17,6 +19,7 @@ export function registerIntegrations(registry: ActivityRegistry, config: Integra
     DocumentsModule.registerActivities(registry, { enabled: config.documents.enabled });
     NotificationsModule.registerActivities(registry, { enabled: config.notifications.enabled });
     PaymentsModule.registerActivities(registry, { enabled: config.payments.enabled });
+    IdentityModule.registerActivities(registry, { enabled: config.identity.enabled });
 }
 
 export default {
