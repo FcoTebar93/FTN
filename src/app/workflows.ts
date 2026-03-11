@@ -83,33 +83,25 @@ export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, Payme
     url.searchParams.set("planName", input.planName);
     url.searchParams.set("priceCents", String(input.priceCents));
 
-    const qrPromise = ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
+    const qrUrl = await ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
       data: url.toString(),
       size: 256,
       format: "png",
     });
-
-    const [qrUrl] = await qrPromise;
-
-    const emailHandle = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
-      to: input.email,
-      subject: "Completa tu pago",
-      htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
-    });
-
-    const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
-
     await ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
       to: input.email,
       subject: "Completa tu pago",
       htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
     });
 
-    return {
-      email: input.email,
-      sessionId: payment.sessionId,
-    };
-  };
+    const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
+    await ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
+      sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
+      params: [input.email, payment.sessionId],
+    });
+
+    return { email: input.email, sessionId: payment.sessionId };
+};
 
 registerWorkflow<OrderInput, OrderResult>(
   "order-processing",
