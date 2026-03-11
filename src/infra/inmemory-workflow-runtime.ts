@@ -246,7 +246,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     
       let appended: WorkflowEvent[] = [];
     
-      // 1) Apéndice de nuevos eventos (si los hay) + generación de ActivityTasks
       if (newDomainEvents.length > 0) {
         appended = await this.eventStore.appendEvents(
           workflowId,
@@ -295,7 +294,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         }
       }
     
-      // 2) WorkflowCompleted (se ejecuta SIEMPRE, haya o no nuevos eventos)
       if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
         const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
           type: "WorkflowCompleted",
@@ -318,7 +316,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         appended = [...appended, persistedCompleted];
       }
     
-      // 3) Snapshots (también se evalúa SIEMPRE)
       const snapshotBaseVersion = snapshot?.version ?? 0;
       const eventsSinceSnapshot = lastEventVersion - snapshotBaseVersion;
       let snapshotCreated = false;
@@ -337,7 +334,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         snapshotCreated = true;
       }
     
-      // 4) Devolver siempre un WorkflowTickResult
       return {
         state: currentState,
         newEvents: appended,
