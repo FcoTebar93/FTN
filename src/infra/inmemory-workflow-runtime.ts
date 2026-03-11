@@ -113,60 +113,37 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     }
 
     async runWorkflowTick(workflowId: WorkflowId, runId: RunId): Promise<WorkflowTickResult> {
-        const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
-        const fromVersion: Version | undefined = snapshot?.version;
-
-        const events: WorkflowEvent[] = await this.eventStore.loadEvents(
-            workflowId,
-            runId,
-            fromVersion ?? 0
+      const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
+      const fromVersion: Version | undefined = snapshot?.version;
+    
+      const events: WorkflowEvent[] = await this.eventStore.loadEvents(
+        workflowId,
+        runId,
+        fromVersion ?? 0
+      );
+    
+      if (!snapshot && events.length === 0) {
+        throw new Error(
+          `No events or snapshot found for workflow ${workflowId}/${runId}`
         );
-        
-        if (!snapshot && events.length === 0) {
-            throw new Error(
-              `No events or snapshot found for workflow ${workflowId}/${runId}`
-            );
-        }
-        
-        const rehydrated = this.engine.replay(
-            workflowId,
-            runId,
-            events,
-            snapshot?.state
-        );
-
-        let currentState = rehydrated.state;
-        let lastEventVersion = rehydrated.lastEventVersion;
-
-        const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
-        let definitionResult: unknown;
-
-        const ftn: FTNApi = {
-          activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
-            if (attempt !== undefined) {
-              const activityId = generateActivityId();
-              newDomainEvents.push({
-                type: "ActivityScheduled",
-                workflowId,
-                runId,
-                payload: {
-                  activityId,
-                  activityName: name,
-                  input,
-                },
-              });
-              return { id: activityId, name };
-            }
-            const existing =
-              currentState.pendingActivities.find(
-                (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
-              ) ??
-              currentState.completedActivities.find(
-                (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
-              );
-            if (existing) {
-              return { id: existing.id, name: existing.name };
-            }
+      }
+    
+      const rehydrated = this.engine.replay(
+        workflowId,
+        runId,
+        events,
+        snapshot?.state
+      );
+    
+      let currentState = rehydrated.state;
+      let lastEventVersion = rehydrated.lastEventVersion;
+    
+      const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
+      let definitionResult: unknown;
+    
+      const ftn: FTNApi = {
+        activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
+          if (attempt !== undefined) {
             const activityId = generateActivityId();
             newDomainEvents.push({
               type: "ActivityScheduled",
@@ -179,342 +156,192 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               },
             });
             return { id: activityId, name };
-          },
-
-          parallel<TResult>(
-            branches: Array<() => ActivityHandle<TResult>>
-          ): ActivityHandle<TResult>[] {
-            const handles: ActivityHandle<TResult>[] = [];
-            for (const branch of branches) {
-              const handle = branch();
-              handles.push(handle);
-            }
-            return handles;
-          },
-
-          async join<TResult>(handles: ActivityHandle<TResult>[]): Promise<TResult[]> {
-            const results: TResult[] = [];
-        
-            for (const handle of handles) {
-              const completed = currentState.completedActivities.find(
-                (a) => a.id === handle.id
-              );
-              if (!completed) {
-                throw new Error(
-                  `Activity ${handle.id} is not completed yet; join must be called after completion`
-                );
-              }
-              results.push(completed.result as TResult);
-            }
-        
-            return results;
-          },
-
-          conditional: async <TResult>(
-            condition: () => boolean,
-            thenBranch: () => Promise<TResult>,
-            elseBranch?: () => Promise<TResult>
-          ): Promise<TResult> => {
-            const stepId = generateStepId();
-          
-            const existingStep = currentState.steps.find(
-              (step) => step.id === stepId && step.kind === "conditional"
-            );
-          
-            if (!existingStep) {
-              const newConditionalStep: ConditionalStep = {
-                id: stepId,
-                kind: "conditional",
-                status: "running",
-                branchChosen: undefined,
-              };
-          
-              currentState = {
-                ...currentState,
-                steps: [...currentState.steps, newConditionalStep],
-              };
-            }
-          
-            const allEvents: WorkflowEvent[] = await this.eventStore.loadEvents(
-              workflowId,
-              runId,
-              0 as Version
-            );
-          
-            const branchEvent = [...allEvents]
-              .reverse()
-              .find(
-                (e) =>
-                  e.type === "ConditionalBranchChosen" &&
-                  e.payload.stepId === stepId
-              );
-          
-            let branch: "then" | "else";
-          
-            if (branchEvent && branchEvent.type === "ConditionalBranchChosen") {
-              branch = branchEvent.payload.branch;
-            } else {
-              const cond = condition();
-              branch = cond ? "then" : "else";
-          
-              newDomainEvents.push({
-                type: "ConditionalBranchChosen",
-                workflowId,
-                runId,
-                payload: {
-                  stepId,
-                  branch,
-                },
-              });
-            }
-          
-            if (branch === "then") {
-              return thenBranch();
-            } else {
-              if (!elseBranch) {
-                return undefined as unknown as TResult;
-              }
-              return elseBranch();
-            }
-          },
-
-          retry: async <TResult>(
-            options: RetryOptions,
-            operation: (attempt: number) => Promise<TResult>
-          ): Promise<TResult> => {
-            const maxAttempts = options.maxAttempts;
-            const backOffMs = options.backOffMs ?? 0;
-
-            const allEvents = await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
-            const retryStartedEvents = allEvents.filter(
-              (e): e is Extract<typeof e, { type: "RetryAttemptStarted" }> =>
-                e.type === "RetryAttemptStarted"
-            );
-            const existingStepId = retryStartedEvents[0]?.payload.stepId;
-            const stepId = existingStepId ?? `retry-${workflowId}-${runId}`;
-
-            const attemptsSoFar = retryStartedEvents.filter(
-              (e) => e.payload.stepId === stepId
-            ).length;
-
-            if (attemptsSoFar >= maxAttempts) {
-              throw new Error(
-                `Retry exhausted for step ${stepId} (${attemptsSoFar} attempts)`
-              );
-            }
-
-            const attempt = attemptsSoFar + 1;
-            newDomainEvents.push({
-              type: "RetryAttemptStarted",
-              workflowId,
-              runId,
-              payload: {
-                stepId,
-                attempt,
-              },
-            });
-
-            try {
-              return await operation(attempt);
-            } catch (err) {
-              if (attempt >= maxAttempts) {
-                newDomainEvents.push({
-                  type: "RetryGivenUp",
-                  workflowId,
-                  runId,
-                  payload: {
-                    stepId,
-                    attempts: attempt,
-                    reason: (err as Error).message,
-                  },
-                });
-                throw err;
-              }
-              if (backOffMs > 0) {
-                const wakeAt = new Date(Date.now() + backOffMs).toISOString();
-                newDomainEvents.push({
-                  type: "TimerScheduled",
-                  workflowId,
-                  runId,
-                  payload: { wakeAt },
-                });
-
-                await this.taskQueue.enqueue({
-                  id: `timer-${workflowId}-${runId}-${Date.now()}`,
-                  type: "timer",
-                  workflowId,
-                  runId,
-                  wakeAt,
-                  createdAt: new Date().toISOString(),
-                  scheduledAt: wakeAt,
-                  workerType: "workflow",
-                  targetQueue: "timers",
-                });
-              }
-              throw err;
-            }
-          },
-
-          sleep: async (ms: number): Promise<void> => {
-            const wakeAt = new Date(Date.now() + ms).toISOString();
-            newDomainEvents.push({
-              type: "TimerScheduled",
-              workflowId,
-              runId,
-              payload: { wakeAt },
-            });
-
-            await this.taskQueue.enqueue({
-              id: `timer-${workflowId}-${runId}-${Date.now()}`,
-              type: "timer",
-              workflowId,
-              runId,
-              wakeAt,
-              createdAt: new Date().toISOString(),
-              scheduledAt: wakeAt,
-              workerType: "workflow",
-              targetQueue: "timers",
-            });
-          },
-
-          signal: async <TData = unknown>(name: string): Promise<TData> => {
-            const allEventsForSignal: WorkflowEvent[] =
-              await this.eventStore.loadEvents(workflowId, runId, 0 as Version);
-          
-            const signalEvent = [...allEventsForSignal]
-              .reverse()
-              .find(
-                (e) =>
-                  e.type === "SignalReceived" && e.payload.signalName === name
-              );
-          
-              if (!signalEvent || signalEvent.type !== "SignalReceived") {
-                throw new Error(
-                  `Signal "${name}" not found for workflow ${workflowId}/${runId}`
-                );
-              }
-              
-              return signalEvent.payload.data as TData;
-          },
-
-          workflowId(): WorkflowId {
-            return workflowId;
-          },
-
-          runId(): RunId {
-            return runId;
           }
-        };
 
-        const key = makeWorkflowKey(workflowId, runId);
-        const defEntry = this.definitions.get(key);
+          const existing = currentState.pendingActivities.find(
+            (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
+          ) ??
+            currentState.completedActivities.find(
+              (a) => a.name === name && JSON.stringify(a.input) === JSON.stringify(input)
+            );
 
-        const lastEvent = events[events.length - 1];
-        const shouldExecuteDefinition = !!defEntry && currentState.status === "running";
-
-        if (shouldExecuteDefinition && defEntry) {
-          try {
-            definitionResult = await defEntry.definition(ftn, defEntry.input);
-          } catch {
-            definitionResult = undefined;
+          if (existing) {
+            return { id: existing.id, name: existing.name };
           }
-        }
 
-        let appended: WorkflowEvent[] = [];
-
-        if (newDomainEvents.length > 0) {
-        appended = await this.eventStore.appendEvents(
-            workflowId,
-            runId,
-            lastEventVersion,
-            newDomainEvents
-        );
-        lastEventVersion = appended[appended.length - 1].version;
-        const activityTasks: ActivityTask[] = [];
-
-        for (const ev of appended) {
-            currentState = this.engine.applyEvent(currentState, ev);
-
-            if (ev.type === "ActivityScheduled") {
-                const { activityId, activityName, input } = ev.payload;
-                const payload: ActivityPayload = {
-                  id: activityId,
-                  workflowId: ev.workflowId,
-                  runId: ev.runId,
-                  activityId,
-                  activityName,
-                  input,
-                  attempt: 1,
-                  scheduledAt: ev.startedAt,
-                };
-
-                const task: ActivityTask = {
-                  id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
-                  type: "activity",
-                  workflowId: ev.workflowId,
-                  runId: ev.runId,
-                  activityId,
-                  activityName,
-                  createdAt: ev.startedAt,
-                  scheduledAt: ev.startedAt,
-                  workerType: "activity",
-                  targetQueue: "activities",
-                  payload,
-                };
-                activityTasks.push(task);
-            }
-
-            for (const task of activityTasks) {
-                await this.taskQueue.enqueue(task as Task);
-            }
-        }
-
-        if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
-          const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
-            type: "WorkflowCompleted",
+          const activityId = generateActivityId();
+          newDomainEvents.push({
+            type: "ActivityScheduled",
             workflowId,
             runId,
             payload: {
-              result: definitionResult,
+              activityId,
+              activityName: name,
+              input,
             },
-          };
-        
-          const [persistedCompleted] = await this.eventStore.appendEvents(
-            workflowId,
-            runId,
-            lastEventVersion,
-            [completedEvent]
-          );
-        
-          lastEventVersion = persistedCompleted.version;
-          currentState = this.engine.applyEvent(currentState, persistedCompleted);
-          appended = [...appended, persistedCompleted];
-        }
-
-        const snapshotBaseVersion = snapshot?.version ?? 0;
-        const eventsSinceSnapshot = lastEventVersion - snapshotBaseVersion;
-        let snapshotCreated = false;
-
-        if (
-          eventsSinceSnapshot >= this.config.snapshotInterval &&
-          lastEventVersion > snapshotBaseVersion
-        ) {
-          await this.snapshotStore.saveSnapshot({
-            workflowId,
-            runId,
-            version: lastEventVersion,
-            state: currentState,
-            createdAt: new Date().toISOString(),
           });
-          snapshotCreated = true;
-        }
+          return { id: activityId, name };
+        },
 
-        return {
-            state: currentState,
-            newEvents: appended,
-            snapshotCreated
-          };
+        parallel<TResult>(
+          branches: Array<() => ActivityHandle<TResult>>
+        ): ActivityHandle<TResult>[] {
+          const handles: ActivityHandle<TResult>[] = [];
+          for (const branch of branches) {
+            const handle = branch();
+            handles.push(handle);
+          }
+          return handles;
+        },
+
+        async join<TResult>(handles: ActivityHandle<TResult>[]): Promise<TResult[]> {
+          const results: TResult[] = [];
+
+          for (const handle of handles) {
+            const completed = currentState.completedActivities.find(
+              (a) => a.id === handle.id
+            );
+            if (!completed) {
+              throw new Error(
+                `Activity ${handle.id} is not completed yet; join must be called after completion`
+              );
+            }
+            results.push(completed.result as TResult);
+          }
+
+          return results;
+        },
+        conditional: function <TResult>(condition: () => boolean, thenBranch: () => Promise<TResult>, elseBranch?: () => Promise<TResult>): Promise<TResult> {
+          throw new Error("Function not implemented.");
+        },
+        retry: function <TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
+          throw new Error("Function not implemented.");
+        },
+        sleep: function (ms: number): Promise<void> {
+          throw new Error("Function not implemented.");
+        },
+        signal: function <TData = unknown>(name: string): Promise<TData> {
+          throw new Error("Function not implemented.");
+        },
+        workflowId: function (): WorkflowId {
+          throw new Error("Function not implemented.");
+        },
+        runId: function (): RunId {
+          throw new Error("Function not implemented.");
         }
-        throw new Error(`runWorkflowTick reached unexpected end for ${workflowId}/${runId}`);
+      };
+    
+      const key = makeWorkflowKey(workflowId, runId);
+      const defEntry = this.definitions.get(key);
+    
+      const shouldExecuteDefinition = !!defEntry && currentState.status === "running";
+    
+      if (shouldExecuteDefinition && defEntry) {
+        try {
+          definitionResult = await defEntry.definition(ftn, defEntry.input);
+        } catch {
+          definitionResult = undefined;
+        }
+      }
+    
+      let appended: WorkflowEvent[] = [];
+    
+      // 1) Apéndice de nuevos eventos (si los hay) + generación de ActivityTasks
+      if (newDomainEvents.length > 0) {
+        appended = await this.eventStore.appendEvents(
+          workflowId,
+          runId,
+          lastEventVersion,
+          newDomainEvents
+        );
+        lastEventVersion = appended[appended.length - 1].version;
+        const activityTasks: ActivityTask[] = [];
+    
+        for (const ev of appended) {
+          currentState = this.engine.applyEvent(currentState, ev);
+    
+          if (ev.type === "ActivityScheduled") {
+            const { activityId, activityName, input } = ev.payload;
+            const payload: ActivityPayload = {
+              id: activityId,
+              workflowId: ev.workflowId,
+              runId: ev.runId,
+              activityId,
+              activityName,
+              input,
+              attempt: 1,
+              scheduledAt: ev.startedAt,
+            };
+    
+            const task: ActivityTask = {
+              id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
+              type: "activity",
+              workflowId: ev.workflowId,
+              runId: ev.runId,
+              activityId,
+              activityName,
+              createdAt: ev.startedAt,
+              scheduledAt: ev.startedAt,
+              workerType: "activity",
+              targetQueue: "activities",
+              payload,
+            };
+            activityTasks.push(task);
+          }
+        }
+    
+        for (const task of activityTasks) {
+          await this.taskQueue.enqueue(task as Task);
+        }
+      }
+    
+      // 2) WorkflowCompleted (se ejecuta SIEMPRE, haya o no nuevos eventos)
+      if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
+        const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
+          type: "WorkflowCompleted",
+          workflowId,
+          runId,
+          payload: {
+            result: definitionResult,
+          },
+        };
+    
+        const [persistedCompleted] = await this.eventStore.appendEvents(
+          workflowId,
+          runId,
+          lastEventVersion,
+          [completedEvent]
+        );
+    
+        lastEventVersion = persistedCompleted.version;
+        currentState = this.engine.applyEvent(currentState, persistedCompleted);
+        appended = [...appended, persistedCompleted];
+      }
+    
+      // 3) Snapshots (también se evalúa SIEMPRE)
+      const snapshotBaseVersion = snapshot?.version ?? 0;
+      const eventsSinceSnapshot = lastEventVersion - snapshotBaseVersion;
+      let snapshotCreated = false;
+    
+      if (
+        eventsSinceSnapshot >= this.config.snapshotInterval &&
+        lastEventVersion > snapshotBaseVersion
+      ) {
+        await this.snapshotStore.saveSnapshot({
+          workflowId,
+          runId,
+          version: lastEventVersion,
+          state: currentState,
+          createdAt: new Date().toISOString(),
+        });
+        snapshotCreated = true;
+      }
+    
+      // 4) Devolver siempre un WorkflowTickResult
+      return {
+        state: currentState,
+        newEvents: appended,
+        snapshotCreated,
+      };
     }
 }
