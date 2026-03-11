@@ -44,30 +44,29 @@ export interface PaymentSignupResult {
 }
 
 export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult> = async (ftn, input) => {
-  const validateHandle = ftn.activity<OrderInput, void>("validate-order", input);
-  const shipmentHandle = ftn.activity<OrderInput, void>("create-shipment", input);
-
   await ftn.retry(
     { maxAttempts: 3, backOffMs: 500 },
-    async () => {
-      await ftn.activity<{ orderId: string; amount: number }, void>(
+    async (attempt) => {
+      const chargeHandle = ftn.activity<{ orderId: string; amount: number }, void>(
         "payments.chargePayment:v1",
-        { orderId: input.orderId, amount: input.amount }
+        { orderId: input.orderId, amount: input.amount },
+        attempt
       );
+      await ftn.join([chargeHandle]);
     }
   );
-  
-  const validatePromise = ftn.activity<{ orderId: string; userId: string; amount: number }, void>(
+
+  const validateHandle = ftn.activity<{ orderId: string; userId: string; amount: number }, void>(
     "payments.validateOrder:v1",
     { orderId: input.orderId, userId: input.userId, amount: input.amount }
   );
-  
-  const shipmentPromise = ftn.activity<{ orderId: string; userId: string }, void>(
+
+  const shipmentHandle = ftn.activity<{ orderId: string; userId: string }, void>(
     "logistics.createShipment:v1",
     { orderId: input.orderId, userId: input.userId }
   );
-  
-  await Promise.all([validatePromise, shipmentPromise]);
+
+  await ftn.join([validateHandle, shipmentHandle]);
   return { orderId: input.orderId, charged: true, shipped: true };
 };
 
@@ -83,22 +82,28 @@ export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, Payme
     url.searchParams.set("planName", input.planName);
     url.searchParams.set("priceCents", String(input.priceCents));
 
-    const qrUrl = await ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
+  const qrHandle = ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
       data: url.toString(),
       size: 256,
       format: "png",
     });
-    await ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
-      to: input.email,
-      subject: "Completa tu pago",
-      htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
-    });
+
+  const [qrUrl] = await ftn.join([qrHandle]);
+
+  const emailHandle = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+    to: input.email,
+    subject: "Completa tu pago",
+    htmlBody: `<p>Escanea este código para completar tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} €):</p><img src="${qrUrl}" />`,
+  });
 
     const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
-    await ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
+
+  const dbHandle = ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
       sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
       params: [input.email, payment.sessionId],
     });
+
+  await ftn.join([emailHandle, dbHandle]);
 
     return { email: input.email, sessionId: payment.sessionId };
 };
