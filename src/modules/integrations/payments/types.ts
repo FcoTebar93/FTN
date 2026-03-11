@@ -1,0 +1,17 @@
+export interface StripeCreateCheckoutSessionInput {
+    successUrl: string;
+    cancelUrl: string;
+    customerEmail?: string;
+    currency: string;
+    lineItems: Array<{
+      name: string;
+      unitAmountCents: number;
+      quantity: number;
+    }>;
+    metadata: Record<string, string>;
+}
+  
+export interface StripeCreateCheckoutSessionResult {
+    sessionId: string;
+    url: string;
+}

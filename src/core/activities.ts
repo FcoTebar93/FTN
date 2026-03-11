@@ -17,4 +17,5 @@ export interface ActivityDefinition<TInput, TResult> {
   tags?: string[];
   version?: string;
 }
-export type AnyActivityDefinition = ActivityDefinition<unknown, unknown>;
+
+export type AnyActivityDefinition = ActivityDefinition<any, any>;
