@@ -3,6 +3,7 @@ import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
 import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
+import { sendWebhookActivityDefinition } from "./send-webhook-activity";
 
 export interface NotificationsConfig {
   enabled: boolean;
@@ -24,6 +25,10 @@ export const NotificationsModule: IntegrationModule = {
 
     if (config.slackWebhookUrl) {
       defs.push(sendSlackMessageActivityDefinition(config));
+    }
+
+    if (config.enabled) {
+      defs.push(sendWebhookActivityDefinition(config));
     }
 
     for (const def of defs) {
