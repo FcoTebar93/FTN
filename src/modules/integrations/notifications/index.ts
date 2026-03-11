@@ -1,6 +1,6 @@
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { ActivityDefinition } from "../../../core/activities";
+import type { AnyActivityDefinition } from "../../../core/activities";
 import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
 
@@ -16,7 +16,7 @@ export const NotificationsModule: IntegrationModule = {
   registerActivities(registry: ActivityRegistry, config: NotificationsConfig) {
     if (!config.enabled) return;
 
-    const defs: ActivityDefinition<unknown, unknown>[] = [];
+    const defs: AnyActivityDefinition[] = [];
 
     if (config.sendgridApiKey && config.emailFrom) {
       defs.push(sendEmailActivityDefinition(config));
