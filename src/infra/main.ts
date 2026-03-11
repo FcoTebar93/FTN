@@ -8,7 +8,6 @@ import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
 
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
-import { InMemoryActivityWorker } from "./inmemory-activity-worker";
 import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 import type { WorkflowTask } from "../shared/tasks";
@@ -80,15 +79,6 @@ const workflowWorker = new InMemoryWorkflowWorker({
   },
 });
 
-const activityWorker = new InMemoryActivityWorker({
-  taskQueue,
-  activities,
-  eventStore,
-  snapshotStore,
-  engine,
-  activityQueueName: "activities",
-});
-
 const timerWorker = new InMemoryTimerWorker({
   taskQueue,
   queueName: "timers",
@@ -99,7 +89,6 @@ const timerWorker = new InMemoryTimerWorker({
 const cancellation = { aborted: false };
 
 workflowWorker.runForever(cancellation).catch(console.error);
-activityWorker.runForever(cancellation).catch(console.error);
 timerWorker.runForever(cancellation).catch(console.error);
 activityQueueWorker.runForever(cancellation).catch(console.error);
 

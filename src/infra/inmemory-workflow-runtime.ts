@@ -4,8 +4,8 @@ import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
 import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from "../core/ftn";
 import type { ActivityId } from "../shared/types";
-import type { ActivityTask } from "../shared/tasks";
-
+import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
+import type { ActivityTask, Task } from "../shared/tasks";
 
 type WorkflowKey = string;
 
@@ -437,24 +437,35 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
             if (ev.type === "ActivityScheduled") {
                 const { activityId, activityName, input } = ev.payload;
+                const payload: ActivityPayload = {
+                  id: activityId,
+                  workflowId: ev.workflowId,
+                  runId: ev.runId,
+                  activityId,
+                  activityName,
+                  input,
+                  attempt: 1,
+                  scheduledAt: ev.startedAt,
+                };
+
                 const task: ActivityTask = {
-                id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
-                type: "activity",
-                workflowId: ev.workflowId,
-                runId: ev.runId,
-                activityId,
-                activityName,
-                createdAt: ev.startedAt,
-                scheduledAt: ev.startedAt,
-                workerType: "activity",
-                targetQueue: "activities",
+                  id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
+                  type: "activity",
+                  workflowId: ev.workflowId,
+                  runId: ev.runId,
+                  activityId,
+                  activityName,
+                  createdAt: ev.startedAt,
+                  scheduledAt: ev.startedAt,
+                  workerType: "activity",
+                  targetQueue: "activities",
+                  payload,
                 };
                 activityTasks.push(task);
-                }
             }
 
             for (const task of activityTasks) {
-                await this.taskQueue.enqueue(task);
+                await this.taskQueue.enqueue(task as Task);
             }
         }
 
@@ -503,5 +514,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             newEvents: appended,
             snapshotCreated
           };
+        }
+        throw new Error(`runWorkflowTick reached unexpected end for ${workflowId}/${runId}`);
     }
 }

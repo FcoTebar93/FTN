@@ -1,5 +1,6 @@
 import type { TaskQueue } from "../modules/task-queue";
-import type { ActivityTask } from "../shared/activity-types";
+import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
+import type { ActivityTask } from "../shared/tasks";
 import type { ActivityWorker } from "../workers/activity-worker";
 
 interface InMemoryActivityQueueWorkerDeps {
@@ -28,7 +29,10 @@ export class InMemoryActivityQueueWorker {
       return;
     }
 
-    await this.deps.worker.handleTask(task as unknown as ActivityTask);
+    const activityTask = task as ActivityTask;
+    const payload: ActivityPayload = activityTask.payload;
+
+    await this.deps.worker.handleTask(payload);
 
     await this.deps.taskQueue.completeTask(lease.leaseId);
   }
