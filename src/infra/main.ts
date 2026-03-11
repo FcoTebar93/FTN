@@ -1,30 +1,51 @@
 import http from "node:http";
+import Stripe from "stripe";
+
 import { DefaultWorkflowEngine } from "../core/default-engine";
 import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
-import { InMemoryActivityRegistry, validateOrderActivity, chargePaymentActivity, createShipmentActivity, sendEmailActivity, generateQrCodeActivity, stripeCreateCheckoutSessionActivity, dbExecuteActivity } from "../app/activities";
-import { InMemoryActivityWorker } from "./inmemory-activity-worker";
+
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
+import { InMemoryActivityWorker } from "./inmemory-activity-worker";
+import { InMemoryTimerWorker } from "./inmemory-timer-worker";
+
 import type { WorkflowTask } from "../shared/tasks";
 import { getWorkflow } from "../app/workflows";
-import { InMemoryTimerWorker } from "./inmemory-timer-worker";
-import Stripe from "stripe";
+
+import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
+import { registerIntegrations } from "../modules/integrations";
+import type { IntegrationsConfig } from "../modules/integrations";
 
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
 const snapshotStore = new InMemorySnapshotStore();
 const taskQueue = new InMemoryTaskQueue();
+
 const activities = new InMemoryActivityRegistry();
 
-activities.register("validate-order", validateOrderActivity);
-activities.register("charge-payment", chargePaymentActivity);
-activities.register("create-shipment", createShipmentActivity);
-activities.register("send-email", sendEmailActivity);
-activities.register("generate-qr-code", generateQrCodeActivity);
-activities.register("stripe-create-checkout-session", stripeCreateCheckoutSessionActivity);
-activities.register("db-execute", dbExecuteActivity);
+const integrationsConfig: IntegrationsConfig = {
+  storage: {
+    enabled: !!process.env.DATABASE_URL,
+    databaseUrl: process.env.DATABASE_URL,
+  },
+  documents: {
+    enabled: true,
+  },
+  notifications: {
+    enabled: true,
+    sendgridApiKey: process.env.SENDGRID_API_KEY,
+    emailFrom: process.env.EMAIL_FROM ?? process.env.SMTP_FROM,
+    slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
+  },
+  payments: {
+    enabled: !!process.env.STRIPE_SECRET_KEY,
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+  },
+};
+
+registerIntegrations(activities, integrationsConfig);
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
@@ -71,7 +92,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
+
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
@@ -86,7 +107,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && (req.url === "/workflows" || req.url.startsWith("/workflows?"))) {
-      const [path, queryString] = req.url.split("?");
+      const [, queryString] = req.url.split("?");
       const params = new URLSearchParams(queryString ?? "");
       const statusFilter = params.get("status") as "running" | "completed" | "failed" | null;
       const limit = Math.min(100, Math.max(1, parseInt(params.get("limit") ?? "50", 10)));
@@ -94,6 +115,7 @@ const server = http.createServer(async (req, res) => {
 
       const runKeys = await (eventStore as import("./inmemory-event-store").InMemoryEventStore).listRunKeys();
       const slice = runKeys.slice(offset, offset + limit);
+
       const summaries: Array<{
         workflowId: string;
         runId: string;
@@ -108,13 +130,16 @@ const server = http.createServer(async (req, res) => {
       for (const { workflowId, runId } of slice) {
         const state = await runtime.loadCurrentState(workflowId, runId);
         if (!state) continue;
+
         const events = await eventStore.loadEvents(workflowId, runId, 0);
         const startEvent = events.find((e) => e.type === "WorkflowStarted");
         const name =
           startEvent && startEvent.type === "WorkflowStarted"
             ? startEvent.payload.name
             : "unknown";
+
         if (statusFilter && state.status !== statusFilter) continue;
+
         summaries.push({
           workflowId,
           runId,
@@ -134,9 +159,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && req.url === "/workflows") {
       let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
+      req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
           const parsed = JSON.parse(body || "{}");
@@ -165,6 +188,7 @@ const server = http.createServer(async (req, res) => {
             workerType: "workflow",
             targetQueue: "workflows",
           };
+
           await taskQueue.enqueue(task);
 
           res.setHeader("Content-Type", "application/json");
@@ -249,9 +273,7 @@ const server = http.createServer(async (req, res) => {
       const runId = parts[3];
 
       let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
+      req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
           const parsed = JSON.parse(body || "{}");
@@ -262,10 +284,7 @@ const server = http.createServer(async (req, res) => {
               type: "SignalReceived",
               workflowId,
               runId,
-              payload: {
-                signalName,
-                data,
-              },
+              payload: { signalName, data },
             },
           ]);
 
@@ -279,6 +298,7 @@ const server = http.createServer(async (req, res) => {
             workerType: "workflow",
             targetQueue: "workflows",
           };
+
           await taskQueue.enqueue(task);
 
           res.setHeader("Content-Type", "application/json");
@@ -293,19 +313,19 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && req.url === "/pay/checkout") {
       let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
+      req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
           const parsed = JSON.parse(body || "{}");
           const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsed;
+
           const key = process.env.STRIPE_SECRET_KEY;
           if (!key) {
             res.statusCode = 500;
             res.end("STRIPE_SECRET_KEY not configured");
             return;
           }
+
           const stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
           const session = await stripe.checkout.sessions.create({
             mode: "payment",
@@ -323,6 +343,7 @@ const server = http.createServer(async (req, res) => {
             })),
             metadata,
           });
+
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ sessionId: session.id, url: session.url }));
         } catch (e) {
@@ -337,10 +358,7 @@ const server = http.createServer(async (req, res) => {
       const sig = req.headers["stripe-signature"];
       let body = "";
 
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-
+      req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
           const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -352,18 +370,13 @@ const server = http.createServer(async (req, res) => {
           }
 
           const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" as any });
-
-          const event = stripe.webhooks.constructEvent(
-            body,
-            sig as string,
-            webhookSecret
-          );
+          const event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret);
 
           if (event.type === "checkout.session.completed") {
             const session: any = event.data.object;
-            const metadata = session.metadata || {};
-            const workflowId = metadata.workflowId;
-            const runId = metadata.runId;
+            const md = session.metadata || {};
+            const workflowId = md.workflowId;
+            const runId = md.runId;
 
             if (workflowId && runId) {
               await eventStore.appendEvents(workflowId, runId, 1, [
@@ -393,6 +406,7 @@ const server = http.createServer(async (req, res) => {
                 workerType: "workflow",
                 targetQueue: "workflows",
               };
+
               await taskQueue.enqueue(task);
             }
           }

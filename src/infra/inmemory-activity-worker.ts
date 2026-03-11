@@ -1,4 +1,5 @@
-import { ActivityRegistry } from "../app/activities";
+import type { ActivityRegistry } from "../core/activity-registry";
+import type { ActivityExecutionContext } from "../core/activities";
 import { WorkflowEngine } from "../core/engine";
 import { WorkflowEvent } from "../core/events";
 import { WorkflowState } from "../core/workflow-state";
@@ -58,14 +59,25 @@ export class InMemoryActivityWorker {
         return;
       }
 
-      const fn = this.deps.activities.getActivity(activityName);
+      const fn = this.deps.activities.get(activityName);
       if (!fn){
         await this.deps.taskQueue.completeTask(lease.leaseId);
         return;
       }
 
+      const ctx: ActivityExecutionContext = {
+        workflowId,
+        runId,
+        activityId,
+        attempt: 1,
+        scheduledAt: new Date(task.scheduledAt),
+        log: (message, meta) => {
+          console.log(`[activity:${fn.name}] ${message}`, { ...meta, workflowId, runId });
+        },
+      };
+
       try {
-        const result = await fn(pending.input);
+        const result = await fn.execute(pending.input, ctx);
 
         const activityCompleted: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
           type: "ActivityCompleted",
