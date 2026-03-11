@@ -25,6 +25,17 @@ export interface ActivityTask extends BaseTask {
     activityName: string;
 }
 
+export interface ActivityTaskMessage {
+    taskId: string;
+    workflowId: string;
+    runId: string;
+    activityId: string;
+    activityName: string;
+    input: unknown;
+    attempt: number;
+    scheduledAt: string;
+}
+
 export interface TimerTask extends BaseTask {
     type: "timer";
     workflowId: WorkflowId;

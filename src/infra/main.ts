@@ -17,13 +17,14 @@ import { getWorkflow } from "../app/workflows";
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { registerIntegrations } from "../modules/integrations";
 import type { IntegrationsConfig } from "../modules/integrations";
+import { DefaultActivityRuntime } from "../modules/activity-runtime";
+import { ActivityWorker } from "../workers/activity-worker";
+import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
 const snapshotStore = new InMemorySnapshotStore();
 const taskQueue = new InMemoryTaskQueue();
-
-const activities = new InMemoryActivityRegistry();
 
 const integrationsConfig: IntegrationsConfig = {
   storage: {
@@ -45,7 +46,20 @@ const integrationsConfig: IntegrationsConfig = {
   },
 };
 
+const activities = new InMemoryActivityRegistry();
 registerIntegrations(activities, integrationsConfig);
+
+const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
+const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
+
+const activityQueueWorker = new InMemoryActivityQueueWorker({
+  taskQueue,
+  worker: activityWorkerCore,
+  queueName: "activities",
+  workerId: "activity-worker-1",
+  leaseTimeoutMs: 10_000,
+  pollIntervalMs: 100,
+});
 
 const runtime = new InMemoryWorkflowRuntime({
   engine,
@@ -87,6 +101,8 @@ const cancellation = { aborted: false };
 workflowWorker.runForever(cancellation).catch(console.error);
 activityWorker.runForever(cancellation).catch(console.error);
 timerWorker.runForever(cancellation).catch(console.error);
+activityQueueWorker.runForever(cancellation).catch(console.error);
+
 
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
