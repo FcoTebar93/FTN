@@ -70,3 +70,55 @@ export interface WorkflowEvent {
     startedAt: string;
     payload: unknown;
 }
+
+export type DesignerStepKind = "activity" | "sleep" | "signal";
+
+export interface DesignerBaseStep {
+  id: string;
+  name?: string;
+  next?: string | null;
+}
+
+export interface DesignerActivityStep extends DesignerBaseStep {
+  kind: "activity";
+  activityName: string;
+  input: Record<string, unknown>;
+}
+
+export interface DesignerSleepStep extends DesignerBaseStep {
+  kind: "sleep";
+  milliseconds: number;
+}
+
+export interface DesignerSignalStep extends DesignerBaseStep {
+  kind: "signal";
+  signalName: string;
+}
+
+export type DesignerWorkflowStep =
+  | DesignerActivityStep
+  | DesignerSleepStep
+  | DesignerSignalStep;
+
+export interface JsonSchema {
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+}
+
+export interface DesignerWorkflowSummary {
+  id: string;
+  version: string;
+  displayName: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface DesignerStoredWorkflow extends DesignerWorkflowSummary {
+  inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
+  steps: DesignerWorkflowStep[];
+  entryStepId: string;
+}

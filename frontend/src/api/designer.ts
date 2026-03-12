@@ -1,0 +1,34 @@
+import { API_BASE_URL } from "../config";
+import type { DesignerWorkflowSummary, DesignerStoredWorkflow } from "./types";
+
+export function getDesignerWorkflows(): Promise<DesignerWorkflowSummary[]> {
+  return fetch(`${API_BASE_URL}/designer/workflows`).then((r) => r.json());
+}
+
+export function getDesignerWorkflow(id: string): Promise<DesignerStoredWorkflow> {
+  return fetch(`${API_BASE_URL}/designer/workflows/${encodeURIComponent(id)}`).then((r) => r.json());
+}
+
+export async function createDesignerWorkflow(payload: DesignerStoredWorkflow): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/designer/workflows`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Error creando workflow: ${res.status} ${res.statusText} ${text}`);
+  }
+}
+
+export async function updateDesignerWorkflow(id: string, payload: DesignerStoredWorkflow): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/designer/workflows/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Error actualizando workflow: ${res.status} ${res.statusText} ${text}`);
+  }
+}
