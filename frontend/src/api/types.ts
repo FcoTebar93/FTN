@@ -79,10 +79,11 @@ export interface DesignerBaseStep {
   next?: string | null;
 }
 
-export interface DesignerActivityStep extends DesignerBaseStep {
+interface DesignerActivityStep extends DesignerBaseStep {
   kind: "activity";
   activityName: string;
   input: Record<string, unknown>;
+  integrationModule?: string;
 }
 
 export interface DesignerSleepStep extends DesignerBaseStep {

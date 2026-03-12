@@ -305,6 +305,27 @@ export function DesignerPage() {
                             {step.kind === "activity" && (
                             <>
                               <div class="form-row">
+                                <label>Integración</label>
+                                <select
+                                  value={(step as any).integrationModule ?? ""}
+                                  onInput={(e) =>
+                                    handleStepFieldChange(
+                                      step.id,
+                                      "integrationModule",
+                                      (e.target as HTMLSelectElement).value || undefined,
+                                    )
+                                  }
+                                >
+                                  <option value="">(todas)</option>
+                                  {Array.from(new Set(activities.map((a) => a.module))).map((mod) => (
+                                    <option key={mod} value={mod}>
+                                      {mod}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div class="form-row">
                                 <label>Activity</label>
                                 <select
                                   value={(step as any).activityName ?? ""}
@@ -312,17 +333,22 @@ export function DesignerPage() {
                                     handleStepFieldChange(
                                       step.id,
                                       "activityName",
-                                      (e.target as HTMLSelectElement).value
+                                      (e.target as HTMLSelectElement).value,
                                     )
                                   }
                                 >
                                   <option value="">(elige una activity)</option>
                                   {Object.entries(
-                                    activities.reduce<Record<string, ActivityCatalogItem[]>>((acc, act) => {
-                                      const mod = act.module || "other";
-                                      (acc[mod] ||= []).push(act);
-                                      return acc;
-                                    }, {})
+                                    activities
+                                      .filter((act) =>
+                                        (step as any).integrationModule
+                                          ? act.module === (step as any).integrationModule
+                                          : true,
+                                      )
+                                      .reduce<Record<string, ActivityCatalogItem[]>>((acc, act) => {
+                                        (acc[act.module] ||= []).push(act);
+                                        return acc;
+                                      }, {}),
                                   ).map(([module, items]) => (
                                     <optgroup key={module} label={module}>
                                       {items.map((act) => (
@@ -334,7 +360,7 @@ export function DesignerPage() {
                                   ))}
                                 </select>
                               </div>
-                              {/* input JSON igual que antes */}
+
                               <div class="form-row">
                                 <label>Input (JSON)</label>
                                 <textarea
@@ -345,7 +371,7 @@ export function DesignerPage() {
                                       const parsed = text ? JSON.parse(text) : {};
                                       handleStepFieldChange(step.id, "input", parsed);
                                     } catch {
-                                      // ignore
+                                      // ignore parse errors in real time
                                     }
                                   }}
                                 />
