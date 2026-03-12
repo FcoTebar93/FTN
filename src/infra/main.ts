@@ -22,6 +22,8 @@ import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
 
+import { validateJson } from "../shared/json-schema-validate";
+
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
 const snapshotStore = new InMemorySnapshotStore();
@@ -204,20 +206,31 @@ const server = http.createServer(async (req, res) => {
         try {
           const parsed = JSON.parse(body || "{}");
           const { name, input } = parsed;
-
+    
           const definition = getWorkflow(name);
           if (!definition) {
             res.statusCode = 404;
             res.end(`Workflow definition "${name}" not found`);
             return;
           }
-
+    
+          const descriptor = getWorkflowDescriptor(name);
+          if (descriptor?.inputSchema) {
+            const result = validateJson(descriptor.inputSchema, input);
+            if (!result.valid) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
+              return;
+            }
+          }
+    
           const { workflowId, runId } = await runtime.startWorkflow({
             workflowName: name,
             input,
             definition,
           });
-
+    
           const task: WorkflowTask = {
             id: `wf-task-${workflowId}-${runId}`,
             type: "workflow",
@@ -228,9 +241,9 @@ const server = http.createServer(async (req, res) => {
             workerType: "workflow",
             targetQueue: "workflows",
           };
-
+    
           await taskQueue.enqueue(task);
-
+    
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ workflowId, runId }));
         } catch (e) {
