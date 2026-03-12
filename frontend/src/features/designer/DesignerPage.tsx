@@ -280,7 +280,13 @@ export function DesignerPage() {
                         </select>
                       </div>
                       <ul class="detail-list">
-                        {current.steps.map((step) => (
+                        {current.steps.map((step) => {
+                          const selectedActivity = activities.find(
+                            (a) => a.name === (step as any).activityName
+                          );
+                          const schema = selectedActivity?.inputSchema;
+
+                          return (
                           <li key={step.id} class="workflow-step-editor">
                             <div class="form-row">
                               <label>Id</label>
@@ -437,7 +443,8 @@ export function DesignerPage() {
                               </select>
                             </div>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     </>
                   )}
