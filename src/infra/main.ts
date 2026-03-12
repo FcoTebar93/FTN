@@ -24,6 +24,8 @@ import { matchHttpTrigger } from "../app/triggers";
 import { handleCatalogRoutes } from "./http/catalog-routes";
 
 import { validateJson } from "../shared/json-schema-validate";
+import { StoredWorkflow } from "../app/designer-types";
+import { listStoredWorkflows } from "../app/designer-store";
 
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
@@ -146,6 +148,104 @@ const server = http.createServer(async (req, res) => {
     if (!req.url || !req.method) {
       res.statusCode = 400;
       res.end("Bad request");
+      return;
+    }
+
+    if (req.method === "GET" && (req.url === "/designer/workflows" || req.url?.startsWith("/designer/workflows?"))) {
+      const items = listStoredWorkflows();
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(items));
+      return;
+    }
+
+    if (req.method === "GET" && req.url?.startsWith("/designer/workflows/")) {
+      const pathOnly = req.url.split("?")[0];
+      const parts = pathOnly.split("/");
+      if (parts.length !== 4) {
+        res.statusCode = 400;
+        res.end("Expected /designer/workflows/:id");
+        return;
+      }
+    
+      const id = decodeURIComponent(parts[3]);
+      const wf = getStoredWorkflow(id);
+      if (wf === undefined) {
+        res.statusCode = 404;
+        res.end("Designer workflow not found");
+        return;
+      }
+    
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(wf));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/designer/workflows") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "{}") as StoredWorkflow;
+    
+          if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
+            res.statusCode = 400;
+            res.end("Invalid StoredWorkflow payload");
+            return;
+          }
+    
+          if (getStoredWorkflow(parsed.id) !== undefined) {
+            res.statusCode = 409;
+            res.end(`StoredWorkflow "${parsed.id}" already exists`);
+            return;
+          }
+    
+          upsertStoredWorkflow(parsed);
+    
+          res.setHeader("Content-Type", "application/json");
+          res.statusCode = 201;
+          res.end(JSON.stringify({ ok: true, id: parsed.id, version: parsed.version }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.end(`Invalid JSON: ${(e as Error).message}`);
+        }
+      });
+      return;
+    }
+
+    if (req.method === "PUT" && req.url?.startsWith("/designer/workflows/")) {
+      const pathOnly = req.url.split("?")[0];
+      const parts = pathOnly.split("/");
+      if (parts.length !== 4) {
+        res.statusCode = 400;
+        res.end("Expected /designer/workflows/:id");
+        return;
+      }
+    
+      const id = decodeURIComponent(parts[3]);
+    
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "{}") as StoredWorkflow;
+    
+          if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
+            res.statusCode = 400;
+            res.end("Invalid StoredWorkflow payload");
+            return;
+          }
+    
+          const stored: StoredWorkflow = { ...parsed, id };
+    
+          upsertStoredWorkflow(stored);
+    
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true, id: stored.id, version: stored.version }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.end(`Invalid JSON: ${(e as Error).message}`);
+        }
+      });
       return;
     }
 
@@ -550,3 +650,12 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 server.listen(PORT, () => {
   console.log(`FTN Workflow Engine running on http://localhost:${PORT}`);
 });
+
+function getStoredWorkflow(id: string) {
+  throw new Error("Function not implemented.");
+}
+
+
+function upsertStoredWorkflow(parsed: StoredWorkflow) {
+  throw new Error("Function not implemented.");
+}
