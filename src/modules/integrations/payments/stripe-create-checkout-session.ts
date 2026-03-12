@@ -18,6 +18,35 @@ export function stripeCreateCheckoutSessionActivityDefinition(config: PaymentsCo
         timeoutMs: 30_000,
         tags: ["payments", "stripe"],
         version: "1.0.0",
+        inputSchema: {
+            type: "object",
+            required: ["successUrl", "cancelUrl", "currency", "lineItems"],
+            properties: {
+              successUrl: { type: "string", description: "URL de éxito para Stripe Checkout" },
+              cancelUrl: { type: "string", description: "URL de cancelación" },
+              customerEmail: { type: "string", description: "Email del cliente (opcional)" },
+              currency: { type: "string", description: "Moneda ISO 3, ej. 'eur'" },
+              lineItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["name", "unitAmountCents", "quantity"],
+                  properties: {
+                    name: { type: "string" },
+                    unitAmountCents: { type: "integer", description: "Importe en céntimos" },
+                    quantity: { type: "integer", minimum: 1 },
+                  },
+                },
+              },
+              metadata: {
+                type: "object",
+                description: "Metadatos que se adjuntan a la sesión",
+                additionalProperties: true,
+              },
+            },
+            additionalProperties: false,
+        },
+
         execute: async (input: StripeCreateCheckoutSessionInput, ctx: ActivityExecutionContext) => {
             ctx.log("Creando Stripe Checkout Session", {customerEmail: input.customerEmail, currency: input.currency});
             

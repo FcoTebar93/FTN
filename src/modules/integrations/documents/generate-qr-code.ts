@@ -9,6 +9,21 @@ export function generateQrCodeActivityDefinition(): ActivityDefinition<GenerateQ
         timeoutMs: 30_000,
         tags: ["documents", "qr-code"],
         version: "1.0.0",
+        inputSchema: {
+            type: "object",
+            required: ["data"],
+            properties: {
+              data: { type: "string", description: "Texto/URL a codificar en el QR" },
+              size: { type: "integer", description: "Tamaño en píxeles (por defecto 256)" },
+              format: {
+                type: "string",
+                enum: ["png", "svg"],
+                description: "Formato de salida",
+              },
+            },
+            additionalProperties: false,
+        },
+        
         execute: async (input: GenerateQrCodeInput, ctx: ActivityExecutionContext) => {
             ctx.log("Generando QR Code", { data: input.data, size: input.size, format: input.format });
             

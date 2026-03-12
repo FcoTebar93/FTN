@@ -18,6 +18,17 @@ export function putKeyValueActivityDefinition(config: StorageConfig): ActivityDe
     timeoutMs: 10_000,
     tags: ["storage", "kv"],
     version: "v1",
+    inputSchema: {
+    type: "object",
+    required: ["namespace", "key", "value"],
+    properties: {
+      namespace: { type: "string", description: "Espacio de nombres" },
+      key: { type: "string", description: "Clave" },
+      value: { description: "Valor a almacenar (cualquier JSON)" },
+    },
+    additionalProperties: false,
+    },
+    
     async execute(input: PutKeyValueInput, ctx: ActivityExecutionContext): Promise<PutKeyValueResult> {
       ctx.log("Guardando valor en kv_store", {
         namespace: input.namespace,

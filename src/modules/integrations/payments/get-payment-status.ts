@@ -18,6 +18,15 @@ export function getPaymentStatusActivityDefinition(config: PaymentsConfig): Acti
     timeoutMs: 10_000,
     tags: ["payments", "stripe"],
     version: "v1",
+    inputSchema: {
+      type: "object",
+      required: ["sessionId"],
+      properties: {
+        sessionId: { type: "string", description: "ID de la sesión de Stripe" },
+      },
+      additionalProperties: false,
+    },
+    
     async execute(input: GetPaymentStatusInput, ctx: ActivityExecutionContext): Promise<GetPaymentStatusResult> {
       ctx.log("Consultando estado de sesión de pago", { sessionId: input.sessionId });
 

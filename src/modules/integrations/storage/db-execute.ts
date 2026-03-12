@@ -19,6 +19,19 @@ export function dbExecuteActivityDefinition(config: StorageConfig): ActivityDefi
         timeoutMs: 30_000,
         tags: ["storage", "db"],
         version: "1.0.0",
+        inputSchema: {
+            type: "object",
+            required: ["sql"],
+            properties: {
+              sql: { type: "string", description: "Sentencia SQL parametrizada" },
+              params: {
+                type: "array",
+                items: {},
+                description: "Parámetros para el SQL (opcional)",
+              },
+            },
+        },
+        
         async execute(input: DbExecuteInput, ctx: ActivityExecutionContext): Promise<DbExecuteResult> {
             ctx.log("Ejecutando consulta en la base de datos", { sql: input.sql, params: input.params });
 

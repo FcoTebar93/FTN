@@ -9,6 +9,26 @@ export function sendWebhookActivityDefinition(_config: NotificationsConfig): Act
     timeoutMs: 15_000,
     tags: ["notifications", "webhook"],
     version: "v1",
+    inputSchema: {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: { type: "string", description: "URL del webhook" },
+        method: {
+          type: "string",
+          enum: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+          description: "Método HTTP (por defecto POST)",
+        },
+        headers: {
+          type: "object",
+          additionalProperties: true,
+          description: "Cabeceras adicionales",
+        },
+        body: { description: "Payload del webhook (cualquier JSON)" },
+        timeoutMs: { type: "integer", description: "Timeout en ms (opcional)" },
+      },
+    },
+
     async execute(input: SendWebhookInput, ctx: ActivityExecutionContext): Promise<SendWebhookResult> {
       const method = input.method ?? "POST";
 

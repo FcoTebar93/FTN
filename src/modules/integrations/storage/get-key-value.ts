@@ -20,6 +20,15 @@ export function getKeyValueActivityDefinition(
     timeoutMs: 5_000,
     tags: ["storage", "kv"],
     version: "v1",
+    inputSchema: {
+      type: "object",
+      required: ["namespace", "key"],
+      properties: {
+        namespace: { type: "string", description: "Espacio de nombres" },
+        key: { type: "string", description: "Clave a leer" },
+      },
+      additionalProperties: false,
+    },
     async execute(input: GetKeyValueInput, ctx: ActivityExecutionContext): Promise<GetKeyValueResult> {
       ctx.log("Leyendo valor de kv_store", {
         namespace: input.namespace,

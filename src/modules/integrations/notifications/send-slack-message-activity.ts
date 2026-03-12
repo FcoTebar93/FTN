@@ -2,9 +2,7 @@ import type { ActivityDefinition, ActivityExecutionContext } from "../../../core
 import type { NotificationsConfig } from "./index";
 import type { SendSlackMessageInput, SendSlackMessageResult } from "./types";
 
-export function sendSlackMessageActivityDefinition(
-  config: NotificationsConfig
-): ActivityDefinition<SendSlackMessageInput, SendSlackMessageResult> {
+export function sendSlackMessageActivityDefinition(config: NotificationsConfig): ActivityDefinition<SendSlackMessageInput, SendSlackMessageResult> {
   const { slackWebhookUrl } = config;
 
   if (!slackWebhookUrl) {
@@ -17,6 +15,16 @@ export function sendSlackMessageActivityDefinition(
     timeoutMs: 10_000,
     tags: ["notifications", "slack"],
     version: "v1",
+    inputSchema: {
+      type: "object",
+      required: ["text"],
+      properties: {
+        channel: { type: "string", description: "Canal de Slack (opcional)" },
+        text: { type: "string", description: "Mensaje a enviar" },
+      },
+      additionalProperties: false,
+    },
+    
     async execute(input: SendSlackMessageInput, ctx: ActivityExecutionContext): Promise<SendSlackMessageResult> {
       ctx.log("Enviando mensaje a Slack", { text: input.text });
 

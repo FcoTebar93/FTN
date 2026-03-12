@@ -18,6 +18,23 @@ export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinit
     timeoutMs: 10_000,
     tags: ["crm", "users"],
     version: "v1",
+    inputSchema: {
+      type: "object",
+      required: ["email"],
+      properties: {
+        userId: { type: "string", description: "ID interno de usuario (opcional)" },
+        email: { type: "string", format: "email" },
+        name: { type: "string" },
+        planName: { type: "string", description: "Nombre del plan contratado" },
+        metadata: {
+          type: "object",
+          description: "Datos adicionales",
+          additionalProperties: true,
+        },
+      },
+      additionalProperties: false,
+    },
+    
     async execute(input: UpsertUserInput, ctx: ActivityExecutionContext): Promise<UpsertUserResult> {
       ctx.log("Upsert de usuario en CRM", {
         userId: input.userId,
