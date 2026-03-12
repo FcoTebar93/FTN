@@ -2,13 +2,6 @@ import { useEffect, useState } from "preact/hooks";
 import type {DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, DesignerKind, ActivityCatalogItem } from "../../api/types";
 import {getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog, getDesignerKinds } from "../../api/designer";
 
-type Mode = "list" | "edit";
-
-const [kinds, setKinds] = useState<DesignerKind[]>([]);
-const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
-const [loadingMeta, setLoadingMeta] = useState(false);
-const [errorMeta, setErrorMeta] = useState<Error | null>(null);
-
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
   version: "v1",
@@ -22,6 +15,13 @@ const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
 };
 
 export function DesignerPage() {
+  type Mode = "list" | "edit";
+
+  const [kinds, setKinds] = useState<DesignerKind[]>([]);
+  const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+  const [errorMeta, setErrorMeta] = useState<Error | null>(null);
+  
   const [mode, setMode] = useState<Mode>("list");
   const [workflows, setWorkflows] = useState<DesignerWorkflowSummary[]>([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -40,6 +40,10 @@ export function DesignerPage() {
       })
       .catch((e) => setErrorMeta(e as Error))
       .finally(() => setLoadingMeta(false));
+
+    getDesignerKinds()
+      .then(setKinds)
+      .catch((e) => setErrorMeta(e as Error));
   }, []);
 
   function handleNew() {

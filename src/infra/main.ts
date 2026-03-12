@@ -27,6 +27,8 @@ import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
 import { listStoredWorkflows } from "../app/designer-store";
 
+import { DESIGNER_KINDS } from "../app/designer-kinds";
+
 const engine = new DefaultWorkflowEngine();
 const eventStore = new InMemoryEventStore();
 const snapshotStore = new InMemorySnapshotStore();
@@ -148,6 +150,12 @@ const server = http.createServer(async (req, res) => {
     if (!req.url || !req.method) {
       res.statusCode = 400;
       res.end("Bad request");
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/designer/kinds") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(DESIGNER_KINDS));
       return;
     }
 
