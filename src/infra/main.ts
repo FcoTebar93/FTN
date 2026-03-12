@@ -19,6 +19,7 @@ import type { IntegrationsConfig } from "../modules/integrations";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import { ActivityWorker } from "../workers/activity-worker";
 import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
+import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
 
@@ -199,22 +200,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && req.url === "/workflows") {
+    const pathOnly = (req.url ?? "").split("?")[0];
+    const trigger = matchHttpTrigger(req.method ?? "GET", pathOnly);
+
+    if (trigger) {
       let body = "";
       req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
-          const parsed = JSON.parse(body || "{}");
-          const { name, input } = parsed;
-    
-          const definition = getWorkflow(name);
-          if (!definition) {
-            res.statusCode = 404;
-            res.end(`Workflow definition "${name}" not found`);
+          const wfDef = getWorkflow(trigger.workflowName);
+          if (!wfDef) {
+            res.statusCode = 500;
+            res.end(`Workflow "${trigger.workflowName}" not registered`);
             return;
           }
-    
-          const descriptor = getWorkflowDescriptor(name);
+
+          const descriptor = getWorkflowDescriptor(trigger.workflowName);
+          const parsedBody = body ? JSON.parse(body) : undefined;
+          const input = trigger.useBodyAsInput ? parsedBody : undefined;
+
           if (descriptor?.inputSchema) {
             const result = validateJson(descriptor.inputSchema, input);
             if (!result.valid) {
@@ -224,13 +228,13 @@ const server = http.createServer(async (req, res) => {
               return;
             }
           }
-    
+
           const { workflowId, runId } = await runtime.startWorkflow({
-            workflowName: name,
+            workflowName: trigger.workflowName,
             input,
-            definition,
+            definition: wfDef,
           });
-    
+
           const task: WorkflowTask = {
             id: `wf-task-${workflowId}-${runId}`,
             type: "workflow",
@@ -241,14 +245,14 @@ const server = http.createServer(async (req, res) => {
             workerType: "workflow",
             targetQueue: "workflows",
           };
-    
+
           await taskQueue.enqueue(task);
-    
+
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ workflowId, runId }));
         } catch (e) {
           res.statusCode = 500;
-          res.end(`Error starting workflow: ${(e as Error).message}`);
+          res.end(`Error handling trigger: ${(e as Error).message}`);
         }
       });
       return;
