@@ -1,5 +1,6 @@
 import type http from "node:http";
 import type { ActivityRegistry } from "../../core/activity-registry";
+import { WorkflowDefinition } from "../../core/ftn";
 
 export interface ActivityDescriptor {
   name: string;
@@ -8,6 +9,15 @@ export interface ActivityDescriptor {
   tags: string[];
   timeoutMs: number | null;
   maxAttempts: number | null;
+}
+
+export interface WorkflowPublicDescriptor {
+    name: string;
+    version: string;
+    displayName: string;
+    description?: string;
+    tags: string[];
+    examples?: Array<{ input: unknown; note?: string }>;
 }
 
 function toDescriptor(def: any): ActivityDescriptor {
@@ -24,7 +34,7 @@ function toDescriptor(def: any): ActivityDescriptor {
   };
 }
 
-export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.ServerResponse, registry: ActivityRegistry): Promise<boolean> {
+export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.ServerResponse, registry: ActivityRegistry, deps: { workflows: { list: () => WorkflowPublicDescriptor[]; getWorkflowDescriptor: (name: string) => WorkflowPublicDescriptor | undefined } }): Promise<boolean> {
   if (!req.url || !req.method) return false;
 
   if (req.method === "GET" && (req.url === "/activities" || req.url.startsWith("/activities?"))) {
@@ -76,6 +86,46 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
 
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(toDescriptor(def)));
+    return true;
+  }
+  
+  if (req.method === "GET" && (req.url === "/catalog/workflows" || req.url.startsWith("/catalog/workflows?"))) {
+    const [, queryString] = req.url.split("?");
+    const params = new URLSearchParams(queryString ?? "");
+    const q = params.get("q")?.toLowerCase();
+    
+    const limit = Math.min(500, Math.max(1, parseInt(params.get("limit") ?? "200", 10)));
+    const offset = Math.max(0, parseInt(params.get("offset") ?? "0", 10));
+    
+    const all = deps.workflows.list();
+    const filtered = q ? all.filter((n) => n.name.includes(q)) : all;
+    
+    const slice = filtered.slice(offset, offset + limit);
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ items: slice, total: filtered.length, limit, offset }));
+    return true;
+  }
+  
+  if (req.method === "GET" && req.url.startsWith("/catalog/workflows/")) {
+    const pathOnly = req.url.split("?")[0];
+    const parts = pathOnly.split("/");
+    if (parts.length !== 4) {
+      res.statusCode = 400;
+      res.end("Expected /catalog/workflows/:name");
+      return true;
+    }
+  
+    const name = decodeURIComponent(parts[3]);
+    const wf = deps.workflows.getWorkflowDescriptor(name);
+  
+    if (!wf) {
+      res.statusCode = 404;
+      res.end("Workflow not found");
+      return true;
+    }
+  
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ name }));
     return true;
   }
 

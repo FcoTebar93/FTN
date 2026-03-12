@@ -9,15 +9,9 @@ export interface VerifyIdentityResult {
     score: number;
     provider: string;
 }
-
-export interface VerifyIdentityInput {
-    userId: string;
-    documentType: string;
-    documentImageUrl: string;
-}
   
 export interface VerifyIdentityResult {
-    verified: boolean;
+    success: boolean;
     score: number;
     provider: string;
 }

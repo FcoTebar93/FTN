@@ -4,20 +4,30 @@ import type { SendEmailInput } from "../modules/integrations/notifications/types
 import type { DbExecuteInput, DbExecuteResult } from "../modules/integrations/storage/types";
 import type { PaymentCompletedSignalData } from "../modules/integrations/payments/types";
 
-type WorkflowMap = Map<string, WorkflowDefinition<any, any>>;
-
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
-const workflows: WorkflowMap = new Map();
 
-export function registerWorkflow<TInput, TResult>(
-  name: string,
-  definition: WorkflowDefinition<TInput, TResult>
-): void {
-  workflows.set(name, definition as WorkflowDefinition<any, any>);
+type WorkflowCatalog = Map<string, WorkflowDescriptor<any, any>>;
+const workflowCatalog: WorkflowCatalog = new Map();
+
+export function getWorkflowDescriptor(name: string): Omit<WorkflowDescriptor, "definition"> | undefined {
+  const d = workflowCatalog.get(name);
+  if (!d) return undefined;
+  const { definition, ...meta } = d;
+  return meta;
+}
+
+export function registerWorkflow<TInput, TResult>(descriptor: WorkflowDescriptor<TInput, TResult>): void {
+  workflowCatalog.set(descriptor.name, descriptor as WorkflowDescriptor<any, any>);
+}
+
+export function listWorkflows(): Array<Omit<WorkflowDescriptor, "definition">> {
+  return Array.from(workflowCatalog.values())
+    .map(({ definition, ...meta }) => meta)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function getWorkflow(name: string): WorkflowDefinition<any, any> | undefined {
-  return workflows.get(name);
+  return workflowCatalog.get(name)?.definition;
 }
 
 export interface OrderInput {
@@ -108,12 +118,36 @@ export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, Payme
     return { email: input.email, sessionId: payment.sessionId };
 };
 
-registerWorkflow<OrderInput, OrderResult>(
-  "order-processing",
-  orderProcessingWorkflow
-);
+export interface WorkflowDescriptor<TInput = unknown, TResult = unknown> {
+  name: string;
+  version: string;
+  displayName: string;
+  description?: string;
+  tags?: string[];
+  examples?: Array<{ input: TInput; note?: string }>;
+  definition: WorkflowDefinition<TInput, TResult>;
+}
 
-registerWorkflow<PaymentSignupInput, PaymentSignupResult>(
-  "payment-signup",
-  paymentSignupWorkflow
-);
+registerWorkflow<OrderInput, OrderResult>({
+  name: "order-processing",
+  version: "v1",
+  displayName: "Procesar pedido",
+  description: "Valida el pedido, cobra el pago y crea el envío.",
+  tags: ["commerce", "payments", "logistics"],
+  examples: [
+    { input: { orderId: "ord_123", userId: "usr_1", amount: 1999 }, note: "Pedido simple" },
+  ],
+  definition: orderProcessingWorkflow,
+});
+
+registerWorkflow<PaymentSignupInput, PaymentSignupResult>({
+  name: "payment-signup",
+  version: "v1",
+  displayName: "Alta con pago",
+  description: "Genera QR de pago, envía email y espera señal de pago completado.",
+  tags: ["growth", "payments", "notifications"],
+  examples: [
+    { input: { email: "user@acme.com", planName: "Pro", priceCents: 9900 } },
+  ],
+  definition: paymentSignupWorkflow,
+});

@@ -11,7 +11,7 @@ import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 import type { WorkflowTask } from "../shared/tasks";
-import { getWorkflow } from "../app/workflows";
+import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workflows";
 
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { registerIntegrations } from "../modules/integrations";
@@ -109,7 +109,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (await handleCatalogRoutes(req, res, activities)) {
+  if (await handleCatalogRoutes(req, res, activities, {
+    workflows: {
+      list: () =>
+        listWorkflows().map((w) => ({
+          name: w.name,
+          version: w.version,
+          displayName: w.displayName,
+          description: w.description,
+          tags: w.tags ?? [],
+          examples: w.examples ?? [],
+        })),
+      getWorkflowDescriptor: (name: string) => {
+        const w = getWorkflowDescriptor(name);
+        if (!w){
+          return undefined;
+        } 
+        return {
+          name: w.name,
+          version: w.version,
+          displayName: w.displayName,
+          description: w.description,
+          tags: w.tags ?? [],
+          examples: w.examples ?? [],
+        };
+      },
+    },
+  })) {
     return;
   }
 
