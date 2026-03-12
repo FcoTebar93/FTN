@@ -372,19 +372,75 @@ export function DesignerPage() {
                               </div>
 
                               <div class="form-row">
-                                <label>Input (JSON)</label>
-                                <textarea
-                                  value={JSON.stringify((step as any).input ?? {}, null, 2)}
-                                  onInput={(e) => {
-                                    const text = (e.target as HTMLTextAreaElement).value;
-                                    try {
-                                      const parsed = text ? JSON.parse(text) : {};
-                                      handleStepFieldChange(step.id, "input", parsed);
-                                    } catch {
-                                      // ignore parse errors in real time
-                                    }
-                                  }}
-                                />
+                                <label>Parámetros</label>
+                                {schema && schema.type === "object" && (schema as any).properties ? (
+                                  <div class="dynamic-fields">
+                                    {Object.entries((schema as any).properties).map(
+                                      ([propName, propSchema]: [string, any]
+                                    ) => {
+                                      const required = schema.required?.includes(propName) ?? false;
+                                      const value = (step as any).input?.[propName];
+                                      const fieldType =
+                                        propSchema.type === "number" || propSchema.type === "integer"
+                                          ? "number"
+                                          : propSchema.type === "boolean"
+                                          ? "checkbox"
+                                          : "text";
+
+                                      return (
+                                        <div class="form-row" key={propName}>
+                                          <label>
+                                            {propName}
+                                            {required ? " *" : ""}
+                                          </label>
+                                          {fieldType === "checkbox" ? (
+                                            <input
+                                              type="checkbox"
+                                              checked={Boolean(value)}
+                                              onInput={(e) =>
+                                                handleStepFieldChange(step.id, "input", {
+                                                  ...(step as any).input,
+                                                  [propName]: (e.target as HTMLInputElement).checked,
+                                                })
+                                              }
+                                            />
+                                          ) : (
+                                            <input
+                                              type={fieldType}
+                                              value={value ?? ""}
+                                              onInput={(e) => {
+                                                const raw = (e.target as HTMLInputElement).value;
+                                                let parsed: unknown = raw;
+                                                if (fieldType === "number") {
+                                                  parsed = raw === "" ? undefined : Number(raw);
+                                                }
+                                                handleStepFieldChange(step.id, "input", {
+                                                  ...(step as any).input,
+                                                  [propName]: parsed,
+                                                });
+                                              }}
+                                            />
+                                          )}
+                                          {propSchema.description && (
+                                            <p class="detail-muted">{propSchema.description}</p>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <textarea
+                                    value={JSON.stringify((step as any).input ?? {}, null, 2)}
+                                    onInput={(e) => {
+                                      const text = (e.target as HTMLTextAreaElement).value;
+                                      try {
+                                        const parsed = text ? JSON.parse(text) : {};
+                                        handleStepFieldChange(step.id, "input", parsed);
+                                      } catch {
+                                      }
+                                    }}
+                                  />
+                                )}
                               </div>
                             </>
                           )}
