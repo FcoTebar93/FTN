@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../config";
+import type { DesignerKind, ActivityCatalogItem } from "./types";
 import type { DesignerWorkflowSummary, DesignerStoredWorkflow } from "./types";
 
 export function getDesignerWorkflows(): Promise<DesignerWorkflowSummary[]> {
@@ -31,4 +32,13 @@ export async function updateDesignerWorkflow(id: string, payload: DesignerStored
     const text = await res.text().catch(() => "");
     throw new Error(`Error actualizando workflow: ${res.status} ${res.statusText} ${text}`);
   }
+}
+
+export function getDesignerKinds(): Promise<DesignerKind[]> {
+  return fetch(`${API_BASE_URL}/designer/kinds`).then((r) => r.json());
+}
+
+export function getActivitiesCatalog(): Promise<ActivityCatalogItem[]> {
+  return fetch(`${API_BASE_URL}/activities`).then((r) => r.json())
+    .then((res) => ("items" in res ? res.items : res)); // por si devuelves { items, total, ... }
 }

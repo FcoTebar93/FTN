@@ -1,8 +1,13 @@
 import { useEffect, useState } from "preact/hooks";
-import type {DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind } from "../../api/types";
-import {getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow } from "../../api/designer";
+import type {DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, DesignerKind, ActivityCatalogItem } from "../../api/types";
+import {getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog, getDesignerKinds } from "../../api/designer";
 
 type Mode = "list" | "edit";
+
+const [kinds, setKinds] = useState<DesignerKind[]>([]);
+const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
+const [loadingMeta, setLoadingMeta] = useState(false);
+const [errorMeta, setErrorMeta] = useState<Error | null>(null);
 
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
@@ -27,11 +32,14 @@ export function DesignerPage() {
   const [errorCurrent, setErrorCurrent] = useState<Error | null>(null);
 
   useEffect(() => {
-    setLoadingList(true);
-    getDesignerWorkflows()
-      .then(setWorkflows)
-      .catch((e) => setErrorList(e as Error))
-      .finally(() => setLoadingList(false));
+    setLoadingMeta(true);
+    Promise.all([getDesignerKinds(), getActivitiesCatalog()])
+      .then(([k, a]) => {
+        setKinds(k);
+        setActivities(a);
+      })
+      .catch((e) => setErrorMeta(e as Error))
+      .finally(() => setLoadingMeta(false));
   }, []);
 
   function handleNew() {
@@ -287,13 +295,7 @@ export function DesignerPage() {
                               <label>Kind</label>
                               <select
                                 value={step.kind}
-                                onInput={(e) =>
-                                  handleStepFieldChange(
-                                    step.id,
-                                    "kind",
-                                    (e.target as HTMLSelectElement).value as DesignerStepKind,
-                                  )
-                                }
+                                onInput={(e) => handleStepFieldChange(step.id, "kind", (e.target as HTMLSelectElement).value as DesignerStepKind)}
                               >
                                 <option value="activity">activity</option>
                                 <option value="sleep">sleep</option>
@@ -301,38 +303,55 @@ export function DesignerPage() {
                               </select>
                             </div>
                             {step.kind === "activity" && (
-                              <>
-                                <div class="form-row">
-                                  <label>Activity name</label>
-                                  <input
-                                    type="text"
-                                    value={(step as any).activityName ?? ""}
-                                    onInput={(e) =>
-                                      handleStepFieldChange(
-                                        step.id,
-                                        "activityName",
-                                        (e.target as HTMLInputElement).value,
-                                      )
+                            <>
+                              <div class="form-row">
+                                <label>Activity</label>
+                                <select
+                                  value={(step as any).activityName ?? ""}
+                                  onInput={(e) =>
+                                    handleStepFieldChange(
+                                      step.id,
+                                      "activityName",
+                                      (e.target as HTMLSelectElement).value
+                                    )
+                                  }
+                                >
+                                  <option value="">(elige una activity)</option>
+                                  {Object.entries(
+                                    activities.reduce<Record<string, ActivityCatalogItem[]>>((acc, act) => {
+                                      const mod = act.module || "other";
+                                      (acc[mod] ||= []).push(act);
+                                      return acc;
+                                    }, {})
+                                  ).map(([module, items]) => (
+                                    <optgroup key={module} label={module}>
+                                      {items.map((act) => (
+                                        <option key={act.name} value={act.name}>
+                                          {act.name} {act.version ? `(v${act.version})` : ""}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  ))}
+                                </select>
+                              </div>
+                              {/* input JSON igual que antes */}
+                              <div class="form-row">
+                                <label>Input (JSON)</label>
+                                <textarea
+                                  value={JSON.stringify((step as any).input ?? {}, null, 2)}
+                                  onInput={(e) => {
+                                    const text = (e.target as HTMLTextAreaElement).value;
+                                    try {
+                                      const parsed = text ? JSON.parse(text) : {};
+                                      handleStepFieldChange(step.id, "input", parsed);
+                                    } catch {
+                                      // ignore
                                     }
-                                  />
-                                </div>
-                                <div class="form-row">
-                                  <label>Input (JSON)</label>
-                                  <textarea
-                                    value={JSON.stringify((step as any).input ?? {}, null, 2)}
-                                    onInput={(e) => {
-                                      const text = (e.target as HTMLTextAreaElement).value;
-                                      try {
-                                        const parsed = text ? JSON.parse(text) : {};
-                                        handleStepFieldChange(step.id, "input", parsed);
-                                      } catch {
-                                        // de momento, ignoramos errores de parseo en vivo
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              </>
-                            )}
+                                  }}
+                                />
+                              </div>
+                            </>
+                          )}
                             {step.kind === "sleep" && (
                               <div class="form-row">
                                 <label>Milliseconds</label>

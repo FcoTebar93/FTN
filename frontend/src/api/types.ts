@@ -122,3 +122,31 @@ export interface DesignerStoredWorkflow extends DesignerWorkflowSummary {
   steps: DesignerWorkflowStep[];
   entryStepId: string;
 }
+
+export interface DesignerKindField {
+  name: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "json" | "activity-select";
+  required?: boolean;
+  description?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface DesignerKind {
+  id: string;
+  label: string;
+  description?: string;
+  fields: DesignerKindField[];
+}
+
+export interface ActivityCatalogItem {
+  name: string;
+  module: string;
+  version?: string;
+  tags: string[];
+  timeoutMs: number | null;
+  maxAttempts: number | null;
+  inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
+}
