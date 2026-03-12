@@ -3,6 +3,7 @@ import type { GenerateQrCodeInput } from "../modules/integrations/documents/type
 import type { SendEmailInput } from "../modules/integrations/notifications/types";
 import type { DbExecuteInput, DbExecuteResult } from "../modules/integrations/storage/types";
 import type { PaymentCompletedSignalData } from "../modules/integrations/payments/types";
+import type { JsonSchema } from "../shared/json-schema";
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
 
@@ -125,20 +126,12 @@ export interface WorkflowDescriptor<TInput = unknown, TResult = unknown> {
   description?: string;
   tags?: string[];
   examples?: Array<{ input: TInput; note?: string }>;
+
+  inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
+
   definition: WorkflowDefinition<TInput, TResult>;
 }
-
-registerWorkflow<OrderInput, OrderResult>({
-  name: "order-processing",
-  version: "v1",
-  displayName: "Procesar pedido",
-  description: "Valida el pedido, cobra el pago y crea el envío.",
-  tags: ["commerce", "payments", "logistics"],
-  examples: [
-    { input: { orderId: "ord_123", userId: "usr_1", amount: 1999 }, note: "Pedido simple" },
-  ],
-  definition: orderProcessingWorkflow,
-});
 
 registerWorkflow<PaymentSignupInput, PaymentSignupResult>({
   name: "payment-signup",
@@ -149,5 +142,24 @@ registerWorkflow<PaymentSignupInput, PaymentSignupResult>({
   examples: [
     { input: { email: "user@acme.com", planName: "Pro", priceCents: 9900 } },
   ],
+  inputSchema: {
+    type: "object",
+    required: ["email", "planName", "priceCents"],
+    properties: {
+      email: { type: "string", format: "email" },
+      planName: { type: "string" },
+      priceCents: { type: "integer", minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+  resultSchema: {
+    type: "object",
+    required: ["email", "sessionId"],
+    properties: {
+      email: { type: "string", format: "email" },
+      sessionId: { type: "string" },
+    },
+    additionalProperties: false,
+  },
   definition: paymentSignupWorkflow,
 });

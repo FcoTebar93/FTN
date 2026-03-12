@@ -1,6 +1,7 @@
 import type http from "node:http";
 import type { ActivityRegistry } from "../../core/activity-registry";
 import { WorkflowDefinition } from "../../core/ftn";
+import { JsonSchema } from "../../shared/json-schema";
 
 export interface ActivityDescriptor {
   name: string;
@@ -9,6 +10,8 @@ export interface ActivityDescriptor {
   tags: string[];
   timeoutMs: number | null;
   maxAttempts: number | null;
+  inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
 }
 
 export interface WorkflowPublicDescriptor {
@@ -18,6 +21,8 @@ export interface WorkflowPublicDescriptor {
     description?: string;
     tags: string[];
     examples?: Array<{ input: unknown; note?: string }>;
+    inputSchema?: JsonSchema;
+    resultSchema?: JsonSchema;
 }
 
 function toDescriptor(def: any): ActivityDescriptor {
@@ -31,6 +36,8 @@ function toDescriptor(def: any): ActivityDescriptor {
     tags: Array.isArray(def.tags) ? def.tags : [],
     timeoutMs: typeof def.timeoutMs === "number" ? def.timeoutMs : null,
     maxAttempts: typeof def.maxAttempts === "number" ? def.maxAttempts : null,
+    inputSchema: def.inputSchema,
+    resultSchema: def.resultSchema,
   };
 }
 

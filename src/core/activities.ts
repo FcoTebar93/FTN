@@ -1,4 +1,5 @@
 export type ActivityName = string;
+import type { JsonSchema } from "../shared/json-schema";
 
 export interface ActivityExecutionContext {
   workflowId: string;
@@ -9,6 +10,7 @@ export interface ActivityExecutionContext {
   log: (message: string, meta?: Record<string, unknown>) => void;
   idempotencyKey?: string;
 }
+
 export interface ActivityDefinition<TInput, TResult> {
   name: ActivityName;
   execute: (input: TInput, ctx: ActivityExecutionContext) => Promise<TResult> | TResult;
@@ -16,6 +18,9 @@ export interface ActivityDefinition<TInput, TResult> {
   timeoutMs?: number;
   tags?: string[];
   version?: string;
+
+  inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
 }
 
 export type AnyActivityDefinition = ActivityDefinition<any, any>;
