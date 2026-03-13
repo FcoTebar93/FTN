@@ -66,3 +66,42 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.workflow-section {
+  margin-bottom: 18px;
+}
+
+.workflow-section h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.workflow-section--meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px 20px;
+}
+
+.workflow-section--meta .form-row {
+  margin-bottom: 0;
+}
+
+.workflow-step-editor {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.06), transparent 55%),
+    rgba(15, 23, 42, 0.95);
+  margin-bottom: 10px;
+
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px 16px;
+}
+
+.workflow-step-editor .form-row {
+  margin-bottom: 0;
+}

@@ -186,7 +186,7 @@ export function DesignerPage() {
             {errorCurrent && <p class="panel panel-error">Error: {errorCurrent.message}</p>}
             {current && (
               <>
-                <section class="workflow-section">
+                <section class="workflow-section workflow-section--meta">
                   <h3>Meta</h3>
                   <div class="form-row">
                     <label>Id</label>
