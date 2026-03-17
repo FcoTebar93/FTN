@@ -1,6 +1,6 @@
 import { JsonSchema } from "../shared/json-schema";
 
-export type StepKind = "activity" | "sleep" | "signal";
+export type StepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel";
 
 export interface BaseStep {
   id: string;
@@ -24,7 +24,19 @@ export interface SignalStep extends BaseStep {
   signalName: string;
 }
 
-export type WorkflowStep = ActivityStep | SleepStep | SignalStep;
+export interface ConditionalStep extends BaseStep {
+  kind: "conditional";
+  expression: string;
+  thenNext?: string | null;
+  elseNext?: string | null;
+}
+
+export interface ParallelStep extends BaseStep {
+  kind: "parallel";
+  branches: string[][];
+}
+
+export type WorkflowStep = ActivityStep | SleepStep | SignalStep | ConditionalStep | ParallelStep;
 
 export interface StoredWorkflow {
   id: string;

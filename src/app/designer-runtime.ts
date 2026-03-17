@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from "../core/ftn";
-import type { StoredWorkflow, WorkflowStep } from "./designer-types";
+import type { ActivityStep, ConditionalStep, ParallelStep, StoredWorkflow, WorkflowStep } from "./designer-types";
 
 interface ExecutionContext {
   input: any;
@@ -96,6 +96,36 @@ export function buildWorkflowDefinitionFromStored(
       } else if (step.kind === "signal") {
         const signalData = await ftn.signal<any>(step.signalName);
         ctx.stepResults[step.id] = signalData;
+      } else if (step.kind === "conditional") {
+        const cond = (step as ConditionalStep);
+        const ok = evalCondition(cond.expression, ctx);
+        currentId = ok ? cond.thenNext ?? null : cond.elseNext ?? null;
+        continue;
+      } else if (step.kind === "parallel") {
+        const p = step as ParallelStep;
+      
+        const branchActivityHandles: Promise<any>[] = [];
+      
+        for (const branch of p.branches) {
+          for (const stepId of branch) {
+            const targetStep = findStep(stored, stepId);
+            if (targetStep.kind !== "activity") continue;
+            const handle = ftn.activity<any, any>(
+              (targetStep as ActivityStep).activityName,
+              (targetStep as any).input ?? {}
+            );
+            branchActivityHandles.push(ftn.join([handle]).then(([r]) => {
+              ctx.stepResults[stepId] = r;
+            }));
+          }
+        }
+      
+        if (branchActivityHandles.length > 0) {
+          await Promise.all(branchActivityHandles);
+        }
+      
+        currentId = step.next ?? null;
+        continue;
       }
 
       currentId = step.next ?? null;
@@ -106,4 +136,12 @@ export function buildWorkflowDefinitionFromStored(
       steps: ctx.stepResults,
     };
   };
+}
+
+function evalCondition(expression: string, ctx: ExecutionContext) {
+  try {
+    return eval(expression);
+  } catch {
+    return false;
+  }
 }

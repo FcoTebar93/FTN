@@ -13,7 +13,7 @@ export interface DesignerKindField {
 }
 
 export interface DesignerKind {
-  id: "activity" | "sleep" | "signal";
+  id: "activity" | "sleep" | "signal" | "conditional" | "parallel";
   label: string;
   description?: string;
   fields: DesignerKindField[];
@@ -45,4 +45,43 @@ export const DESIGNER_KINDS: DesignerKind[] = [
       { name: "signalName", label: "Nombre de la señal", type: "string", required: true },
     ],
   },
+  {
+    id: "conditional",
+    label: "Conditional",
+    description: "Ejecuta una rama u otra según una expresión.",
+    fields: [
+      {
+        name: "expression",
+        label: "Expression",
+        type: "string",
+        required: true,
+        description: "Ej: input.amount > 1000",
+      },
+      {
+        name: "thenNext",
+        label: "Then step id",
+        type: "string",
+        description: "Id del siguiente step si la condición es verdadera",
+      },
+      {
+        name: "elseNext",
+        label: "Else step id",
+        type: "string",
+        description: "Id del siguiente step si la condición es falsa",
+      },
+    ],
+  },
+  {
+    id: "parallel",
+    label: "Parallel",
+    description: "Ejecuta varias ramas en paralelo.",
+    fields: [
+      {
+        name: "branches",
+        label: "Branches (JSON)",
+        type: "json",
+        description: "Array de arrays de ids de steps, p.ej. [[\"s1\",\"s2\"],[\"s3\"]]",
+      },
+    ],
+  }
 ];
