@@ -555,7 +555,7 @@ export function DesignerPage() {
                             </div>
                           </>
                         )}
-                            {step.kind === "sleep" && (
+                        {step.kind === "sleep" && (
                               <div class="form-row">
                                 <label>Milliseconds</label>
                                 <input
@@ -570,8 +570,8 @@ export function DesignerPage() {
                                   }
                                 />
                               </div>
-                            )}
-                            {step.kind === "signal" && (
+                        )}
+                        {step.kind === "signal" && (
                               <div class="form-row">
                                 <label>Signal name</label>
                                 <input
@@ -586,7 +586,50 @@ export function DesignerPage() {
                                   }
                                 />
                               </div>
-                            )}
+                        )}
+                        {step.kind === "parallel" && (
+                        <>
+                          {Array.isArray((step as any).branches) &&
+                            (step as any).branches.map((branch: string[], idx: number) => (
+                              <div class="form-row" key={idx}>
+                                <label>Rama {idx + 1}</label>
+                                <select
+                                  multiple
+                                  onChange={(e) => {
+                                    const selected = Array.from(
+                                      (e.target as HTMLSelectElement).selectedOptions
+                                    ).map((o) => o.value);
+                                    const allBranches = [...(((step as any).branches as string[][]) ?? [])];
+                                    allBranches[idx] = selected;
+                                    handleStepFieldChange(step.id, "branches", allBranches);
+                                  }}
+                                >
+                                  {current.steps
+                                    .filter((s) => s.id !== step.id && s.kind === "activity")
+                                    .map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.id}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            ))}
+
+                          <div class="form-row">
+                            <button
+                              type="button"
+                              class="workflow-filter-btn"
+                              onClick={() => {
+                                const existing = ((step as any).branches as string[][]) ?? [];
+                                const updated = [...existing, []];
+                                handleStepFieldChange(step.id, "branches", updated);
+                              }}
+                            >
+                              + Añadir rama
+                            </button>
+                          </div>
+                        </>
+                      )}
                             <div class="form-row">
                               <label>Next step</label>
                               <select
