@@ -71,7 +71,7 @@ export interface WorkflowEvent {
     payload: unknown;
 }
 
-export type DesignerStepKind = "activity" | "sleep" | "signal";
+export type DesignerStepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel";
 
 export interface DesignerBaseStep {
   id: string;
@@ -95,11 +95,6 @@ export interface DesignerSignalStep extends DesignerBaseStep {
   kind: "signal";
   signalName: string;
 }
-
-export type DesignerWorkflowStep =
-  | DesignerActivityStep
-  | DesignerSleepStep
-  | DesignerSignalStep;
 
 export interface JsonSchema {
   type?: string | string[];
@@ -151,3 +146,25 @@ export interface ActivityCatalogItem {
   inputSchema?: JsonSchema;
   resultSchema?: JsonSchema;
 }
+
+export interface DesignerConditionalStep extends DesignerBaseStep {
+  kind: "conditional";
+  expression: string;
+  thenNext?: string | null;
+  elseNext?: string | null;
+  path?: string;
+  operator?: string;
+  right?: string;
+}
+
+export interface DesignerParallelStep extends DesignerBaseStep {
+  kind: "parallel";
+  branches: string[][];
+}
+
+export type DesignerWorkflowStep =
+  | DesignerActivityStep
+  | DesignerSleepStep
+  | DesignerSignalStep
+  | DesignerConditionalStep
+  | DesignerParallelStep;

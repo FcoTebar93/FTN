@@ -138,10 +138,79 @@ export function buildWorkflowDefinitionFromStored(
   };
 }
 
-function evalCondition(expression: string, ctx: ExecutionContext) {
-  try {
-    return eval(expression);
-  } catch {
+function parseLiteral(text: string): unknown {
+  const trimmed = text.trim();
+
+  if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    return trimmed.slice(1, -1);
+  }
+
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (trimmed === "null") return null;
+  if (trimmed === "undefined") return undefined;
+
+  const num = Number(trimmed);
+  if (!Number.isNaN(num)) return num;
+
+  return trimmed;
+}
+
+function getValueFromPath(path: string, ctx: ExecutionContext): unknown {
+  const trimmed = path.trim();
+  if (trimmed.startsWith("input.")) {
+    return getByPath(ctx.input, trimmed.slice("input.".length));
+  }
+  if (trimmed.startsWith("steps.")) {
+    const rest = trimmed.slice("steps.".length);
+    const [stepId, ...parts] = rest.split(".");
+    const base = ctx.stepResults[stepId];
+    return parts.length > 0 ? getByPath(base, parts.join(".")) : base;
+  }
+  return parseLiteral(trimmed);
+}
+
+function evalCondition(expression: string, ctx: ExecutionContext): boolean {
+  const expr = expression.trim();
+  if (!expr) return false;
+
+  const operators = ["===", "!==", ">=", "<=", ">", "<"];
+  let op: string | undefined;
+  let leftRaw = "";
+  let rightRaw = "";
+
+  for (const candidate of operators) {
+    const idx = expr.indexOf(candidate);
+    if (idx !== -1) {
+      op = candidate;
+      leftRaw = expr.slice(0, idx);
+      rightRaw = expr.slice(idx + candidate.length);
+      break;
+    }
+  }
+
+  if (!op) {
+    console.warn("[evalCondition] Operador no reconocido en expresión:", expr);
     return false;
+  }
+
+  const left = getValueFromPath(leftRaw, ctx);
+  const right = parseLiteral(rightRaw);
+
+  switch (op) {
+    case "===":
+      return left === right;
+    case "!==":
+      return left !== right;
+    case ">":
+      return Number(left) > Number(right);
+    case "<":
+      return Number(left) < Number(right);
+    case ">=":
+      return Number(left) >= Number(right);
+    case "<=":
+      return Number(left) <= Number(right);
+    default:
+      return false;
   }
 }

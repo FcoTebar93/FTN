@@ -450,6 +450,111 @@ export function DesignerPage() {
                               </div>
                             </>
                           )}
+                          {step.kind === "conditional" && (
+                          <>
+                            <div class="form-row">
+                              <label>Path</label>
+                              <input
+                                type="text"
+                                placeholder="input.amount o steps.step-1.result.status"
+                                value={(step as any).path ?? ""}
+                                onInput={(e) => {
+                                  const path = (e.target as HTMLInputElement).value;
+                                  const op = (step as any).operator ?? "===";
+                                  const right = (step as any).right ?? "";
+                                  const expression = path && right ? `${path} ${op} ${right}` : "";
+                                  handleStepFieldChange(step.id, "path", path);
+                                  handleStepFieldChange(step.id, "expression", expression);
+                                }}
+                              />
+                            </div>
+
+                            <div class="form-row">
+                              <label>Operador</label>
+                              <select
+                                value={(step as any).operator ?? "==="}
+                                onInput={(e) => {
+                                  const op = (e.target as HTMLSelectElement).value;
+                                  const path = (step as any).path ?? "";
+                                  const right = (step as any).right ?? "";
+                                  const expression = path && right ? `${path} ${op} ${right}` : "";
+                                  handleStepFieldChange(step.id, "operator", op);
+                                  handleStepFieldChange(step.id, "expression", expression);
+                                }}
+                              >
+                                <option value="===">===</option>
+                                <option value="!==">!==</option>
+                                <option value=">">&gt;</option>
+                                <option value="<">&lt;</option>
+                                <option value=">=">&gt;=</option>
+                                <option value="<=">&lt;=</option>
+                              </select>
+                            </div>
+
+                            <div class="form-row">
+                              <label>Valor</label>
+                              <input
+                                type="text"
+                                placeholder="1000, 'completed', true..."
+                                value={(step as any).right ?? ""}
+                                onInput={(e) => {
+                                  const right = (e.target as HTMLInputElement).value;
+                                  const path = (step as any).path ?? "";
+                                  const op = (step as any).operator ?? "===";
+                                  const expression = path && right ? `${path} ${op} ${right}` : "";
+                                  handleStepFieldChange(step.id, "right", right);
+                                  handleStepFieldChange(step.id, "expression", expression);
+                                }}
+                              />
+                            </div>
+
+                            <div class="form-row">
+                              <label>Then step id</label>
+                              <select
+                                value={(step as any).thenNext ?? ""}
+                                onInput={(e) =>
+                                  handleStepFieldChange(
+                                    step.id,
+                                    "thenNext",
+                                    (e.target as HTMLSelectElement).value || null,
+                                  )
+                                }
+                              >
+                                <option value="">(fin)</option>
+                                {current.steps
+                                  .filter((s) => s.id !== step.id)
+                                  .map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.id}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            <div class="form-row">
+                              <label>Else step id</label>
+                              <select
+                                value={(step as any).elseNext ?? ""}
+                                onInput={(e) =>
+                                  handleStepFieldChange(
+                                    step.id,
+                                    "elseNext",
+                                    (e.target as HTMLSelectElement).value || null,
+                                  )
+                                }
+                              >
+                                <option value="">(fin)</option>
+                                {current.steps
+                                  .filter((s) => s.id !== step.id)
+                                  .map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.id}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </>
+                        )}
                             {step.kind === "sleep" && (
                               <div class="form-row">
                                 <label>Milliseconds</label>
