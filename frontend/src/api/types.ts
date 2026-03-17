@@ -147,6 +147,15 @@ export interface ActivityCatalogItem {
   resultSchema?: JsonSchema;
 }
 
+export interface CatalogWorkflow {
+  name: string;
+  version: string;
+  displayName: string;
+  description?: string;
+  tags: string[];
+  inputSchema?: JsonSchema;
+}
+
 export interface DesignerConditionalStep extends DesignerBaseStep {
   kind: "conditional";
   expression: string;
@@ -167,4 +176,5 @@ export type DesignerWorkflowStep =
   | DesignerSleepStep
   | DesignerSignalStep
   | DesignerConditionalStep
-  | DesignerParallelStep;
+  | DesignerParallelStep
+  | CatalogWorkflow;

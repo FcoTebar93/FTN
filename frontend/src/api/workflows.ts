@@ -1,5 +1,5 @@
-import { fetchJson } from "./client";
-import type { WorkflowSummary, WorkflowState, WorkflowEvent, WorkflowStatus, StepRecord } from "./types";
+import { fetchJson, postJson } from "./client";
+import type { WorkflowSummary, WorkflowState, WorkflowEvent, WorkflowStatus, StepRecord, CatalogWorkflow } from "./types";
 
 export async function getWorkflows (params?: { status?: WorkflowStatus; limit?: number; offset?: number }): Promise<WorkflowSummary[]> {
     const search = new URLSearchParams();
@@ -26,4 +26,13 @@ export function getWorkflowEvents (workflowId: string, runId: string): Promise<W
 
 export function getWorkflowSteps (workflowId: string, runId: string): Promise<StepRecord[]> {
     return fetchJson<StepRecord[]>(`/workflows/${workflowId}/${runId}/steps`);
+}
+
+export async function getCatalogWorkflows() {
+  const res = await fetchJson<{ items: CatalogWorkflow[] }>("/catalog/workflows");
+  return res.items;
+}
+
+export async function startWorkflow(name: string, input: unknown) {
+  return postJson<{ workflowId: string; runId: string }>("/workflows", { name, input });
 }

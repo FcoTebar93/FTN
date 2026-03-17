@@ -31,6 +31,15 @@ export function getWorkflow(name: string): WorkflowDefinition<any, any> | undefi
   return workflowCatalog.get(name)?.definition;
 }
 
+export interface CatalogWorkflow {
+  name: string;
+  version: string;
+  displayName: string;
+  description?: string;
+  tags: string[];
+  inputSchema?: JsonSchema;
+}
+
 export interface OrderInput {
   orderId: string;
   userId: string;
