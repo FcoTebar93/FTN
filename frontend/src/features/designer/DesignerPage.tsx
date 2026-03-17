@@ -411,9 +411,15 @@ export function DesignerPage() {
                                               onInput={(e) => {
                                                 const raw = (e.target as HTMLInputElement).value;
                                                 let parsed: unknown = raw;
-                                                if (fieldType === "number") {
+                                              
+                                                const trimmed = raw.trim();
+                                                const isPlaceholder =
+                                                  trimmed.startsWith("{{") && trimmed.endsWith("}}");
+                                              
+                                                if (!isPlaceholder && fieldType === "number") {
                                                   parsed = raw === "" ? undefined : Number(raw);
                                                 }
+                                              
                                                 handleStepFieldChange(step.id, "input", {
                                                   ...(step as any).input,
                                                   [propName]: parsed,
