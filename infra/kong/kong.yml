@@ -1,0 +1,15 @@
+_format_version: "3.0"
+_transform: false
+
+services:
+  - name: ftn-backend
+    url: http://backend:4000
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    routes:
+      - name: ftn-all
+        paths:
+          - /
+        strip_path: false
+        preserve_host: false
