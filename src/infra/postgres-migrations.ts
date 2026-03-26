@@ -43,6 +43,20 @@ CREATE TABLE IF NOT EXISTS ftn_workflow_snapshots (
 );
 `,
   },
+  {
+    version: 2,
+    name: "ftn_users",
+    sql: `
+CREATE TABLE IF NOT EXISTS ftn_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ftn_users_username_lower ON ftn_users (lower(username));
+`,
+  },
 ];
 
 /**

@@ -127,7 +127,10 @@ export function signJwtHs256(payload: Record<string, unknown>, secret: string): 
 }
 
 export function isLoginConfigured(config: ApiSecurityConfig): boolean {
-  return Boolean(config.jwtSecret && config.loginPassword);
+  if (!config.jwtSecret) {
+    return false;
+  }
+  return Boolean(config.loginPassword || config.registrationEnabled);
 }
 
 export function validateLoginCredentials(
@@ -144,12 +147,15 @@ export function validateLoginCredentials(
   );
 }
 
-export function issueAccessToken(config: ApiSecurityConfig): { token: string; expiresIn: number } {
+export function issueAccessTokenForSubject(
+  config: ApiSecurityConfig,
+  subject: string
+): { token: string; expiresIn: number } {
   const now = Math.floor(Date.now() / 1000);
   const ttl = config.jwtTtlSeconds;
   const scopeStr = config.loginScopes.replace(/,/g, " ").trim() || "*";
   const payload: Record<string, unknown> = {
-    sub: config.loginUsername,
+    sub: subject,
     iat: now,
     exp: now + ttl,
     scope: scopeStr,
@@ -162,6 +168,10 @@ export function issueAccessToken(config: ApiSecurityConfig): { token: string; ex
   }
   const token = signJwtHs256(payload, config.jwtSecret!);
   return { token, expiresIn: ttl };
+}
+
+export function issueAccessToken(config: ApiSecurityConfig): { token: string; expiresIn: number } {
+  return issueAccessTokenForSubject(config, config.loginUsername);
 }
 
 function scopesFromJwtPayload(p: JwtPayload): Set<string> {
