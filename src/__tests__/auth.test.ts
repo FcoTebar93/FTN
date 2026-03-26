@@ -6,7 +6,9 @@ import type { ApiSecurityConfig } from "../infra/http/api-security";
 import {
   FTN_SCOPES,
   checkProtectedAccess,
+  isLoginConfigured,
   issueAccessToken,
+  issueAccessTokenForSubject,
   requiredScopesForRoute,
   signJwtHs256,
   validateLoginCredentials,
@@ -62,6 +64,7 @@ function baseConfig(over: Partial<ApiSecurityConfig> = {}): ApiSecurityConfig {
     enableRbac: false,
     apiKeyScopes: ["*"],
     loginUsername: "ftn",
+    registrationEnabled: false,
     jwtTtlSeconds: 3600,
     loginScopes: "*",
     rateLimitPerMinute: 0,
@@ -101,6 +104,22 @@ test("RBAC: API key con * puede designer:write", () => {
   assert.equal(checkProtectedAccess(req, config, "POST", "/designer/workflows"), "allow");
 });
 
+test("isLoginConfigured: JWT + registro sin password de entorno", () => {
+  const cfg = baseConfig({
+    jwtSecret: "x".repeat(32),
+    registrationEnabled: true,
+  });
+  assert.equal(isLoginConfigured(cfg), true);
+});
+
+test("isLoginConfigured: JWT sin password ni registro", () => {
+  const cfg = baseConfig({
+    jwtSecret: "x".repeat(32),
+    registrationEnabled: false,
+  });
+  assert.equal(isLoginConfigured(cfg), false);
+});
+
 test("signJwtHs256 e issueAccessToken son coherentes con verifyJwtHs256", () => {
   const secret = "y".repeat(32);
   const cfg = baseConfig({
@@ -119,6 +138,11 @@ test("signJwtHs256 e issueAccessToken son coherentes con verifyJwtHs256", () => 
   assert.ok(payload);
   assert.equal(payload!.sub, "alice");
   assert.ok(typeof payload!.scope === "string" && payload!.scope.includes("catalog:read"));
+
+  const { token: t2 } = issueAccessTokenForSubject(cfg, "bob");
+  const p2 = verifyJwtHs256(t2, secret);
+  assert.ok(p2);
+  assert.equal(p2!.sub, "bob");
 });
 
 test("RBAC: JWT con scope adecuado", () => {
