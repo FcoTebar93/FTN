@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS ftn_schema_migrations (
 );
 `;
 
+/** Bloquea migraciones concurrentes (tests en paralelo, varios procesos). */
+const MIGRATION_LOCK_K1 = 8291031;
+const MIGRATION_LOCK_K2 = 42042;
+
 export interface PostgresMigration {
   readonly version: number;
   readonly name: string;
@@ -44,39 +48,50 @@ CREATE TABLE IF NOT EXISTS ftn_workflow_snapshots (
 /**
  * Aplica migraciones pendientes del motor FTN (tablas de eventos y snapshots).
  * Idempotente: migraciones ya registradas en `ftn_schema_migrations` se omiten.
+ * Usa un advisory lock para que varias conexiones no ejecuten CREATE TABLE a la vez
+ * (evita condiciones de carrera en `pg_type` con CREATE TABLE IF NOT EXISTS).
  */
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
-  await pool.query(MIGRATION_TABLE_SQL);
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1, $2)", [MIGRATION_LOCK_K1, MIGRATION_LOCK_K2]);
 
-  const { rows } = await pool.query<{ version: number }>(
-    "SELECT version FROM ftn_schema_migrations ORDER BY version ASC"
-  );
-  const applied = new Set(rows.map((r) => r.version));
+    await client.query(MIGRATION_TABLE_SQL);
 
-  for (const m of MIGRATIONS) {
-    if (applied.has(m.version)) {
-      continue;
-    }
+    const { rows } = await client.query<{ version: number }>(
+      "SELECT version FROM ftn_schema_migrations ORDER BY version ASC"
+    );
+    const applied = new Set(rows.map((r) => r.version));
 
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(m.sql);
-      await client.query("INSERT INTO ftn_schema_migrations (version, name) VALUES ($1, $2)", [
-        m.version,
-        m.name,
-      ]);
-      await client.query("COMMIT");
-    } catch (e) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        /* ignore */
+    for (const m of MIGRATIONS) {
+      if (applied.has(m.version)) {
+        continue;
       }
-      throw e;
-    } finally {
-      client.release();
+
+      await client.query("BEGIN");
+      try {
+        await client.query(m.sql);
+        await client.query("INSERT INTO ftn_schema_migrations (version, name) VALUES ($1, $2)", [
+          m.version,
+          m.name,
+        ]);
+        await client.query("COMMIT");
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
+        throw e;
+      }
     }
+  } finally {
+    try {
+      await client.query("SELECT pg_advisory_unlock($1, $2)", [MIGRATION_LOCK_K1, MIGRATION_LOCK_K2]);
+    } catch {
+      /* ignore */
+    }
+    client.release();
   }
 }
 
