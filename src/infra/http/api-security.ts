@@ -11,6 +11,15 @@ export class PayloadTooLargeError extends Error {
 export interface ApiSecurityConfig {
   corsOrigins: string[];
   apiKey?: string;
+  jwtSecret?: string;
+  jwtIssuer?: string;
+  jwtAudience?: string;
+  enableRbac: boolean;
+  apiKeyScopes: string[];
+  loginUsername: string;
+  loginPassword?: string;
+  jwtTtlSeconds: number;
+  loginScopes: string;
   rateLimitPerMinute: number;
   maxBodyBytes: number;
   trustProxy: boolean;
@@ -24,11 +33,40 @@ export function loadApiSecurityConfigFromEnv(): ApiSecurityConfig {
     .filter(Boolean);
 
   const apiKey = process.env.FTN_API_KEY?.trim() || undefined;
+  const jwtSecret = process.env.FTN_JWT_SECRET?.trim() || undefined;
+  const jwtIssuer = process.env.FTN_JWT_ISSUER?.trim() || undefined;
+  const jwtAudience = process.env.FTN_JWT_AUDIENCE?.trim() || undefined;
+  const enableRbac = process.env.FTN_ENABLE_RBAC === "true" || process.env.FTN_ENABLE_RBAC === "1";
+  const apiKeyScopesRaw = process.env.FTN_API_KEY_SCOPES?.trim();
+  const apiKeyScopes = apiKeyScopesRaw
+    ? apiKeyScopesRaw.split(/[\s,]+/).filter(Boolean)
+    : ["*"];
+
+  const loginUsername = process.env.FTN_AUTH_LOGIN_USERNAME?.trim() || "ftn";
+  const loginPassword = process.env.FTN_AUTH_LOGIN_PASSWORD?.trim() || undefined;
+  const jwtTtlSeconds = Math.max(60, parseInt(process.env.FTN_JWT_TTL_SECONDS ?? "3600", 10) || 3600);
+  const loginScopes = process.env.FTN_AUTH_LOGIN_SCOPES?.trim() || "*";
+
   const rateLimitPerMinute = Math.max(0, parseInt(process.env.FTN_HTTP_RATE_LIMIT_PER_MINUTE ?? "300", 10) || 0);
   const maxBodyBytes = Math.max(1024, parseInt(process.env.FTN_HTTP_MAX_BODY_BYTES ?? String(1024 * 1024), 10) || 1024 * 1024);
   const trustProxy = process.env.FTN_TRUST_PROXY === "true" || process.env.FTN_TRUST_PROXY === "1";
 
-  return { corsOrigins, apiKey, rateLimitPerMinute, maxBodyBytes, trustProxy };
+  return {
+    corsOrigins,
+    apiKey,
+    jwtSecret,
+    jwtIssuer,
+    jwtAudience,
+    enableRbac,
+    apiKeyScopes,
+    loginUsername,
+    loginPassword,
+    jwtTtlSeconds,
+    loginScopes,
+    rateLimitPerMinute,
+    maxBodyBytes,
+    trustProxy,
+  };
 }
 
 export function isPublicPath(method: string, pathWithoutQuery: string): boolean {
@@ -36,6 +74,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
     return true;
   }
   if (method === "POST" && pathWithoutQuery === "/stripe/webhook") {
+    return true;
+  }
+  if (method === "POST" && pathWithoutQuery === "/auth/login") {
     return true;
   }
   return false;

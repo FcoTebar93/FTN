@@ -30,11 +30,15 @@ import {
   applyCorsHeaders,
   createRateLimiter,
   getClientIp,
-  isAuthorized,
-  isPublicPath,
   loadApiSecurityConfigFromEnv,
   readBodyCapped,
 } from "./http/api-security";
+import {
+  checkProtectedAccess,
+  isLoginConfigured,
+  issueAccessToken,
+  validateLoginCredentials,
+} from "./http/auth";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
@@ -163,14 +167,17 @@ async function main(): Promise<void> {
     const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
     const methodEarly = req.method ?? "GET";
 
-    if (
-      apiSecurity.apiKey &&
-      !isPublicPath(methodEarly, rawPathEarly) &&
-      !isAuthorized(req, apiSecurity.apiKey)
-    ) {
+    const access = checkProtectedAccess(req, apiSecurity, methodEarly, rawPathEarly);
+    if (access === "unauthorized") {
       res.statusCode = 401;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    if (access === "forbidden") {
+      res.statusCode = 403;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Forbidden", detail: "Insufficient scope" }));
       return;
     }
 
@@ -219,6 +226,49 @@ async function main(): Promise<void> {
       }
 
       const rawPath = req.url.split("?")[0] ?? "";
+
+      if (req.method === "POST" && rawPath === "/auth/login") {
+        if (!isLoginConfigured(apiSecurity)) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Not found" }));
+          return;
+        }
+
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+
+        let parsed: { username?: unknown; password?: unknown };
+        try {
+          parsed = JSON.parse(body || "{}");
+        } catch {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid JSON" }));
+          return;
+        }
+
+        const u = typeof parsed.username === "string" ? parsed.username : "";
+        const p = typeof parsed.password === "string" ? parsed.password : "";
+
+        if (!validateLoginCredentials(apiSecurity, u, p)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid credentials" }));
+          return;
+        }
+
+        const { token, expiresIn } = issueAccessToken(apiSecurity);
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            access_token: token,
+            token_type: "Bearer",
+            expires_in: expiresIn,
+          })
+        );
+        return;
+      }
 
       if (req.method === "GET" && rawPath === "/health") {
         res.setHeader("Content-Type", "application/json");
