@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { authHeaders } from "./config";
 
 type PaymentModalProps = {
   backendBaseUrl: string;
@@ -34,7 +35,7 @@ export function PaymentModal({ backendBaseUrl }: PaymentModalProps) {
       try {
         const res = await fetch(`${backendBaseUrl}/pay/checkout`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             successUrl: `${window.location.origin}/pago-ok`,
             cancelUrl: `${window.location.origin}/pago-cancelado`,
