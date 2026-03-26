@@ -26,6 +26,15 @@ import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
+import {
+  applyCorsHeaders,
+  createRateLimiter,
+  getClientIp,
+  isAuthorized,
+  isPublicPath,
+  loadApiSecurityConfigFromEnv,
+  readBodyCapped,
+} from "./http/api-security";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
@@ -139,14 +148,36 @@ async function main(): Promise<void> {
   timerWorker.runForever(cancellation).catch((err) => log.error("timerWorker.runForever", { err: String(err) }));
   activityQueueWorker.runForever(cancellation).catch((err) => log.error("activityQueueWorker.runForever", { err: String(err) }));
 
+  const apiSecurity = loadApiSecurityConfigFromEnv();
+  const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
+
   const server = http.createServer(async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    applyCorsHeaders(req, res, apiSecurity.corsOrigins);
 
     if (req.method === "OPTIONS") {
       res.statusCode = 204;
       res.end();
+      return;
+    }
+
+    const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
+    const methodEarly = req.method ?? "GET";
+
+    if (
+      apiSecurity.apiKey &&
+      !isPublicPath(methodEarly, rawPathEarly) &&
+      !isAuthorized(req, apiSecurity.apiKey)
+    ) {
+      res.statusCode = 401;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+
+    if (!rateLimiter(getClientIp(req, apiSecurity.trustProxy))) {
+      res.statusCode = 429;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Too many requests" }));
       return;
     }
 
@@ -195,6 +226,33 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (req.method === "GET" && rawPath === "/ready") {
+        const checks: { postgres?: boolean; redis?: boolean } = {};
+        if (pool) {
+          try {
+            await pool.query("SELECT 1");
+            checks.postgres = true;
+          } catch {
+            checks.postgres = false;
+          }
+        }
+        if (redis) {
+          try {
+            await redis.ping();
+            checks.redis = true;
+          } catch {
+            checks.redis = false;
+          }
+        }
+        const ok =
+          (!pool || checks.postgres === true) &&
+          (!redis || checks.redis === true);
+        res.statusCode = ok ? 200 : 503;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: ok ? "ready" : "not_ready", checks }));
+        return;
+      }
+
       if (req.method === "GET" && req.url === "/designer/kinds") {
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(DESIGNER_KINDS));
@@ -231,34 +289,32 @@ async function main(): Promise<void> {
       }
 
       if (req.method === "POST" && req.url === "/designer/workflows") {
-        let body = "";
-        req.on("data", (chunk) => (body += chunk));
-        req.on("end", () => {
-          try {
-            const parsed = JSON.parse(body || "{}") as StoredWorkflow;
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const parsed = JSON.parse(body || "{}") as StoredWorkflow;
 
-            if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-              res.statusCode = 400;
-              res.end("Invalid StoredWorkflow payload");
-              return;
-            }
-
-            if (getStoredWorkflow(parsed.id) !== undefined) {
-              res.statusCode = 409;
-              res.end(`StoredWorkflow "${parsed.id}" already exists`);
-              return;
-            }
-
-            upsertStoredWorkflow(parsed);
-
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 201;
-            res.end(JSON.stringify({ ok: true, id: parsed.id, version: parsed.version }));
-          } catch (e) {
+          if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
             res.statusCode = 400;
-            res.end(`Invalid JSON: ${(e as Error).message}`);
+            res.end("Invalid StoredWorkflow payload");
+            return;
           }
-        });
+
+          if (getStoredWorkflow(parsed.id) !== undefined) {
+            res.statusCode = 409;
+            res.end(`StoredWorkflow "${parsed.id}" already exists`);
+            return;
+          }
+
+          upsertStoredWorkflow(parsed);
+
+          res.setHeader("Content-Type", "application/json");
+          res.statusCode = 201;
+          res.end(JSON.stringify({ ok: true, id: parsed.id, version: parsed.version }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.end(`Invalid JSON: ${(e as Error).message}`);
+        }
         return;
       }
 
@@ -273,29 +329,27 @@ async function main(): Promise<void> {
 
         const id = decodeURIComponent(parts[3]);
 
-        let body = "";
-        req.on("data", (chunk) => (body += chunk));
-        req.on("end", () => {
-          try {
-            const parsed = JSON.parse(body || "{}") as StoredWorkflow;
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const parsed = JSON.parse(body || "{}") as StoredWorkflow;
 
-            if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-              res.statusCode = 400;
-              res.end("Invalid StoredWorkflow payload");
-              return;
-            }
-
-            const stored: StoredWorkflow = { ...parsed, id };
-
-            upsertStoredWorkflow(stored);
-
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ ok: true, id: stored.id, version: stored.version }));
-          } catch (e) {
+          if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
             res.statusCode = 400;
-            res.end(`Invalid JSON: ${(e as Error).message}`);
+            res.end("Invalid StoredWorkflow payload");
+            return;
           }
-        });
+
+          const stored: StoredWorkflow = { ...parsed, id };
+
+          upsertStoredWorkflow(stored);
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true, id: stored.id, version: stored.version }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.end(`Invalid JSON: ${(e as Error).message}`);
+        }
         return;
       }
 
@@ -354,57 +408,55 @@ async function main(): Promise<void> {
       const trigger = matchHttpTrigger(req.method ?? "GET", pathOnlyTrigger);
 
       if (trigger) {
-        let body = "";
-        req.on("data", (chunk) => (body += chunk));
-        req.on("end", async () => {
-          try {
-            const wfDef = getWorkflow(trigger.workflowName);
-            if (!wfDef) {
-              res.statusCode = 500;
-              res.end(`Workflow "${trigger.workflowName}" not registered`);
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const wfDef = getWorkflow(trigger.workflowName);
+          if (!wfDef) {
+            res.statusCode = 500;
+            res.end(`Workflow "${trigger.workflowName}" not registered`);
+            return;
+          }
+
+          const descriptor = getWorkflowDescriptor(trigger.workflowName);
+          const parsedBody = body ? JSON.parse(body) : undefined;
+          const input = trigger.useBodyAsInput ? parsedBody : undefined;
+
+          if (descriptor?.inputSchema) {
+            const result = validateJson(descriptor.inputSchema, input);
+            if (!result.valid) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
               return;
             }
-
-            const descriptor = getWorkflowDescriptor(trigger.workflowName);
-            const parsedBody = body ? JSON.parse(body) : undefined;
-            const input = trigger.useBodyAsInput ? parsedBody : undefined;
-
-            if (descriptor?.inputSchema) {
-              const result = validateJson(descriptor.inputSchema, input);
-              if (!result.valid) {
-                res.statusCode = 400;
-                res.setHeader("Content-Type", "application/json");
-                res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
-                return;
-              }
-            }
-
-            const { workflowId, runId } = await runtime.startWorkflow({
-              workflowName: trigger.workflowName,
-              input,
-              definition: wfDef,
-            });
-
-            const task: WorkflowTask = {
-              id: `wf-task-${workflowId}-${runId}`,
-              type: "workflow",
-              workflowId,
-              runId,
-              createdAt: new Date().toISOString(),
-              scheduledAt: new Date().toISOString(),
-              workerType: "workflow",
-              targetQueue: "workflows",
-            };
-
-            await taskQueue.enqueue(task);
-
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ workflowId, runId }));
-          } catch (e) {
-            res.statusCode = 500;
-            res.end(`Error handling trigger: ${(e as Error).message}`);
           }
-        });
+
+          const { workflowId, runId } = await runtime.startWorkflow({
+            workflowName: trigger.workflowName,
+            input,
+            definition: wfDef,
+          });
+
+          const task: WorkflowTask = {
+            id: `wf-task-${workflowId}-${runId}`,
+            type: "workflow",
+            workflowId,
+            runId,
+            createdAt: new Date().toISOString(),
+            scheduledAt: new Date().toISOString(),
+            workerType: "workflow",
+            targetQueue: "workflows",
+          };
+
+          await taskQueue.enqueue(task);
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ workflowId, runId }));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(`Error handling trigger: ${(e as Error).message}`);
+        }
         return;
       }
 
@@ -479,49 +531,47 @@ async function main(): Promise<void> {
         const workflowId = parts[2];
         const runId = parts[3];
 
-        let body = "";
-        req.on("data", (chunk) => (body += chunk));
-        req.on("end", async () => {
-          try {
-            const parsed = JSON.parse(body || "{}");
-            const { signalName, data } = parsed;
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const parsed = JSON.parse(body || "{}");
+          const { signalName, data } = parsed;
 
-            const state = await runtime.loadCurrentState(workflowId, runId);
-            if (!state) {
-              res.statusCode = 404;
-              res.end("Workflow not found");
-              return;
-            }
+          const state = await runtime.loadCurrentState(workflowId, runId);
+          if (!state) {
+            res.statusCode = 404;
+            res.end("Workflow not found");
+            return;
+          }
 
-            await eventStore.appendEvents(workflowId, runId, state.version, [
-              {
-                type: "SignalReceived",
-                workflowId,
-                runId,
-                payload: { signalName, data },
-              },
-            ]);
-
-            const task: WorkflowTask = {
-              id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
-              type: "workflow",
+          await eventStore.appendEvents(workflowId, runId, state.version, [
+            {
+              type: "SignalReceived",
               workflowId,
               runId,
-              createdAt: new Date().toISOString(),
-              scheduledAt: new Date().toISOString(),
-              workerType: "workflow",
-              targetQueue: "workflows",
-            };
+              payload: { signalName, data },
+            },
+          ]);
 
-            await taskQueue.enqueue(task);
+          const task: WorkflowTask = {
+            id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
+            type: "workflow",
+            workflowId,
+            runId,
+            createdAt: new Date().toISOString(),
+            scheduledAt: new Date().toISOString(),
+            workerType: "workflow",
+            targetQueue: "workflows",
+          };
 
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
-            res.statusCode = 500;
-            res.end(`Error sending signal: ${(e as Error).message}`);
-          }
-        });
+          await taskQueue.enqueue(task);
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(`Error sending signal: ${(e as Error).message}`);
+        }
         return;
       }
 
@@ -570,71 +620,68 @@ async function main(): Promise<void> {
 
       if (req.method === "POST" && req.url === "/stripe/webhook") {
         const sig = req.headers["stripe-signature"];
-        let body = "";
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+          if (!webhookSecret || !stripeSecretKey) {
+            res.statusCode = 500;
+            res.end("Stripe secrets not configured");
+            return;
+          }
 
-        req.on("data", (chunk) => (body += chunk));
-        req.on("end", async () => {
-          try {
-            const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-            const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-            if (!webhookSecret || !stripeSecretKey) {
-              res.statusCode = 500;
-              res.end("Stripe secrets not configured");
-              return;
-            }
+          const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" as any });
+          const event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret);
 
-            const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" as any });
-            const event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret);
+          if (event.type === "checkout.session.completed") {
+            const session: any = event.data.object;
+            const md = session.metadata || {};
+            const workflowId = md.workflowId;
+            const runId = md.runId;
 
-            if (event.type === "checkout.session.completed") {
-              const session: any = event.data.object;
-              const md = session.metadata || {};
-              const workflowId = md.workflowId;
-              const runId = md.runId;
-
-              if (workflowId && runId) {
-                const state = await runtime.loadCurrentState(workflowId, runId);
-                if (state) {
-                  await eventStore.appendEvents(workflowId, runId, state.version, [
-                    {
-                      type: "SignalReceived",
-                      workflowId,
-                      runId,
-                      payload: {
-                        signalName: "payment-completed",
-                        data: {
-                          sessionId: session.id,
-                          amountTotal: session.amount_total,
-                          currency: session.currency,
-                          customerEmail: session.customer_details?.email,
-                        },
-                      },
-                    },
-                  ]);
-
-                  const task: WorkflowTask = {
-                    id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
-                    type: "workflow",
+            if (workflowId && runId) {
+              const state = await runtime.loadCurrentState(workflowId, runId);
+              if (state) {
+                await eventStore.appendEvents(workflowId, runId, state.version, [
+                  {
+                    type: "SignalReceived",
                     workflowId,
                     runId,
-                    createdAt: new Date().toISOString(),
-                    scheduledAt: new Date().toISOString(),
-                    workerType: "workflow",
-                    targetQueue: "workflows",
-                  };
+                    payload: {
+                      signalName: "payment-completed",
+                      data: {
+                        sessionId: session.id,
+                        amountTotal: session.amount_total,
+                        currency: session.currency,
+                        customerEmail: session.customer_details?.email,
+                      },
+                    },
+                  },
+                ]);
 
-                  await taskQueue.enqueue(task);
-                }
+                const task: WorkflowTask = {
+                  id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
+                  type: "workflow",
+                  workflowId,
+                  runId,
+                  createdAt: new Date().toISOString(),
+                  scheduledAt: new Date().toISOString(),
+                  workerType: "workflow",
+                  targetQueue: "workflows",
+                };
+
+                await taskQueue.enqueue(task);
               }
             }
-
-            res.statusCode = 200;
-            res.end("[OK] webhook processed");
-          } catch (err) {
-            res.statusCode = 400;
-            res.end(`Webhook error: ${(err as Error).message}`);
           }
-        });
+
+          res.statusCode = 200;
+          res.end("[OK] webhook processed");
+        } catch (err) {
+          res.statusCode = 400;
+          res.end(`Webhook error: ${(err as Error).message}`);
+        }
 
         return;
       }
