@@ -18,6 +18,7 @@ export interface ApiSecurityConfig {
   apiKeyScopes: string[];
   loginUsername: string;
   loginPassword?: string;
+  registrationEnabled: boolean;
   jwtTtlSeconds: number;
   loginScopes: string;
   rateLimitPerMinute: number;
@@ -44,6 +45,8 @@ export function loadApiSecurityConfigFromEnv(): ApiSecurityConfig {
 
   const loginUsername = process.env.FTN_AUTH_LOGIN_USERNAME?.trim() || "ftn";
   const loginPassword = process.env.FTN_AUTH_LOGIN_PASSWORD?.trim() || undefined;
+  const registrationEnabled =
+    process.env.FTN_AUTH_REGISTRATION_ENABLED === "true" || process.env.FTN_AUTH_REGISTRATION_ENABLED === "1";
   const jwtTtlSeconds = Math.max(60, parseInt(process.env.FTN_JWT_TTL_SECONDS ?? "3600", 10) || 3600);
   const loginScopes = process.env.FTN_AUTH_LOGIN_SCOPES?.trim() || "*";
 
@@ -61,6 +64,7 @@ export function loadApiSecurityConfigFromEnv(): ApiSecurityConfig {
     apiKeyScopes,
     loginUsername,
     loginPassword,
+    registrationEnabled,
     jwtTtlSeconds,
     loginScopes,
     rateLimitPerMinute,
@@ -80,6 +84,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
     return true;
   }
   if (method === "GET" && pathWithoutQuery === "/auth/status") {
+    return true;
+  }
+  if (method === "POST" && pathWithoutQuery === "/auth/register") {
     return true;
   }
   return false;
