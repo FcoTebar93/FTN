@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { Pool } from "pg";
 
-import { ensurePostgresEngineSchema } from "../../infra/postgres-engine-schema";
+import { runPostgresMigrations } from "../../infra/postgres-migrations";
 import { PostgresEventStore } from "../../infra/postgres-event-store";
 import { PostgresSnapshotStore } from "../../infra/postgres-snapshot-store";
 import { ConcurrencyError } from "../../modules/event-store";
@@ -18,7 +18,7 @@ describePg("Postgres engine persistence (FTN_ENGINE_DATABASE_URL o DATABASE_URL)
 
   before(async () => {
     pool = new Pool({ connectionString: engineUrl! });
-    await ensurePostgresEngineSchema(pool);
+    await runPostgresMigrations(pool);
     eventStore = new PostgresEventStore(pool);
     snapshotStore = new PostgresSnapshotStore(pool);
     await pool.query("TRUNCATE ftn_workflow_events, ftn_workflow_snapshots CASCADE");

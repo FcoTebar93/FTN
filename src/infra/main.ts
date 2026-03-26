@@ -29,7 +29,7 @@ import { StoredWorkflow } from "../app/designer-types";
 import { getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow } from "../app/designer-store";
 
 import { DESIGNER_KINDS } from "../app/designer-kinds";
-import { ensurePostgresEngineSchema } from "./postgres-engine-schema";
+import { runPostgresMigrations } from "./postgres-migrations";
 import { PostgresEventStore } from "./postgres-event-store";
 import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger } from "./logger";
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
   let pool: Pool | undefined;
   if (engineDsUrl) {
     pool = new Pool({ connectionString: engineDsUrl });
-    await ensurePostgresEngineSchema(pool);
+    await runPostgresMigrations(pool);
     log.info("ftn.engine.persistence", { backend: "postgres" });
   } else {
     log.info("ftn.engine.persistence", { backend: "memory" });
