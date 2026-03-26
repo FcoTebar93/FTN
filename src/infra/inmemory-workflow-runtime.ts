@@ -1,5 +1,5 @@
 import type { WorkflowRuntime, WorkflowRuntimeDeps, StartWorkflowOptions, StartWorkflowResult, WorkflowTickResult } from "../modules/workflow-runtime";
-import type { WorkflowId, RunId, Version, StepId, ConditionalStep } from "../shared/types";
+import type { WorkflowId, RunId, Version, StepId } from "../shared/types";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
 import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from "../core/ftn";
@@ -33,6 +33,13 @@ function makeWorkflowKey(workflowId: WorkflowId, runId: RunId): WorkflowKey {
 
 function generateActivityId(): ActivityId {
     return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+class WorkflowSuspendedError extends Error {
+  constructor() {
+    super("Workflow suspended until timer or external event");
+    this.name = "WorkflowSuspendedError";
+  }
 }
 
 export class InMemoryWorkflowRuntime implements WorkflowRuntime {
@@ -211,24 +218,63 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
           return results;
         },
-        conditional: function <TResult>(condition: () => boolean, thenBranch: () => Promise<TResult>, elseBranch?: () => Promise<TResult>): Promise<TResult> {
-          throw new Error("Function not implemented.");
+        conditional: async function <TResult>(
+          condition: () => boolean,
+          thenBranch: () => Promise<TResult>,
+          elseBranch?: () => Promise<TResult>
+        ): Promise<TResult> {
+          if (condition()) {
+            return await thenBranch();
+          }
+          if (elseBranch) {
+            return await elseBranch();
+          }
+          return undefined as TResult;
         },
-        retry: function <TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
-          throw new Error("Function not implemented.");
+        retry: async function <TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
+          const stepId = generateStepId();
+          let lastErr: unknown;
+          const max = options.maxAttempts;
+          for (let attempt = 1; attempt <= max; attempt++) {
+            newDomainEvents.push({
+              type: "RetryAttemptStarted",
+              workflowId,
+              runId,
+              payload: { stepId, attempt },
+            });
+            try {
+              return await operation(attempt);
+            } catch (e) {
+              lastErr = e;
+              if (attempt === max) {
+                throw e;
+              }
+              if (options.backOffMs && options.backOffMs > 0) {
+                await new Promise((r) => setTimeout(r, options.backOffMs));
+              }
+            }
+          }
+          throw lastErr;
         },
-        sleep: function (ms: number): Promise<void> {
-          throw new Error("Function not implemented.");
+        sleep: async function (ms: number): Promise<void> {
+          const wakeAt = new Date(Date.now() + ms).toISOString();
+          newDomainEvents.push({
+            type: "TimerScheduled",
+            workflowId,
+            runId,
+            payload: { wakeAt },
+          });
+          throw new WorkflowSuspendedError();
         },
-        signal: function <TData = unknown>(name: string): Promise<TData> {
+        signal: function <TData = unknown>(_name: string): Promise<TData> {
           throw new Error("Function not implemented.");
         },
         workflowId: function (): WorkflowId {
-          throw new Error("Function not implemented.");
+          return workflowId;
         },
         runId: function (): RunId {
-          throw new Error("Function not implemented.");
-        }
+          return runId;
+        },
       };
     
       const key = makeWorkflowKey(workflowId, runId);
@@ -294,7 +340,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         }
       }
     
-      if (currentState.status === "running" && currentState.pendingActivities.length === 0) {
+      if (
+        currentState.status === "running" &&
+        currentState.pendingActivities.length === 0 &&
+        currentState.pendingTimers.length === 0
+      ) {
         const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
           type: "WorkflowCompleted",
           workflowId,
