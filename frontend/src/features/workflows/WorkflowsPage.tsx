@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "preact/hooks";
 import { getWorkflows, getWorkflowState, getWorkflowEvents, getWorkflowSteps } from "../../api/workflows";
-import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord, WorkflowStatus } from "../../api/types";import { WorkflowsList } from "./WorkflowsList";
+import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord, WorkflowStatus } from "../../api/types";
+import { WorkflowsList } from "./WorkflowsList";
 import { WorkflowDetail } from "./WorkflowsDetails";
 
 const POLL_INTERVAL_MS = 4000;
