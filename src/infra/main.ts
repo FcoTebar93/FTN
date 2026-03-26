@@ -1,11 +1,14 @@
 import http from "node:http";
 import Stripe from "stripe";
 import { Pool } from "pg";
+import Redis from "ioredis";
 
 import { DefaultWorkflowEngine } from "../core/default-engine";
 import { InMemoryEventStore } from "./inmemory-event-store";
 import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "./inmemory-task-queue";
+import { RedisTaskQueue } from "./redis-task-queue";
+import type { TaskQueue } from "../modules/task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
 
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
@@ -50,7 +53,19 @@ async function main(): Promise<void> {
 
   const eventStore = pool ? new PostgresEventStore(pool) : new InMemoryEventStore();
   const snapshotStore = pool ? new PostgresSnapshotStore(pool) : new InMemorySnapshotStore();
-  const taskQueue = new InMemoryTaskQueue();
+
+  let redis: Redis | undefined;
+  const redisUrl = process.env.REDIS_URL?.trim();
+  let taskQueue: TaskQueue;
+  if (redisUrl) {
+    redis = new Redis(redisUrl, { maxRetriesPerRequest: 2 });
+    const keyPrefix = process.env.FTN_REDIS_KEY_PREFIX?.trim();
+    taskQueue = new RedisTaskQueue(redis, keyPrefix ? { keyPrefix } : {});
+    log.info("ftn.taskQueue", { backend: "redis" });
+  } else {
+    taskQueue = new InMemoryTaskQueue();
+    log.info("ftn.taskQueue", { backend: "memory" });
+  }
 
   const integrationsConfig: IntegrationsConfig = {
     storage: {
@@ -698,6 +713,9 @@ async function main(): Promise<void> {
     cancellation.aborted = true;
     if (pool) {
       await pool.end();
+    }
+    if (redis) {
+      await redis.quit();
     }
     server.close(() => process.exit(0));
   };
