@@ -31,7 +31,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             throw new Error(`Event ${event.id} is not applicable to workflow ${state.id} run ${state.runId}`);
         }
 
-        let nextState: WorkflowState = { ...state, version: event.version };
+        const nextState: WorkflowState = { ...state, version: event.version };
 
         switch (event.type) {
             case "WorkflowStarted": {

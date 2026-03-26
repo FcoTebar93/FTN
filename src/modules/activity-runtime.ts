@@ -4,7 +4,7 @@ import type { SnapshotStore } from "./snapshot-store";
 import type { WorkflowEngine } from "../core/engine";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
-import type { Version, WorkflowId, RunId } from "../shared/types";
+import type { Version } from "../shared/types";
 
 export interface ActivityRuntime {
   deserializeTask(raw: unknown): ActivityTask;
@@ -48,8 +48,8 @@ export class DefaultActivityRuntime implements ActivityRuntime {
       snapshot?.state
     );
 
-    let state: WorkflowState = rehydrated.state;
-    let lastEventVersion: Version = rehydrated.lastEventVersion;
+    const state: WorkflowState = rehydrated.state;
+    const lastEventVersion: Version = rehydrated.lastEventVersion;
 
     const pending = state.pendingActivities.find((a) => a.id === activityId);
     if (!pending) {
@@ -86,7 +86,6 @@ export class DefaultActivityRuntime implements ActivityRuntime {
       [domainEvent]
     )) as WorkflowEvent[];
 
-    state = engine.applyEvent(state, persisted);
-    lastEventVersion = persisted.version;
+    engine.applyEvent(state, persisted);
   }
 }
