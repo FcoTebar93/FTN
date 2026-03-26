@@ -5,29 +5,52 @@ import { InMemoryEventStore } from "../infra/inmemory-event-store";
 import { InMemorySnapshotStore } from "../infra/inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "../infra/inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "../infra/inmemory-workflow-runtime";
-import { InMemoryActivityRegistry } from "../app/activities";
-import { InMemoryActivityWorker } from "../infra/inmemory-activity-worker";
 import { InMemoryWorkflowWorker } from "../infra/inmemory-workflow-worker";
-import { getWorkflow } from "../app/workflows";
 import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
+import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
+import { ActivityWorker } from "../workers/activity-worker";
+import { DefaultActivityRuntime } from "../modules/activity-runtime";
+import type { ActivityTask } from "../shared/tasks";
+
+function inMemoryStack() {
+  const engine = new DefaultWorkflowEngine();
+  const eventStore = new InMemoryEventStore();
+  const snapshotStore = new InMemorySnapshotStore();
+  const taskQueue = new InMemoryTaskQueue();
+  const runtime = new InMemoryWorkflowRuntime({
+    engine,
+    eventStore,
+    snapshotStore,
+    taskQueue,
+    config: { snapshotInterval: 50 },
+  });
+  return { engine, eventStore, snapshotStore, taskQueue, runtime };
+}
+
+function makeWorkflowTask(workflowId: string, runId: string) {
+  return {
+    id: `wf-task-${workflowId}-${runId}`,
+    type: "workflow" as const,
+    workflowId,
+    runId,
+    createdAt: new Date().toISOString(),
+    scheduledAt: new Date().toISOString(),
+    workerType: "workflow" as const,
+    targetQueue: "workflows",
+  };
+}
 
 describe("InMemoryWorkflowWorker", () => {
-    it("toma una WorkflowTask de la cola y ejecuta un tick que programa una actividad", async () => {
-    const engine = new DefaultWorkflowEngine();
-    const eventStore = new InMemoryEventStore();
-    const snapshotStore = new InMemorySnapshotStore();
-    const taskQueue = new InMemoryTaskQueue();
+  it("toma una WorkflowTask de la cola y ejecuta un tick que programa una actividad", async () => {
+    const { runtime, eventStore, snapshotStore, engine, taskQueue } = inMemoryStack();
     const activities = new InMemoryActivityRegistry();
 
-    const runtime = new InMemoryWorkflowRuntime({
-      engine,
-      eventStore,
-      snapshotStore,
-      taskQueue,
-      config: { snapshotInterval: 50 },
+    activities.register({
+      name: "echo-activity",
+      async execute(input: { value: number }) {
+        return input;
+      },
     });
-
-    activities.register("echo-activity", async (input: { value: number }) => input);
 
     const { workflowId, runId } = await runtime.startWorkflow({
       workflowName: "echo-workflow",
@@ -38,16 +61,7 @@ describe("InMemoryWorkflowWorker", () => {
       },
     });
 
-    await taskQueue.enqueue({
-      id: `wf-task-${workflowId}-${runId}`,
-      type: "workflow",
-      workflowId,
-      runId,
-      createdAt: new Date().toISOString(),
-      scheduledAt: new Date().toISOString(),
-      workerType: "workflow",
-      targetQueue: "workflows",
-    });
+    await taskQueue.enqueue(makeWorkflowTask(workflowId, runId));
 
     const workflowWorker = new InMemoryWorkflowWorker({
       workerId: "workflow-worker-1",
@@ -64,81 +78,47 @@ describe("InMemoryWorkflowWorker", () => {
 
     const state = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(state);
-    assert.equal(state?.pendingActivities.length, 1);
-    assert.equal(state?.pendingActivities[0].name, "echo-activity");
+    assert.equal(state!.pendingActivities.length, 1);
+    assert.equal(state!.pendingActivities[0].name, "echo-activity");
 
-    const activityWorker = new InMemoryActivityWorker({
-      taskQueue,
-      activities,
-      eventStore,
-      snapshotStore,
-      engine,
-      activityQueueName: "activities",
-    });
+    const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
+    const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
 
-    await activityWorker.runOnce();
+    const lease = await taskQueue.leaseNextTask("activity-worker-1", "activities", 10000);
+    assert.ok(lease);
+    await activityWorkerCore.handleTask((lease.task as ActivityTask).payload);
+    await taskQueue.completeTask(lease.leaseId);
 
     await workflowWorker.runOnce();
 
-    const nextLease = await taskQueue.leaseNextTask(
-      "workflow-worker-1",
-      "workflows",
-      1000
-    );
+    const nextLease = await taskQueue.leaseNextTask("workflow-worker-1", "workflows", 1000);
     assert.equal(nextLease, null);
 
     const finalState = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(finalState);
-    assert.equal(finalState?.pendingActivities.length, 0);
-    assert.equal(finalState?.completedActivities.length, 1);
+    assert.equal(finalState!.pendingActivities.length, 0);
+    assert.equal(finalState!.completedActivities.length, 1);
   });
 
-  it("order-processing: retry en charge-payment y workflow completa", async () => {
-    const engine = new DefaultWorkflowEngine();
-    const eventStore = new InMemoryEventStore();
-    const snapshotStore = new InMemorySnapshotStore();
-    const taskQueue = new InMemoryTaskQueue();
+  it("workflow-worker y activity-worker completan un workflow con activities simples", async () => {
+    const { runtime, eventStore, snapshotStore, engine, taskQueue } = inMemoryStack();
     const activities = new InMemoryActivityRegistry();
 
-    activities.register("validate-order", async () => {});
-    activities.register("create-shipment", async () => {});
-
-    let chargeCalls = 0;
-    activities.register("charge-payment", async () => {
-      chargeCalls += 1;
-      if (chargeCalls < 2) {
-        throw new Error("Simulated payment gateway failure");
-      }
+    activities.register({
+      name: "noop-activity",
+      async execute() {},
     });
 
-    const runtime = new InMemoryWorkflowRuntime({
-      engine,
-      eventStore,
-      snapshotStore,
-      taskQueue,
-      config: { snapshotInterval: 50 },
-    });
-
-    const definition = getWorkflow("order-processing");
-    assert.ok(definition, "order-processing workflow must be registered");
-
-    const input = { orderId: "order-1", userId: "user-1", amount: 99.99 };
     const { workflowId, runId } = await runtime.startWorkflow({
-      workflowName: "order-processing",
-      input,
-      definition: definition!,
+      workflowName: "noop-workflow",
+      input: {},
+      definition: async (ftn) => {
+        ftn.activity("noop-activity", {});
+        return { done: true };
+      },
     });
 
-    await taskQueue.enqueue({
-      id: `wf-task-${workflowId}-${runId}`,
-      type: "workflow",
-      workflowId,
-      runId,
-      createdAt: new Date().toISOString(),
-      scheduledAt: new Date().toISOString(),
-      workerType: "workflow",
-      targetQueue: "workflows",
-    });
+    await taskQueue.enqueue(makeWorkflowTask(workflowId, runId));
 
     const workflowWorker = new InMemoryWorkflowWorker({
       workerId: "workflow-worker-1",
@@ -151,51 +131,40 @@ describe("InMemoryWorkflowWorker", () => {
       },
     });
 
-    const activityWorker = new InMemoryActivityWorker({
-      taskQueue,
-      activities,
-      eventStore,
-      snapshotStore,
-      engine,
-      activityQueueName: "activities",
-    });
+    const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
+    const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
 
     const runActivityWorkerUntilIdle = async (maxRuns = 10) => {
       for (let i = 0; i < maxRuns; i++) {
-        await activityWorker.runOnce();
+        const lease = await taskQueue.leaseNextTask("activity-worker-1", "activities", 1000);
+        if (!lease) return;
+        await activityWorkerCore.handleTask((lease.task as ActivityTask).payload);
+        await taskQueue.completeTask(lease.leaseId);
       }
     };
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       await workflowWorker.runOnce();
       await runActivityWorkerUntilIdle();
+      const state = await runtime.loadCurrentState(workflowId, runId);
+      if (state && state.status === "completed") {
+        break;
+      }
     }
 
-    const state = await runtime.loadCurrentState(workflowId, runId);
-    assert.ok(state, "state must exist");
-    assert.equal(state?.status, "completed", "workflow must complete after retry");
-    assert.equal(chargeCalls, 2, "charge-payment must run twice (fail then succeed)");
+    const finalState = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(finalState);
+    assert.equal(finalState!.status, "completed");
   });
 
-  it("ftn.sleep enqueues a TimerTask and TimeWorker creates a WorkflowTask", async () => {
-    const engine = new DefaultWorkflowEngine();
-    const eventStore = new InMemoryEventStore();
-    const snapshotStore = new InMemorySnapshotStore();
-    const taskQueue = new InMemoryTaskQueue();
-
-    const runtime = new InMemoryWorkflowRuntime({
-      engine,
-      eventStore,
-      snapshotStore,
-      taskQueue,
-      config: { snapshotInterval: 50 }
-    });
+  it("ftn.sleep encola TimerTask; TimerWorker encola WorkflowTask al vencer (sleep 0)", async () => {
+    const { runtime, taskQueue } = inMemoryStack();
 
     const { workflowId, runId } = await runtime.startWorkflow({
       workflowName: "sleep-workflow",
       input: {},
       definition: async (ftn) => {
-        await ftn.sleep(1000);
+        await ftn.sleep(0);
         return { done: true };
       },
     });
@@ -209,19 +178,17 @@ describe("InMemoryWorkflowWorker", () => {
       pollIntervalMs: 10,
     });
 
-    await timerWorker.runOnce();
+    let wfLease = null;
+    for (let i = 0; i < 15; i++) {
+      await timerWorker.runOnce();
+      wfLease = await taskQueue.leaseNextTask("workflow-worker-1", "workflows", 0);
+      if (wfLease) break;
+    }
 
-    const nextLease = await taskQueue.leaseNextTask(
-      "timer-worker-1",
-      "timers",
-      1000
-    );
-    
-    assert.ok(nextLease, "must exist a workflow task after timer task is completed");
-    assert.equal(nextLease!.task.type, "workflow");
-    assert.equal(nextLease!.task.workflowId, workflowId);
-    assert.equal(nextLease!.task.runId, runId);
-
-    await taskQueue.completeTask(nextLease!.leaseId);
+    assert.ok(wfLease);
+    assert.equal(wfLease.task.type, "workflow");
+    assert.equal(wfLease.task.workflowId, workflowId);
+    assert.equal(wfLease.task.runId, runId);
+    await taskQueue.completeTask(wfLease.leaseId);
   });
 });

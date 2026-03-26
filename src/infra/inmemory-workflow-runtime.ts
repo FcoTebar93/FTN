@@ -5,7 +5,7 @@ import type { WorkflowState } from "../core/workflow-state";
 import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from "../core/ftn";
 import type { ActivityId } from "../shared/types";
 import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
-import type { ActivityTask, Task } from "../shared/tasks";
+import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
 
 type WorkflowKey = string;
 
@@ -301,10 +301,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         );
         lastEventVersion = appended[appended.length - 1].version;
         const activityTasks: ActivityTask[] = [];
-    
+        const timerTasks: TimerTask[] = [];
+
         for (const ev of appended) {
           currentState = this.engine.applyEvent(currentState, ev);
-    
+
           if (ev.type === "ActivityScheduled") {
             const { activityId, activityName, input } = ev.payload;
             const payload: ActivityPayload = {
@@ -317,7 +318,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               attempt: 1,
               scheduledAt: ev.startedAt,
             };
-    
+
             const task: ActivityTask = {
               id: `task-${ev.workflowId}-${ev.runId}-${activityId}`,
               type: "activity",
@@ -333,9 +334,27 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             };
             activityTasks.push(task);
           }
+
+          if (ev.type === "TimerScheduled") {
+            const { wakeAt } = ev.payload;
+            timerTasks.push({
+              id: `timer-${ev.workflowId}-${ev.runId}-${ev.version}`,
+              type: "timer",
+              workflowId: ev.workflowId,
+              runId: ev.runId,
+              wakeAt,
+              createdAt: ev.startedAt,
+              scheduledAt: ev.startedAt,
+              workerType: "workflow",
+              targetQueue: "timers",
+            });
+          }
         }
-    
+
         for (const task of activityTasks) {
+          await this.taskQueue.enqueue(task as Task);
+        }
+        for (const task of timerTasks) {
           await this.taskQueue.enqueue(task as Task);
         }
       }

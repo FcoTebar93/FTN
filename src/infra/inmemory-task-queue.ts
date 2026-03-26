@@ -39,7 +39,7 @@ export class InMemoryTaskQueue implements TaskQueue {
     }
 
     async completeTask(leaseId: string): Promise<void> {
-        const lease = this.leases.get(leaseId);
+        this.leases.delete(leaseId);
     }
 
     async requeueTask(taskId: string): Promise<void> {
