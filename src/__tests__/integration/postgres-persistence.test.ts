@@ -86,6 +86,7 @@ describePg("Postgres engine persistence (FTN_ENGINE_DATABASE_URL o DATABASE_URL)
       },
       (e: unknown) => {
         assert.ok(e instanceof ConcurrencyError);
+        return true;
       }
     );
   });
