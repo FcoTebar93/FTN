@@ -79,6 +79,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "POST" && pathWithoutQuery === "/auth/login") {
     return true;
   }
+  if (method === "GET" && pathWithoutQuery === "/auth/status") {
+    return true;
+  }
   return false;
 }
 
