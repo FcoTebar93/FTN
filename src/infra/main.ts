@@ -26,19 +26,8 @@ import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
-import {
-  applyCorsHeaders,
-  createRateLimiter,
-  getClientIp,
-  loadApiSecurityConfigFromEnv,
-  readBodyCapped,
-} from "./http/api-security";
-import {
-  checkProtectedAccess,
-  isLoginConfigured,
-  issueAccessToken,
-  validateLoginCredentials,
-} from "./http/auth";
+import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/api-security";
+import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, validateLoginCredentials } from "./http/auth";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
@@ -265,6 +254,17 @@ async function main(): Promise<void> {
             access_token: token,
             token_type: "Bearer",
             expires_in: expiresIn,
+          })
+        );
+        return;
+      }
+
+      if (req.method === "GET" && rawPath === "/auth/status") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            loginConfigured: isLoginConfigured(apiSecurity),
+            authRequired: isAuthConfigured(apiSecurity),
           })
         );
         return;
