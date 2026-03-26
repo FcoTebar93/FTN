@@ -25,4 +25,6 @@ export interface EventStore {
     loadEvents(workflowId: WorkflowId, runId: RunId, fromVersion: Version): Promise<WorkflowEvent[]>;
 
     appendEvents(workflowId: WorkflowId, runId: RunId, expectedVersion: Version, newEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[]): Promise<WorkflowEvent[]>;
+
+    listRunKeys(): Promise<Array<{ workflowId: WorkflowId; runId: RunId }>>;
 }
