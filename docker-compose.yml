@@ -13,6 +13,14 @@ services:
     networks:
       - ftn-net
 
+  redis:
+    image: redis:7-alpine
+    container_name: ftn-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ftn-net
+
   backend:
     container_name: ftn-backend
     build:
@@ -23,9 +31,11 @@ services:
     environment:
       # Sobrescribe DATABASE_URL para que el backend vea el contenedor postgres
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/ftn
+      REDIS_URL: redis://redis:6379
       PORT: 4000
     depends_on:
       - postgres
+      - redis
     ports:
       - "4000:4000"
     networks:

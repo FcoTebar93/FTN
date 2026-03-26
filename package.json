@@ -21,11 +21,12 @@
     "scripts": {
         "build": "tsc",
         "test": "npm run build && node --test dist/__tests__/*.test.js",
-        "test:integration": "npm run build && node --test dist/__tests__/integration/postgres-persistence.test.js dist/__tests__/integration/workflow-runtime-postgres.test.js",
+        "test:integration": "npm run build && node --test dist/__tests__/integration/postgres-persistence.test.js dist/__tests__/integration/workflow-runtime-postgres.test.js dist/__tests__/integration/redis-task-queue.test.js",
         "lint": "eslint src"
     },
     "dependencies": {
         "@sendgrid/mail": "^8.1.6",
+        "ioredis": "^5.10.1",
         "nodemailer": "^8.0.2",
         "pg": "^8.14.1",
         "qrcode": "^1.5.4",
