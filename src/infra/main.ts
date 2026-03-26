@@ -57,10 +57,12 @@ async function main(): Promise<void> {
   let redis: Redis | undefined;
   const redisUrl = process.env.REDIS_URL?.trim();
   let taskQueue: TaskQueue;
+  let redisTaskQueue: RedisTaskQueue | undefined;
   if (redisUrl) {
     redis = new Redis(redisUrl, { maxRetriesPerRequest: 2 });
     const keyPrefix = process.env.FTN_REDIS_KEY_PREFIX?.trim();
-    taskQueue = new RedisTaskQueue(redis, keyPrefix ? { keyPrefix } : {});
+    redisTaskQueue = new RedisTaskQueue(redis, keyPrefix ? { keyPrefix } : {});
+    taskQueue = redisTaskQueue;
     log.info("ftn.taskQueue", { backend: "redis" });
   } else {
     taskQueue = new InMemoryTaskQueue();
@@ -709,8 +711,35 @@ async function main(): Promise<void> {
     log.info("server.listen", { port: PORT, url: `http://localhost:${PORT}` });
   });
 
+  let recoverTimer: ReturnType<typeof setInterval> | undefined;
+  const recoverIntervalMs = Number(process.env.FTN_REDIS_RECOVER_INTERVAL_MS ?? "60000");
+  const staleLeaseMs = Number(process.env.FTN_REDIS_STALE_LEASE_MS ?? String(10 * 60 * 1000));
+  if (redisTaskQueue && recoverIntervalMs > 0) {
+    const queues = ["workflows", "activities", "timers"] as const;
+    recoverTimer = setInterval(() => {
+      if (cancellation.aborted) {
+        return;
+      }
+      void (async () => {
+        for (const q of queues) {
+          try {
+            const n = await redisTaskQueue.recoverStaleProcessing(q, staleLeaseMs);
+            if (n > 0) {
+              log.info("ftn.taskQueue.recovered", { queue: q, count: n });
+            }
+          } catch (e) {
+            log.error("ftn.taskQueue.recoverFailed", { queue: q, err: String(e) });
+          }
+        }
+      })();
+    }, recoverIntervalMs);
+  }
+
   const shutdown = async () => {
     cancellation.aborted = true;
+    if (recoverTimer) {
+      clearInterval(recoverTimer);
+    }
     if (pool) {
       await pool.end();
     }
