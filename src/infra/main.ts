@@ -27,7 +27,17 @@ import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
 import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/api-security";
-import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, validateLoginCredentials } from "./http/auth";
+import {
+  checkProtectedAccess,
+  isAuthConfigured,
+  isLoginConfigured,
+  issueAccessToken,
+  issueAccessTokenForSubject,
+  validateLoginCredentials,
+} from "./http/auth";
+import { normalizeAndValidateUsername, validatePlainPassword } from "./http/auth-registration";
+import { hashPassword, verifyPassword } from "./passwords";
+import { getUserPasswordHash, insertUser } from "./postgres-users";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
@@ -240,14 +250,93 @@ async function main(): Promise<void> {
         const u = typeof parsed.username === "string" ? parsed.username : "";
         const p = typeof parsed.password === "string" ? parsed.password : "";
 
-        if (!validateLoginCredentials(apiSecurity, u, p)) {
+        let token: string;
+        let expiresIn: number;
+
+        if (validateLoginCredentials(apiSecurity, u, p)) {
+          ({ token, expiresIn } = issueAccessToken(apiSecurity));
+        } else if (pool && apiSecurity.registrationEnabled) {
+          const normalized = normalizeAndValidateUsername(u);
+          if (!normalized) {
+            res.statusCode = 401;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Invalid credentials" }));
+            return;
+          }
+          const storedHash = await getUserPasswordHash(pool, normalized);
+          if (!storedHash || !(await verifyPassword(p, storedHash))) {
+            res.statusCode = 401;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Invalid credentials" }));
+            return;
+          }
+          ({ token, expiresIn } = issueAccessTokenForSubject(apiSecurity, normalized));
+        } else {
           res.statusCode = 401;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ error: "Invalid credentials" }));
           return;
         }
 
-        const { token, expiresIn } = issueAccessToken(apiSecurity);
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            access_token: token,
+            token_type: "Bearer",
+            expires_in: expiresIn,
+          })
+        );
+        return;
+      }
+
+      if (req.method === "POST" && rawPath === "/auth/register") {
+        if (!pool || !apiSecurity.registrationEnabled || !apiSecurity.jwtSecret) {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Registration is not available" }));
+          return;
+        }
+
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+
+        let parsed: { username?: unknown; password?: unknown };
+        try {
+          parsed = JSON.parse(body || "{}");
+        } catch {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid JSON" }));
+          return;
+        }
+
+        const rawUser = typeof parsed.username === "string" ? parsed.username : "";
+        const rawPass = typeof parsed.password === "string" ? parsed.password : "";
+        const normalized = normalizeAndValidateUsername(rawUser);
+        if (!normalized || !validatePlainPassword(rawPass)) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: "Invalid username or password",
+              detail:
+                "Usuario: 3–64 caracteres (letras, números, _, ., -). Contraseña: mínimo 10 caracteres.",
+            })
+          );
+          return;
+        }
+
+        const passwordHash = await hashPassword(rawPass);
+        const inserted = await insertUser(pool, normalized, passwordHash);
+        if (inserted === "duplicate") {
+          res.statusCode = 409;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Username already taken" }));
+          return;
+        }
+
+        const { token, expiresIn } = issueAccessTokenForSubject(apiSecurity, normalized);
+        res.statusCode = 201;
         res.setHeader("Content-Type", "application/json");
         res.end(
           JSON.stringify({
@@ -265,6 +354,7 @@ async function main(): Promise<void> {
           JSON.stringify({
             loginConfigured: isLoginConfigured(apiSecurity),
             authRequired: isAuthConfigured(apiSecurity),
+            registrationEnabled: Boolean(apiSecurity.registrationEnabled && pool),
           })
         );
         return;
