@@ -269,6 +269,25 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         },
         retry: async function <TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
           const stepId: StepId = `retry-${nextRetryOrdinal++}`;
+
+          const hasRetryCompletedRecorded = (sid: StepId): boolean => {
+            const inFull = fullHistory.some((e) => e.type === "RetryCompleted" && e.payload.stepId === sid);
+            const inPending = newDomainEvents.some((raw) => {
+              const e = raw as WorkflowEvent;
+              return e.type === "RetryCompleted" && e.payload.stepId === sid;
+            });
+            return inFull || inPending;
+          };
+
+          const hasRetryGivenUpRecorded = (sid: StepId): boolean => {
+            const inFull = fullHistory.some((e) => e.type === "RetryGivenUp" && e.payload.stepId === sid);
+            const inPending = newDomainEvents.some((raw) => {
+              const e = raw as WorkflowEvent;
+              return e.type === "RetryGivenUp" && e.payload.stepId === sid;
+            });
+            return inFull || inPending;
+          };
+
           let lastErr: unknown;
           const max = options.maxAttempts;
           for (let attempt = 1; attempt <= max; attempt++) {
@@ -281,14 +300,42 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               });
             }
             try {
-              return await operation(attempt);
+              const result = await operation(attempt);
+              if (!hasRetryCompletedRecorded(stepId)) {
+                newDomainEvents.push({
+                  type: "RetryCompleted",
+                  workflowId,
+                  runId,
+                  payload: { stepId, attempts: attempt },
+                });
+              }
+              return result;
             } catch (e) {
               lastErr = e;
               if (attempt === max) {
+                const reason = e instanceof Error ? e.message : String(e);
+                if (!hasRetryGivenUpRecorded(stepId)) {
+                  newDomainEvents.push({
+                    type: "RetryGivenUp",
+                    workflowId,
+                    runId,
+                    payload: { stepId, attempts: max, reason },
+                  });
+                }
                 throw e;
               }
               if (options.backOffMs && options.backOffMs > 0) {
-                await new Promise((r) => setTimeout(r, options.backOffMs));
+                const wakeAt = new Date(Date.now() + options.backOffMs).toISOString();
+                newDomainEvents.push({
+                  type: "TimerScheduled",
+                  workflowId,
+                  runId,
+                  payload: {
+                    wakeAt,
+                    retryBackoff: { stepId, afterAttempt: attempt },
+                  },
+                });
+                throw new WorkflowSuspendedError();
               }
             }
           }
@@ -306,16 +353,21 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         },
         signal: function <TData = unknown>(name: string): Promise<TData> {
           const ordinal = signalOrdinalByName.get(name) ?? 0;
-          signalOrdinalByName.set(name, ordinal + 1);
-
           const matches = fullHistory.filter(
             (e): e is Extract<WorkflowEvent, { type: "SignalReceived" }> =>
               e.type === "SignalReceived" && e.payload.signalName === name
           );
           const ev = matches[ordinal];
           if (ev) {
+            signalOrdinalByName.set(name, ordinal + 1);
             return Promise.resolve(ev.payload.data as TData);
           }
+          newDomainEvents.push({
+            type: "SignalWaitStarted",
+            workflowId,
+            runId,
+            payload: { signalName: name, ordinal },
+          });
           throw new WorkflowSuspendedError();
         },
         workflowId: function (): WorkflowId {
@@ -416,7 +468,8 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         !suspended &&
         currentState.status === "running" &&
         currentState.pendingActivities.length === 0 &&
-        currentState.pendingTimers.length === 0
+        currentState.pendingTimers.length === 0 &&
+        (currentState.pendingSignalWaits?.length ?? 0) === 0
       ) {
         const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
           type: "WorkflowCompleted",
