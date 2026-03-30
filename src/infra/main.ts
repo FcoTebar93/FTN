@@ -113,6 +113,15 @@ async function main(): Promise<void> {
       enabled: !!databaseUrl,
       databaseUrl,
     },
+    http: {
+      enabled: process.env.FTN_HTTP_DISABLED !== "1" && process.env.FTN_HTTP_DISABLED !== "true",
+      allowPrivateUrls: process.env.FTN_HTTP_ALLOW_PRIVATE_URLS === "1",
+      maxResponseBodyBytes: 2_000_000,
+    },
+    messaging: {
+      enabled: !!redisUrl,
+      redisUrl,
+    },
   };
 
   const activities = new InMemoryActivityRegistry();

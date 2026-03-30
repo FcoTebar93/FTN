@@ -6,6 +6,8 @@ import { PaymentsConfig, PaymentsModule } from "./payments";
 import { IdentityConfig, IdentityModule } from "./identity";
 import { LogisticsConfig, LogisticsModule } from "./logistics";
 import { CrmModule, type CrmConfig } from "./crm";
+import { HttpModule, type HttpConfig } from "./http";
+import { MessagingModule, type MessagingConfig } from "./messaging";
 
 export interface IntegrationsConfig {
   storage: StorageConfig;
@@ -15,6 +17,8 @@ export interface IntegrationsConfig {
   identity: IdentityConfig;
   logistics: LogisticsConfig;
   crm: CrmConfig;
+  http: HttpConfig;
+  messaging: MessagingConfig;
 }
 
 export function registerIntegrations(registry: ActivityRegistry, config: IntegrationsConfig) {
@@ -25,6 +29,8 @@ export function registerIntegrations(registry: ActivityRegistry, config: Integra
   IdentityModule.registerActivities(registry, { enabled: config.identity.enabled });
   LogisticsModule.registerActivities(registry, config.logistics);
   CrmModule.registerActivities(registry, config.crm);
+  HttpModule.registerActivities(registry, config.http);
+  MessagingModule.registerActivities(registry, config.messaging);
 }
 
 export default {
