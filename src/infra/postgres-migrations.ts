@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS ftn_schema_migrations (
 );
 `;
 
-/** Bloquea migraciones concurrentes (tests en paralelo, varios procesos). */
 const MIGRATION_LOCK_K1 = 8291031;
 const MIGRATION_LOCK_K2 = 42042;
 
@@ -57,14 +56,26 @@ CREATE TABLE IF NOT EXISTS ftn_users (
 CREATE UNIQUE INDEX IF NOT EXISTS ftn_users_username_lower ON ftn_users (lower(username));
 `,
   },
+  {
+    version: 3,
+    name: "engine_prod_indexes_and_comments",
+    sql: `
+-- Búsquedas por tipo de evento (operación, métricas, soporte)
+CREATE INDEX IF NOT EXISTS ftn_workflow_events_event_type
+  ON ftn_workflow_events ((event_json->>'type'));
+
+COMMENT ON TABLE ftn_workflow_events IS
+  'Stream append-only por (workflow_id, run_id, version). Concurrencia: appendEvents usa expectedVersion + bloqueo advisory por stream.';
+
+COMMENT ON TABLE ftn_workflow_snapshots IS
+  'Último snapshot por run (UPSERT). Coherencia: última escritura gana en carreras concurrentes de saveSnapshot.';
+
+COMMENT ON COLUMN ftn_workflow_events.event_json IS
+  'WorkflowEvent serializado; debe incluir type, workflowId, runId, version, id, startedAt tras append.';
+`,
+  },
 ];
 
-/**
- * Aplica migraciones pendientes del motor FTN (tablas de eventos y snapshots).
- * Idempotente: migraciones ya registradas en `ftn_schema_migrations` se omiten.
- * Usa un advisory lock para que varias conexiones no ejecuten CREATE TABLE a la vez
- * (evita condiciones de carrera en `pg_type` con CREATE TABLE IF NOT EXISTS).
- */
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
   const client = await pool.connect();
   try {
