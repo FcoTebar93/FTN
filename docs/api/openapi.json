@@ -1,0 +1,211 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FTN Workflow Engine HTTP API",
+    "version": "0.1.0",
+    "description": "API para catálogo, arranque de workflows, estado, señales y diseñador. Autenticación opcional: `Authorization: Bearer <JWT>` o cabecera `X-API-Key` cuando `FTN_API_KEY` / `FTN_JWT_SECRET` están configurados. Rutas públicas: `/health`, `/ready`, `/auth/*`, `/openapi.json`."
+  },
+  "servers": [{ "url": "http://localhost:4000", "description": "Desarrollo local (PORT por defecto 4000)" }],
+  "tags": [
+    { "name": "meta", "description": "Salud y documentación" },
+    { "name": "auth", "description": "Login y registro (si están habilitados)" },
+    { "name": "catalog", "description": "Catálogo de actividades y workflows" },
+    { "name": "workflows", "description": "Ejecución e inspección de runs" },
+    { "name": "designer", "description": "Workflows almacenados para el diseñador" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Liveness",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Readiness (Postgres/Redis si aplica)",
+        "responses": { "200": { "description": "Listo" }, "503": { "description": "Dependencia no disponible" } }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Especificación OpenAPI",
+        "responses": { "200": { "description": "Documento OpenAPI JSON" } }
+      }
+    },
+    "/auth/status": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Estado de autenticación del servidor",
+        "responses": { "200": { "description": "JSON con loginConfigured, authRequired, registrationEnabled" } }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Obtener JWT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": { "username": { "type": "string" }, "password": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token emitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": { "type": "string" },
+                    "token_type": { "type": "string", "example": "Bearer" },
+                    "expires_in": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog/workflows": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "Listar workflows registrados",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "items[], total, limit, offset",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/catalog/workflows/{name}": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "Descriptor público de un workflow (schemas, ejemplos)",
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Descriptor" }, "404": { "description": "No encontrado" } }
+      }
+    },
+    "/workflows": {
+      "get": {
+        "tags": ["workflows"],
+        "summary": "Listar runs conocidos (paginado)",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["running", "completed", "failed"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Array de resúmenes" } }
+      },
+      "post": {
+        "tags": ["workflows"],
+        "summary": "Iniciar un workflow por nombre de catálogo",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "description": "Nombre registrado (ej. payment-signup)" },
+                  "input": { "description": "Entrada validada contra inputSchema del descriptor" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["workflowId", "runId", "version"],
+                  "properties": {
+                    "workflowId": { "type": "string" },
+                    "runId": { "type": "string" },
+                    "version": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Input inválido" },
+          "404": { "description": "Workflow no registrado" }
+        }
+      }
+    },
+    "/workflows/{workflowId}/{runId}": {
+      "get": {
+        "tags": ["workflows"],
+        "summary": "Estado actual del run (replay)",
+        "parameters": [
+          { "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "WorkflowState" }, "404": { "description": "No encontrado" } }
+      }
+    },
+    "/workflows/{workflowId}/{runId}/events": {
+      "get": {
+        "tags": ["workflows"],
+        "summary": "Historial de eventos del run",
+        "parameters": [
+          { "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "WorkflowEvent[]" }, "404": { "description": "Sin eventos" } }
+      }
+    },
+    "/workflows/{workflowId}/{runId}/signals": {
+      "post": {
+        "tags": ["workflows"],
+        "summary": "Enviar señal al workflow",
+        "parameters": [
+          { "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["signalName"],
+                "properties": {
+                  "signalName": { "type": "string" },
+                  "data": { "description": "Payload opcional" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "{ ok: true }" }, "404": { "description": "Run no encontrado" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "apiKeyAuth": { "type": "apiKey", "in": "header", "name": "X-API-Key" }
+    }
+  },
+  "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }]
+}

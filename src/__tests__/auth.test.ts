@@ -3,6 +3,7 @@ import type http from "node:http";
 import { test } from "node:test";
 
 import type { ApiSecurityConfig } from "../infra/http/api-security";
+import { isPublicPath } from "../infra/http/api-security";
 import {
   FTN_SCOPES,
   checkProtectedAccess,
@@ -54,8 +55,13 @@ test("requiredScopesForRoute asigna scopes esperados", () => {
   assert.deepEqual(requiredScopesForRoute("GET", "/designer/kinds"), [FTN_SCOPES.designerRead]);
   assert.deepEqual(requiredScopesForRoute("POST", "/designer/workflows"), [FTN_SCOPES.designerWrite]);
   assert.deepEqual(requiredScopesForRoute("GET", "/workflows"), [FTN_SCOPES.workflowsRead]);
+  assert.deepEqual(requiredScopesForRoute("POST", "/workflows"), [FTN_SCOPES.workflowsWrite]);
   assert.deepEqual(requiredScopesForRoute("POST", "/workflows/a/b/signals"), [FTN_SCOPES.workflowsWrite]);
   assert.deepEqual(requiredScopesForRoute("POST", "/pay/checkout"), [FTN_SCOPES.paymentsWrite]);
+});
+
+test("GET /openapi.json es ruta pública", () => {
+  assert.equal(isPublicPath("GET", "/openapi.json"), true);
 });
 
 function baseConfig(over: Partial<ApiSecurityConfig> = {}): ApiSecurityConfig {
