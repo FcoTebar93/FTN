@@ -172,3 +172,39 @@ registerWorkflow<PaymentSignupInput, PaymentSignupResult>({
   },
   definition: paymentSignupWorkflow,
 });
+
+registerWorkflow<OrderInput, OrderResult>({
+  name: "order-processing",
+  version: "v1",
+  displayName: "Procesamiento de pedido",
+  description:
+    "Cobra el pedido (con reintentos), valida el importe y crea el envío en paralelo. Pensado para demos con activities de pagos y logística.",
+  tags: ["ecommerce", "payments", "logistics"],
+  examples: [
+    {
+      input: { orderId: "ord-demo-1", userId: "user-42", amount: 49.99 },
+      note: "Requiere integraciones de payments y logistics habilitadas.",
+    },
+  ],
+  inputSchema: {
+    type: "object",
+    required: ["orderId", "userId", "amount"],
+    properties: {
+      orderId: { type: "string", description: "Identificador del pedido" },
+      userId: { type: "string", description: "Identificador del usuario" },
+      amount: { type: "number", minimum: 0, description: "Importe a cobrar (misma unidad que la activity de cobro)" },
+    },
+    additionalProperties: false,
+  },
+  resultSchema: {
+    type: "object",
+    required: ["orderId", "charged", "shipped"],
+    properties: {
+      orderId: { type: "string" },
+      charged: { type: "boolean" },
+      shipped: { type: "boolean" },
+    },
+    additionalProperties: false,
+  },
+  definition: orderProcessingWorkflow,
+});

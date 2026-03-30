@@ -84,10 +84,11 @@ async function main(): Promise<void> {
     log.info("ftn.taskQueue", { backend: "memory" });
   }
 
+  const databaseUrl = process.env.DATABASE_URL?.trim();
   const integrationsConfig: IntegrationsConfig = {
     storage: {
-      enabled: !!process.env.DATABASE_URL,
-      databaseUrl: process.env.DATABASE_URL,
+      enabled: !!databaseUrl,
+      databaseUrl,
     },
     documents: {
       enabled: true,
@@ -99,11 +100,18 @@ async function main(): Promise<void> {
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
     },
     payments: {
-      enabled: !!process.env.STRIPE_SECRET_KEY,
+      enabled: process.env.FTN_PAYMENTS_DISABLED !== "1" && process.env.FTN_PAYMENTS_DISABLED !== "true",
       stripeSecretKey: process.env.STRIPE_SECRET_KEY,
     },
     identity: {
       enabled: true,
+    },
+    logistics: {
+      enabled: true,
+    },
+    crm: {
+      enabled: !!databaseUrl,
+      databaseUrl,
     },
   };
 
