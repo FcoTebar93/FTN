@@ -336,14 +336,9 @@ You then wire this into `InMemoryWorkflowRuntime.startWorkflow` by passing the d
 
 Some concrete directions to take this engine further:
 
-1. **HTTP API / CLI**
-  - Add `src/main.ts` to:
-    - Build `InMemoryWorkflowRuntime`, workers and `ActivityRegistry`.
-    - Start one workflow worker and one activity worker.
-    - Expose:
-      - `POST /workflows` to start workflows.
-      - `GET /workflows/:workflowId/:runId` to inspect state.
-      - `POST /workflows/:workflowId/:runId/signals` to append `SignalReceived`.
+1. **HTTP API**
+  - `src/infra/main.ts` expone workers, catálogo, designer y **`POST /workflows`**, **`GET /workflows/...`**, señales, etc.
+  - Contrato documentado: **`docs/api/openapi.json`** y **`GET /openapi.json`** en el servidor en marcha.
 2. **Real persistence**
   - Implement `EventStore` and `SnapshotStore` on top of Postgres:
     - `events` table (append‑only, versioned, optimistic locking).
