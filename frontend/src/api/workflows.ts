@@ -34,5 +34,9 @@ export async function getCatalogWorkflows() {
 }
 
 export async function startWorkflow(name: string, input: unknown) {
-  return postJson<{ workflowId: string; runId: string }>("/workflows", { name, input });
+  return postJson<{ workflowId: string; runId: string; version: number }>("/workflows", { name, input });
+}
+
+export async function sendWorkflowSignal(workflowId: string, runId: string, signalName: string, data?: unknown): Promise<{ ok: boolean }> {
+  return postJson<{ ok: boolean }>(`/workflows/${workflowId}/${runId}/signals`, { signalName, data });
 }

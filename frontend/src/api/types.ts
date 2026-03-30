@@ -55,6 +55,7 @@ export interface WorkflowState {
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];
     pendingTimers: PendingTimer[];
+    pendingSignalWaits?: Array<{ signalName: string; ordinal: number }>;
     steps: StepRecord[];
 
     result?: unknown;
@@ -153,7 +154,9 @@ export interface CatalogWorkflow {
   displayName: string;
   description?: string;
   tags: string[];
+  examples?: Array<{ input: unknown; note?: string }>;
   inputSchema?: JsonSchema;
+  resultSchema?: JsonSchema;
 }
 
 export interface DesignerConditionalStep extends DesignerBaseStep {
