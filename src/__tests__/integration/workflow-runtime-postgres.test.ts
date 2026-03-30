@@ -93,4 +93,56 @@ describePg("InMemoryWorkflowRuntime con stores Postgres", () => {
     assert.equal(state!.status, "completed");
     assert.deepEqual(state!.result, { ok: true });
   });
+
+  it("signal: SignalWaitStarted en historial y completado tras SignalReceived", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new PostgresEventStore(pool);
+    const snapshotStore = new PostgresSnapshotStore(pool);
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "pg-signal",
+      input: {},
+      definition: async (ftn) => {
+        const data = await ftn.signal<{ v: number }>("s");
+        return { v: data.v };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const state1 = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state1);
+    assert.equal(state1!.status, "running");
+    assert.ok(state1!.pendingSignalWaits.length >= 1);
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.ok(stream.some((e) => e.type === "SignalWaitStarted"));
+
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "s", data: { v: 7 } },
+      },
+    ]);
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const state2 = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state2);
+    assert.equal(state2!.status, "completed");
+    assert.deepEqual(state2!.result, { v: 7 });
+    assert.equal(state2!.pendingSignalWaits.length, 0);
+  });
 });

@@ -5,6 +5,7 @@ import { InMemoryEventStore } from "../infra/inmemory-event-store";
 import { InMemorySnapshotStore } from "../infra/inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "../infra/inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "../infra/inmemory-workflow-runtime";
+import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
@@ -157,6 +158,49 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state!.result, "then-branch");
   });
 
+  it("ftn.signal suspende hasta SignalReceived y luego completa", async () => {
+    const { runtime, eventStore } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "signal-wait",
+      input: {},
+      definition: async (ftn) => {
+        const data = await ftn.signal<{ x: number }>("my-signal");
+        return { ok: true, value: data.x };
+      },
+    });
+
+    const tick1 = await runtime.runWorkflowTick(workflowId, runId);
+    const state1 = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state1);
+    assert.equal(state1!.status, "running");
+    assert.equal(tick1.newEvents.length, 1);
+    assert.equal(tick1.newEvents[0].type, "SignalWaitStarted");
+    assert.equal(state1!.pendingSignalWaits.length, 1);
+    assert.equal(state1!.pendingSignalWaits[0].signalName, "my-signal");
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "my-signal", data: { x: 42 } },
+      },
+    ]);
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const state2 = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state2);
+    assert.equal(state2!.status, "completed");
+    assert.deepEqual(state2!.result, { ok: true, value: 42 });
+    assert.equal(state2!.pendingSignalWaits.length, 0);
+  });
+
   it("ftn.retry registra RetryAttemptStarted y reintenta hasta tener éxito", async () => {
     const { runtime, eventStore } = inMemoryStack();
 
@@ -188,9 +232,75 @@ describe("InMemoryWorkflowRuntime", () => {
     const events = await eventStore.loadEvents(workflowId, runId, 0);
     const retryEvents = events.filter((e) => e.type === "RetryAttemptStarted");
     const giveUpEvents = events.filter((e) => e.type === "RetryGivenUp");
+    const completedRetry = events.filter((e) => e.type === "RetryCompleted");
 
     assert.ok(calls >= 2);
     assert.ok(retryEvents.length >= 1);
     assert.equal(giveUpEvents.length, 0);
+    assert.ok(completedRetry.length >= 1);
+  });
+
+  it("ftn.retry con backOffMs programa TimerScheduled (retryBackoff) y completa tras el timer", async () => {
+    const { runtime, taskQueue } = inMemoryStack();
+
+    let calls = 0;
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "retry-backoff",
+      input: {},
+      definition: async (ftn) => {
+        return ftn.retry(
+          { maxAttempts: 3, backOffMs: 5 },
+          async () => {
+            calls += 1;
+            if (calls < 2) {
+              throw new Error("fail once");
+            }
+            return "ok";
+          }
+        );
+      },
+    });
+
+    const tick1 = await runtime.runWorkflowTick(workflowId, runId);
+    const state1 = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state1);
+    assert.equal(state1!.status, "running");
+    assert.ok(
+      tick1.newEvents.some(
+        (e) =>
+          e.type === "TimerScheduled" &&
+          e.payload.retryBackoff !== undefined &&
+          e.payload.retryBackoff.afterAttempt === 1
+      )
+    );
+
+    const timerWorker = new InMemoryTimerWorker({
+      taskQueue,
+      queueName: "timers",
+      workflowQueueName: "workflows",
+      pollIntervalMs: 5,
+    });
+
+    let advanced = false;
+    for (let i = 0; i < 40; i++) {
+      await timerWorker.runOnce();
+      await new Promise((r) => setTimeout(r, 3));
+      const lease = await taskQueue.leaseNextTask("workflow-worker-1", "workflows", 0);
+      if (lease) {
+        await taskQueue.completeTask(lease.leaseId);
+        await runtime.runWorkflowTick(workflowId, runId);
+        advanced = true;
+        break;
+      }
+    }
+
+    assert.ok(advanced);
+
+    const state2 = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state2);
+    assert.equal(state2!.status, "completed");
+    assert.equal(state2!.result, "ok");
   });
 });
