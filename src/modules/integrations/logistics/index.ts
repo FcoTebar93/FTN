@@ -1,14 +1,13 @@
-import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
-import type { CreateShipmentInput } from "./types";
+import type { IntegrationModule, IntegrationModuleConfig } from "../types";
+import type { ActivityRegistry } from "../../../core/activity-registry";
+import { createShipmentActivityDefinition } from "./create-shipment";
 
-export function createShipmentActivityDefinition(): ActivityDefinition<CreateShipmentInput, void> {
-  return {
-    name: "logistics.createShipment:v1",
-    maxAttempts: 1,
-    tags: ["logistics", "shipping"],
-    version: "v1",
-    async execute(input: CreateShipmentInput, ctx: ActivityExecutionContext): Promise<void> {
-      ctx.log("Creando envío", { orderId: input.orderId, userId: input.userId });
-    }
-  };
-}
+export interface LogisticsConfig extends IntegrationModuleConfig {}
+
+export const LogisticsModule: IntegrationModule = {
+  name: "logistics",
+  registerActivities(registry: ActivityRegistry, config: LogisticsConfig) {
+    if (!config.enabled) return;
+    registry.register(createShipmentActivityDefinition());
+  },
+};
