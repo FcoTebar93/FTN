@@ -19,6 +19,12 @@ npm run build
 # Run tests (builds first, then runs node:test on dist/__tests__)  
 npm test
 
+# API + workers (requires env: see docs/deploy.md)
+npm start
+```
+
+Docker Compose (Postgres + Redis) and production notes: **`docs/deploy.md`**.
+
 ## Project Layout
 
 ```text
