@@ -19,10 +19,6 @@ function generateWorkflowId(): WorkflowId {
     return `workflow-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 }
 
-function generateStepId(): StepId {
-  return `step-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-}
-
 function generateRunId(): RunId {
     return `run-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 }
@@ -35,7 +31,8 @@ function generateActivityId(): ActivityId {
     return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-class WorkflowSuspendedError extends Error {
+/** Thrown when the workflow must pause until a timer fires or external history arrives (replay-safe). */
+export class WorkflowSuspendedError extends Error {
   constructor() {
     super("Workflow suspended until timer or external event");
     this.name = "WorkflowSuspendedError";
@@ -144,9 +141,28 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     
       let currentState = rehydrated.state;
       let lastEventVersion = rehydrated.lastEventVersion;
+
+      const fullHistory = await this.eventStore.loadEvents(workflowId, runId, 0);
     
       const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
       let definitionResult: unknown;
+
+      let nextRetryOrdinal = 0;
+      let nextConditionalOrdinal = 0;
+      const signalOrdinalByName = new Map<string, number>();
+
+      const hasRetryAttemptRecorded = (stepId: StepId, attempt: number): boolean => {
+        const inFull = fullHistory.some((e) => {
+          if (e.type !== "RetryAttemptStarted") return false;
+          return e.payload.stepId === stepId && e.payload.attempt === attempt;
+        });
+        const inPending = newDomainEvents.some((raw) => {
+          const e = raw as WorkflowEvent;
+          if (e.type !== "RetryAttemptStarted") return false;
+          return e.payload.stepId === stepId && e.payload.attempt === attempt;
+        });
+        return inFull || inPending;
+      };
     
       const ftn: FTNApi = {
         activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
@@ -223,25 +239,47 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           thenBranch: () => Promise<TResult>,
           elseBranch?: () => Promise<TResult>
         ): Promise<TResult> {
-          if (condition()) {
-            return await thenBranch();
+          const stepId: StepId = `conditional-${nextConditionalOrdinal++}`;
+          const existing = fullHistory.find(
+            (e) =>
+              e.type === "ConditionalBranchChosen" &&
+              e.payload.stepId === stepId
+          ) as
+            | Extract<WorkflowEvent, { type: "ConditionalBranchChosen" }>
+            | undefined;
+
+          let branch: "then" | "else";
+          if (existing) {
+            branch = existing.payload.branch;
+          } else {
+            branch = condition() ? "then" : "else";
+            newDomainEvents.push({
+              type: "ConditionalBranchChosen",
+              workflowId,
+              runId,
+              payload: { stepId, branch },
+            });
           }
-          if (elseBranch) {
-            return await elseBranch();
-          }
-          return undefined as TResult;
+
+          return branch === "then"
+            ? await thenBranch()
+            : elseBranch
+              ? await elseBranch()
+              : (undefined as TResult);
         },
         retry: async function <TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
-          const stepId = generateStepId();
+          const stepId: StepId = `retry-${nextRetryOrdinal++}`;
           let lastErr: unknown;
           const max = options.maxAttempts;
           for (let attempt = 1; attempt <= max; attempt++) {
-            newDomainEvents.push({
-              type: "RetryAttemptStarted",
-              workflowId,
-              runId,
-              payload: { stepId, attempt },
-            });
+            if (!hasRetryAttemptRecorded(stepId, attempt)) {
+              newDomainEvents.push({
+                type: "RetryAttemptStarted",
+                workflowId,
+                runId,
+                payload: { stepId, attempt },
+              });
+            }
             try {
               return await operation(attempt);
             } catch (e) {
@@ -266,8 +304,19 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           });
           throw new WorkflowSuspendedError();
         },
-        signal: function <TData = unknown>(_name: string): Promise<TData> {
-          throw new Error("Function not implemented.");
+        signal: function <TData = unknown>(name: string): Promise<TData> {
+          const ordinal = signalOrdinalByName.get(name) ?? 0;
+          signalOrdinalByName.set(name, ordinal + 1);
+
+          const matches = fullHistory.filter(
+            (e): e is Extract<WorkflowEvent, { type: "SignalReceived" }> =>
+              e.type === "SignalReceived" && e.payload.signalName === name
+          );
+          const ev = matches[ordinal];
+          if (ev) {
+            return Promise.resolve(ev.payload.data as TData);
+          }
+          throw new WorkflowSuspendedError();
         },
         workflowId: function (): WorkflowId {
           return workflowId;
@@ -282,10 +331,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     
       const shouldExecuteDefinition = !!defEntry && currentState.status === "running";
     
+      let suspended = false;
       if (shouldExecuteDefinition && defEntry) {
         try {
           definitionResult = await defEntry.definition(ftn, defEntry.input);
-        } catch {
+        } catch (e) {
+          if (e instanceof WorkflowSuspendedError) {
+            suspended = true;
+          }
           definitionResult = undefined;
         }
       }
@@ -360,6 +413,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       }
     
       if (
+        !suspended &&
         currentState.status === "running" &&
         currentState.pendingActivities.length === 0 &&
         currentState.pendingTimers.length === 0
