@@ -661,6 +661,25 @@ export function DesignerPage() {
                 </section>
 
                 <section class="workflow-section">
+                  <h3>Vista previa JSON</h3>
+                  <p class="detail-muted">Payload que se enviará al guardar (revisión rápida).</p>
+                  <pre
+                    class="detail-muted"
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      fontSize: "12px",
+                      maxHeight: "240px",
+                      overflow: "auto",
+                      padding: "8px",
+                      background: "var(--panel-bg, #1a1a1e)",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    {current ? JSON.stringify(current, null, 2) : ""}
+                  </pre>
+                </section>
+
+                <section class="workflow-section">
                   <button type="button" class="workflow-filter-btn" onClick={handleSave}>
                     Guardar workflow
                   </button>
