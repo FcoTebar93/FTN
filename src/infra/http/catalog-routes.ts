@@ -132,7 +132,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     }
   
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ name }));
+    res.end(JSON.stringify(wf));
     return true;
   }
 

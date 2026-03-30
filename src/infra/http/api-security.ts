@@ -89,6 +89,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "POST" && pathWithoutQuery === "/auth/register") {
     return true;
   }
+  if (method === "GET" && pathWithoutQuery === "/openapi.json") {
+    return true;
+  }
   return false;
 }
 

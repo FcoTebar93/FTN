@@ -48,6 +48,8 @@ import { runPostgresMigrations } from "./postgres-migrations";
 import { PostgresEventStore } from "./postgres-event-store";
 import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger } from "./logger";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 async function main(): Promise<void> {
   const log = createLogger();
@@ -197,6 +199,8 @@ async function main(): Promise<void> {
             description: w.description,
             tags: w.tags ?? [],
             examples: w.examples ?? [],
+            inputSchema: w.inputSchema,
+            resultSchema: w.resultSchema,
           })),
         getWorkflowDescriptor: (name: string) => {
           const w = getWorkflowDescriptor(name);
@@ -210,6 +214,8 @@ async function main(): Promise<void> {
             description: w.description,
             tags: w.tags ?? [],
             examples: w.examples ?? [],
+            inputSchema: w.inputSchema,
+            resultSchema: w.resultSchema,
           };
         },
       },
@@ -366,6 +372,20 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (req.method === "GET" && rawPath === "/openapi.json") {
+        const specPath = join(process.cwd(), "docs/api/openapi.json");
+        if (!existsSync(specPath)) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "OpenAPI spec not found" }));
+          return;
+        }
+        const raw = readFileSync(specPath, "utf8");
+        res.setHeader("Content-Type", "application/json");
+        res.end(raw);
+        return;
+      }
+
       if (req.method === "GET" && rawPath === "/ready") {
         const checks: { postgres?: boolean; redis?: boolean } = {};
         if (pool) {
@@ -489,6 +509,66 @@ async function main(): Promise<void> {
         } catch (e) {
           res.statusCode = 400;
           res.end(`Invalid JSON: ${(e as Error).message}`);
+        }
+        return;
+      }
+
+      if (req.method === "POST" && rawPath === "/workflows") {
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const parsed = JSON.parse(body || "{}") as { name?: unknown; input?: unknown };
+          const name = typeof parsed.name === "string" ? parsed.name : "";
+          if (!name) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Missing name" }));
+            return;
+          }
+          const wfDef = getWorkflow(name);
+          if (!wfDef) {
+            res.statusCode = 404;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Workflow not found", name }));
+            return;
+          }
+          const descriptor = getWorkflowDescriptor(name);
+          const input = parsed.input;
+          if (descriptor?.inputSchema) {
+            const result = validateJson(descriptor.inputSchema, input);
+            if (!result.valid) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
+              return;
+            }
+          }
+
+          const { workflowId, runId, version } = await runtime.startWorkflow({
+            workflowName: name,
+            input,
+            definition: wfDef,
+          });
+
+          const task: WorkflowTask = {
+            id: `wf-task-${workflowId}-${runId}`,
+            type: "workflow",
+            workflowId,
+            runId,
+            createdAt: new Date().toISOString(),
+            scheduledAt: new Date().toISOString(),
+            workerType: "workflow",
+            targetQueue: "workflows",
+          };
+          await taskQueue.enqueue(task);
+
+          res.statusCode = 201;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ workflowId, runId, version }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: (e as Error).message }));
         }
         return;
       }
