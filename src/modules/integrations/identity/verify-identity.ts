@@ -25,11 +25,41 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
               documentType: input.documentType,
               documentImageUrl: input.documentImageUrl,
             });
-            // TODO: Integrate with a KYC provider
+
+            const providerUrl = process.env.KYC_PROVIDER_URL?.trim();
+            const providerToken = process.env.KYC_PROVIDER_TOKEN?.trim();
+            if (providerUrl && providerToken) {
+              const res = await fetch(providerUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${providerToken}`,
+                },
+                body: JSON.stringify({
+                  userId: input.userId,
+                  documentType: input.documentType,
+                  documentImageUrl: input.documentImageUrl,
+                }),
+              });
+              if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`KYC provider ${res.status}: ${errText.slice(0, 500)}`);
+              }
+              const data = (await res.json()) as Partial<VerifyIdentityResult>;
+              return {
+                success: Boolean(data.success),
+                score: typeof data.score === "number" ? data.score : 0,
+                provider: typeof data.provider === "string" ? data.provider : "kyc-webhook",
+              };
+            }
+
+            ctx.log("KYC modo demo (sin KYC_PROVIDER_URL + KYC_PROVIDER_TOKEN)", {
+              userId: input.userId,
+            });
             return {
               success: true,
-              score: 0.98,
-              provider: "ExampleKYC",
+              score: 0.95,
+              provider: "demo",
             };
         }
     }

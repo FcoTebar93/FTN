@@ -10,12 +10,6 @@ export interface VerifyIdentityResult {
     provider: string;
 }
   
-export interface VerifyIdentityResult {
-    success: boolean;
-    score: number;
-    provider: string;
-}
-  
 export interface CheckFraudScoreInput {
     userId: string;
     orderId: string;
