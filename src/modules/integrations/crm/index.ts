@@ -1,10 +1,9 @@
-import type { IntegrationModule } from "../types";
+import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
 import { upsertUserActivityDefinition } from "./upsert-user";
 
-export interface CrmConfig {
-  enabled: boolean;
+export interface CrmConfig extends IntegrationModuleConfig {
   databaseUrl?: string;
 }
 
