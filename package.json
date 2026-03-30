@@ -21,7 +21,8 @@
     "scripts": {
         "build": "tsc",
         "test": "npm run build && node --test dist/__tests__/*.test.js",
-        "test:integration": "npm run build && node --test dist/__tests__/integration/postgres-persistence.test.js dist/__tests__/integration/postgres-users.test.js dist/__tests__/integration/workflow-runtime-postgres.test.js dist/__tests__/integration/redis-task-queue.test.js",
+        "start": "node dist/infra/main.js",
+        "test:integration": "npm run build && node --test dist/__tests__/integration/postgres-persistence.test.js dist/__tests__/integration/postgres-users.test.js dist/__tests__/integration/workflow-runtime-postgres.test.js dist/__tests__/integration/postgres-concurrency.test.js dist/__tests__/integration/redis-task-queue.test.js",
         "lint": "eslint src"
     },
     "dependencies": {
