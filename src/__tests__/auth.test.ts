@@ -64,6 +64,11 @@ test("GET /openapi.json es ruta pública", () => {
   assert.equal(isPublicPath("GET", "/openapi.json"), true);
 });
 
+test("GET /docs y /swagger son rutas públicas", () => {
+  assert.equal(isPublicPath("GET", "/docs"), true);
+  assert.equal(isPublicPath("GET", "/swagger"), true);
+});
+
 function baseConfig(over: Partial<ApiSecurityConfig> = {}): ApiSecurityConfig {
   return {
     corsOrigins: ["http://localhost:5173"],

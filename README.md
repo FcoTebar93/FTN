@@ -25,6 +25,8 @@ npm start
 
 Docker Compose (Postgres + Redis) and production notes: **`docs/deploy.md`**.
 
+API docs in the browser: **`http://localhost:4000/docs`** (Swagger UI) and **`/openapi.json`**.
+
 ## Project Layout
 
 ```text
