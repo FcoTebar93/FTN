@@ -3,7 +3,7 @@
   "info": {
     "title": "FTN Workflow Engine HTTP API",
     "version": "0.1.0",
-    "description": "API para catálogo, arranque de workflows, estado, señales y diseñador. Autenticación opcional: `Authorization: Bearer <JWT>` o cabecera `X-API-Key` cuando `FTN_API_KEY` / `FTN_JWT_SECRET` están configurados. Rutas públicas: `/health`, `/ready`, `/auth/*`, `/openapi.json`."
+    "description": "API para catálogo, arranque de workflows, estado, señales y diseñador. Interfaz Swagger: **GET /docs** (alias **GET /swagger** → /docs). Autenticación opcional: `Authorization: Bearer <JWT>` o cabecera `X-API-Key` cuando `FTN_API_KEY` / `FTN_JWT_SECRET` están configurados. Rutas públicas: `/health`, `/ready`, `/auth/*`, `/openapi.json`, `/docs`."
   },
   "servers": [{ "url": "http://localhost:4000", "description": "Desarrollo local (PORT por defecto 4000)" }],
   "tags": [

@@ -50,6 +50,7 @@ import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger } from "./logger";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { SWAGGER_UI_HTML } from "./swagger-ui";
 
 async function main(): Promise<void> {
   const log = createLogger();
@@ -383,6 +384,20 @@ async function main(): Promise<void> {
         const raw = readFileSync(specPath, "utf8");
         res.setHeader("Content-Type", "application/json");
         res.end(raw);
+        return;
+      }
+
+      if (req.method === "GET" && rawPath === "/docs") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(SWAGGER_UI_HTML);
+        return;
+      }
+
+      if (req.method === "GET" && rawPath === "/swagger") {
+        res.statusCode = 302;
+        res.setHeader("Location", "/docs");
+        res.end();
         return;
       }
 

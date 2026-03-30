@@ -92,6 +92,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "GET" && pathWithoutQuery === "/openapi.json") {
     return true;
   }
+  if (method === "GET" && (pathWithoutQuery === "/docs" || pathWithoutQuery === "/swagger")) {
+    return true;
+  }
   return false;
 }
 
