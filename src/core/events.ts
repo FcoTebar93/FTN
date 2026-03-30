@@ -10,6 +10,7 @@ export type WorkflowEventType =
     | "StepForked"
     | "StepJoined"
     | "SignalReceived"
+    | "SignalWaitStarted"
     | "SnapshotCreated"
     | "TimerScheduled"
     | "ConditionalBranchChosen"
@@ -87,6 +88,14 @@ export interface SignalReceivedEvent extends BaseWorkflowEvent {
     };
 }
 
+export interface SignalWaitStartedEvent extends BaseWorkflowEvent {
+    type: "SignalWaitStarted";
+    payload: {
+        signalName: string;
+        ordinal: number;
+    };
+}
+
 export interface WorkflowCompletedEvent extends BaseWorkflowEvent {
     type: "WorkflowCompleted";
     payload: {
@@ -113,6 +122,7 @@ export interface TimerScheduledEvent extends BaseWorkflowEvent {
     type: "TimerScheduled";
     payload: {
       wakeAt: string;
+      retryBackoff?: { stepId: StepId; afterAttempt: number };
     };
 }
 
@@ -165,6 +175,7 @@ export type WorkflowEvent =
     | StepForkedEvent
     | StepJoinedEvent
     | SignalReceivedEvent
+    | SignalWaitStartedEvent
     | WorkflowCompletedEvent
     | WorkflowFailedEvent
     | SnapshotCreatedEvent
