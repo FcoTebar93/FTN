@@ -37,6 +37,11 @@ export interface CompletedActivity {
     attempt?: number;
 }
 
+export interface PendingSignalWait {
+    signalName: string;
+    ordinal: number;
+}
+
 export interface WorkflowState {
     id: WorkflowId;
     runId: RunId;
@@ -50,6 +55,7 @@ export interface WorkflowState {
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];
     pendingTimers: PendingTimer[];
+    pendingSignalWaits: PendingSignalWait[];
     steps: StepRecord[];
 
     result?: unknown;

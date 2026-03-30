@@ -21,6 +21,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             pendingActivities: [],
             completedActivities: [],
             pendingTimers: [],
+            pendingSignalWaits: [],
             steps: [],
             stepState: undefined
         };
@@ -31,7 +32,11 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             throw new Error(`Event ${event.id} is not applicable to workflow ${state.id} run ${state.runId}`);
         }
 
-        const nextState: WorkflowState = { ...state, version: event.version };
+        const nextState: WorkflowState = {
+            ...state,
+            pendingSignalWaits: state.pendingSignalWaits ?? [],
+            version: event.version,
+        };
 
         switch (event.type) {
             case "WorkflowStarted": {
@@ -137,15 +142,19 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                 }
             }
             case "TimerScheduled": {
-                const { wakeAt } = event.payload;
-              
+                const { wakeAt, retryBackoff } = event.payload;
+
+                if (retryBackoff) {
+                    return nextState;
+                }
+
                 const sleepStep: SleepStep = {
                   id: `sleep-${event.version}`,
                   kind: "sleep",
                   status: "waiting",
                   wakeAt,
                 };
-              
+
                 return {
                   ...nextState,
                   pendingTimers: [...nextState.pendingTimers, { wakeAt }],
@@ -200,7 +209,24 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                   ),
                 };
             }
-            case "SignalReceived":
+            case "SignalWaitStarted": {
+                const { signalName, ordinal } = event.payload;
+                return {
+                    ...nextState,
+                    pendingSignalWaits: [...nextState.pendingSignalWaits, { signalName, ordinal }],
+                };
+            }
+            case "SignalReceived": {
+                const { signalName } = event.payload;
+                const idx = nextState.pendingSignalWaits.findIndex((w) => w.signalName === signalName);
+                return {
+                    ...nextState,
+                    pendingSignalWaits:
+                        idx >= 0
+                            ? nextState.pendingSignalWaits.filter((_, i) => i !== idx)
+                            : nextState.pendingSignalWaits,
+                };
+            }
             case "StepForked":
             case "StepJoined": {
                 return nextState;
