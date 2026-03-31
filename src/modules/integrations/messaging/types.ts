@@ -1,6 +1,8 @@
+import type Redis from "ioredis";
 import type { IntegrationModuleConfig } from "../types";
 
 export interface MessagingConfig extends IntegrationModuleConfig {
+  redis?: Redis;
   redisUrl?: string;
 }
 

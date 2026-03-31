@@ -9,11 +9,19 @@ export type { MessagingConfig } from "./types";
 export const MessagingModule: IntegrationModule = {
   name: "messaging",
   registerActivities(registry: ActivityRegistry, config: MessagingConfig) {
-    if (!config.enabled || !config.redisUrl?.trim()) {
+    if (!config.enabled) {
+      return;
+    }
+    if (!config.redis && !config.redisUrl?.trim()) {
       return;
     }
 
-    const defs: AnyActivityDefinition[] = [redisPublishActivityDefinition({ ...config, redisUrl: config.redisUrl.trim() })];
+    const defs: AnyActivityDefinition[] = [
+      redisPublishActivityDefinition({
+        ...config,
+        ...(config.redis ? {} : { redisUrl: config.redisUrl!.trim() }),
+      }),
+    ];
 
     for (const def of defs) {
       registry.register(def);

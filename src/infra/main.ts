@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     },
     messaging: {
       enabled: !!redisUrl,
-      redisUrl,
+      ...(redis ? { redis } : {}),
     },
   };
 
