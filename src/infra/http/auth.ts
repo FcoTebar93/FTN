@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type http from "node:http";
 
-import type { ApiSecurityConfig } from "./api-security";
-import { extractBearerOrApiKey, isPublicPath } from "./api-security";
+import type { ApiSecurityConfig } from "./security";
+import { extractBearerOrApiKey, isPublicPath } from "./security";
 
 export const FTN_SCOPES = {
   catalogRead: "catalog:read",

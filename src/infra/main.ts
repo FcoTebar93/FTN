@@ -25,10 +25,10 @@ import { ActivityWorker } from "../workers/activity-worker";
 import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 import { matchHttpTrigger } from "../app/triggers";
 
-import { handleCatalogRoutes } from "./http/catalog-routes";
-import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/api-security";
+import { handleCatalogRoutes } from "./http/catalog";
+import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/security";
 import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
-import { normalizeAndValidateUsername, validatePlainPassword } from "./http/auth-registration";
+import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword, verifyPassword } from "./passwords";
 import { getUserPasswordHash, insertUser } from "./users";
 

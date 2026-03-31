@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import type http from "node:http";
 import { test } from "node:test";
 
-import type { ApiSecurityConfig } from "../infra/http/api-security";
-import { isPublicPath } from "../infra/http/api-security";
+import type { ApiSecurityConfig } from "../infra/http/security";
+import { isPublicPath } from "../infra/http/security";
 import {
   FTN_SCOPES,
   checkProtectedAccess,

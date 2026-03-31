@@ -98,136 +98,87 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   return false;
 }
 
+export function applyCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse, corsOrigins: string[]): string | null {
+  const origin = req.headers.origin;
+  if (origin && (corsOrigins.includes("*") || corsOrigins.includes(origin))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    return origin;
+  }
+  return null;
+}
+
 export function getClientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   if (trustProxy) {
     const xff = req.headers["x-forwarded-for"];
     if (typeof xff === "string" && xff.length > 0) {
-      return xff.split(",")[0]!.trim();
+      const first = xff.split(",")[0]?.trim();
+      if (first) return first;
     }
   }
-  return req.socket.remoteAddress ?? "unknown";
+  return req.socket.remoteAddress || "unknown";
 }
 
-function timingSafeEqualString(a: string, b: string): boolean {
-  const ba = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ba.length !== bb.length) {
-    return false;
-  }
-  return timingSafeEqual(ba, bb);
-}
-
-export function extractBearerOrApiKey(req: http.IncomingMessage): string | undefined {
-  const auth = req.headers.authorization;
-  if (typeof auth === "string" && auth.startsWith("Bearer ")) {
-    return auth.slice(7).trim();
-  }
-  const xk = req.headers["x-api-key"];
-  if (typeof xk === "string" && xk.length > 0) {
-    return xk.trim();
-  }
-  if (Array.isArray(xk) && xk[0]) {
-    return xk[0].trim();
-  }
-  return undefined;
-}
-
-export function isAuthorized(req: http.IncomingMessage, expectedKey: string | undefined): boolean {
-  if (!expectedKey) {
-    return true;
-  }
-  const got = extractBearerOrApiKey(req);
-  if (!got) {
-    return false;
-  }
-  return timingSafeEqualString(got, expectedKey);
-}
-
-export function applyCorsHeaders(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  corsOrigins: string[]
-): void {
-  const origin = req.headers.origin;
-  if (origin && corsOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-  } else if (corsOrigins.includes("*")) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-  }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-API-Key, X-Request-Id"
-  );
-}
-
-type Window = { count: number; resetAt: number };
-
-export function createRateLimiter(perMinute: number): (ip: string) => boolean {
-  if (perMinute <= 0) {
-    return () => true;
-  }
-  const windows = new Map<string, Window>();
-  const windowMs = 60_000;
-  const max = perMinute;
-
-  return (ip: string): boolean => {
+export function createRateLimiter(limitPerMinute: number) {
+  const bucket = new Map<string, { count: number; resetAt: number }>();
+  return (key: string): boolean => {
+    if (limitPerMinute <= 0) return true;
     const now = Date.now();
-    let w = windows.get(ip);
-    if (!w || now >= w.resetAt) {
-      w = { count: 0, resetAt: now + windowMs };
-      windows.set(ip, w);
+    const curr = bucket.get(key);
+    if (!curr || curr.resetAt <= now) {
+      bucket.set(key, { count: 1, resetAt: now + 60_000 });
+      return true;
     }
-    w.count += 1;
-    if (w.count > max) {
-      return false;
-    }
+    if (curr.count >= limitPerMinute) return false;
+    curr.count += 1;
     return true;
   };
 }
 
-export function readLimitedBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let total = 0;
-
-    req.on("data", (chunk: Buffer | string) => {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      total += buf.length;
-      if (total > maxBytes) {
-        req.destroy();
-        reject(new PayloadTooLargeError());
-        return;
-      }
-      chunks.push(buf);
-    });
-
-    req.on("end", () => {
-      resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-
-    req.on("error", (err) => {
-      reject(err);
-    });
-  });
+function timingSafeEqualString(a: string, b: string): boolean {
+  const aa = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (aa.length !== bb.length) {
+    return false;
+  }
+  return timingSafeEqual(aa, bb);
 }
 
-/** Lee el cuerpo; si supera el límite responde 413 y devuelve `null`. */
+export function extractBearerOrApiKey(req: http.IncomingMessage): string | null {
+  const auth = req.headers.authorization;
+  if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
+    return auth.slice(7).trim();
+  }
+  const xApiKey = req.headers["x-api-key"];
+  if (typeof xApiKey === "string") {
+    return xApiKey.trim();
+  }
+  return null;
+}
+
 export async function readBodyCapped(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  maxBytes: number
+  maxBodyBytes: number
 ): Promise<string | null> {
-  try {
-    return await readLimitedBody(req, maxBytes);
-  } catch (e) {
-    if (e instanceof PayloadTooLargeError) {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += b.length;
+    if (total > maxBodyBytes) {
       res.statusCode = 413;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Payload too large" }));
+      res.end("Payload too large");
       return null;
     }
-    throw e;
+    chunks.push(b);
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export function isApiKeyValid(rawToken: string, configuredApiKey: string | undefined): boolean {
+  if (!configuredApiKey) return false;
+  return timingSafeEqualString(rawToken, configuredApiKey);
 }
