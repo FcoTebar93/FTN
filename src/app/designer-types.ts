@@ -38,6 +38,13 @@ export interface ParallelStep extends BaseStep {
 
 export type WorkflowStep = ActivityStep | SleepStep | SignalStep | ConditionalStep | ParallelStep;
 
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type ExecutionSchedule =
+  | { type: "instant" }
+  | { type: "daily"; hour: number; minute: number; timezone?: string }
+  | { type: "weekly"; weekdays: Weekday[]; hour: number; minute: number; timezone?: string };
+
 export interface StoredWorkflow {
   id: string;
   version: string;
@@ -46,6 +53,8 @@ export interface StoredWorkflow {
   tags?: string[];
   inputSchema?: JsonSchema;
   resultSchema?: JsonSchema;
+  schedule?: ExecutionSchedule;
+  scheduledInput?: unknown;
   steps: WorkflowStep[];
   entryStepId: string;
 }
