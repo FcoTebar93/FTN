@@ -27,21 +27,16 @@ import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog-routes";
 import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/api-security";
-import {
-  checkProtectedAccess,
-  isAuthConfigured,
-  isLoginConfigured,
-  issueAccessToken,
-  issueAccessTokenForSubject,
-  validateLoginCredentials,
-} from "./http/auth";
+import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/auth-registration";
 import { hashPassword, verifyPassword } from "./passwords";
 import { getUserPasswordHash, insertUser } from "./postgres-users";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
-import { getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow } from "../app/designer-store";
+import { configureDesignerStore, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledRun } from "../app/designer-store";
+import { runScheduledWorkflowTick } from "../app/designer-scheduler";
+import { normalizeStoredWorkflow, validateSchedule } from "../app/designer-schedule";
 
 import { DESIGNER_KINDS } from "../app/designer-kinds";
 import { runPostgresMigrations } from "./postgres-migrations";
@@ -65,6 +60,8 @@ async function main(): Promise<void> {
   } else {
     log.info("ftn.engine.persistence", { backend: "memory" });
   }
+
+  configureDesignerStore(pool);
 
   const eventStore = pool ? new PostgresEventStore(pool) : new InMemoryEventStore();
   const snapshotStore = pool ? new PostgresSnapshotStore(pool) : new InMemorySnapshotStore();
@@ -127,6 +124,8 @@ async function main(): Promise<void> {
   const activities = new InMemoryActivityRegistry();
   registerIntegrations(activities, integrationsConfig);
 
+  await loadAllFromDatabase();
+
   const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
   const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
 
@@ -164,6 +163,40 @@ async function main(): Promise<void> {
     workflowQueueName: "workflows",
     pollIntervalMs: 500,
   });
+
+  async function enqueueWorkflowStart(
+    name: string,
+    input: unknown
+  ): Promise<{ workflowId: string; runId: string; version: number }> {
+    const wfDef = getWorkflow(name);
+    if (!wfDef) {
+      throw new Error(`Workflow not found: ${name}`);
+    }
+    const descriptor = getWorkflowDescriptor(name);
+    if (descriptor?.inputSchema) {
+      const result = validateJson(descriptor.inputSchema, input);
+      if (!result.valid) {
+        throw new Error(`Invalid input: ${JSON.stringify(result.errors)}`);
+      }
+    }
+    const { workflowId, runId, version } = await runtime.startWorkflow({
+      workflowName: name,
+      input,
+      definition: wfDef,
+    });
+    const task: WorkflowTask = {
+      id: `wf-task-${workflowId}-${runId}`,
+      type: "workflow",
+      workflowId,
+      runId,
+      createdAt: new Date().toISOString(),
+      scheduledAt: new Date().toISOString(),
+      workerType: "workflow",
+      targetQueue: "workflows",
+    };
+    await taskQueue.enqueue(task);
+    return { workflowId, runId, version };
+  }
 
   const cancellation = { aborted: false };
 
@@ -452,7 +485,7 @@ async function main(): Promise<void> {
       }
 
       if (req.method === "GET" && (req.url === "/designer/workflows" || req.url?.startsWith("/designer/workflows?"))) {
-        const items = listStoredWorkflows();
+        const items = await listStoredWorkflows();
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(items));
         return;
@@ -468,7 +501,7 @@ async function main(): Promise<void> {
         }
 
         const id = decodeURIComponent(parts[3]);
-        const wf = getStoredWorkflow(id);
+        const wf = await getStoredWorkflow(id);
         if (wf === undefined) {
           res.statusCode = 404;
           res.end("Designer workflow not found");
@@ -492,17 +525,44 @@ async function main(): Promise<void> {
             return;
           }
 
-          if (getStoredWorkflow(parsed.id) !== undefined) {
+          if ((await getStoredWorkflow(parsed.id)) !== undefined) {
             res.statusCode = 409;
             res.end(`StoredWorkflow "${parsed.id}" already exists`);
             return;
           }
 
-          upsertStoredWorkflow(parsed);
+          const normalized = normalizeStoredWorkflow(parsed);
+          const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
+          if (schedErr) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: schedErr }));
+            return;
+          }
+
+          await upsertStoredWorkflow(normalized);
+
+          if (normalized.schedule?.type === "instant") {
+            try {
+              await enqueueWorkflowStart(normalized.id, normalized.scheduledInput ?? {});
+            } catch (e) {
+              res.statusCode = 201;
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  ok: true,
+                  id: normalized.id,
+                  version: normalized.version,
+                  instantRunError: String((e as Error).message),
+                })
+              );
+              return;
+            }
+          }
 
           res.setHeader("Content-Type", "application/json");
           res.statusCode = 201;
-          res.end(JSON.stringify({ ok: true, id: parsed.id, version: parsed.version }));
+          res.end(JSON.stringify({ ok: true, id: normalized.id, version: normalized.version }));
         } catch (e) {
           res.statusCode = 400;
           res.end(`Invalid JSON: ${(e as Error).message}`);
@@ -534,10 +594,19 @@ async function main(): Promise<void> {
 
           const stored: StoredWorkflow = { ...parsed, id };
 
-          upsertStoredWorkflow(stored);
+          const normalized = normalizeStoredWorkflow(stored);
+          const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
+          if (schedErr) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: schedErr }));
+            return;
+          }
+
+          await upsertStoredWorkflow(normalized);
 
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ ok: true, id: stored.id, version: stored.version }));
+          res.end(JSON.stringify({ ok: true, id: normalized.id, version: normalized.version }));
         } catch (e) {
           res.statusCode = 400;
           res.end(`Invalid JSON: ${(e as Error).message}`);
@@ -557,42 +626,8 @@ async function main(): Promise<void> {
             res.end(JSON.stringify({ error: "Missing name" }));
             return;
           }
-          const wfDef = getWorkflow(name);
-          if (!wfDef) {
-            res.statusCode = 404;
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ error: "Workflow not found", name }));
-            return;
-          }
-          const descriptor = getWorkflowDescriptor(name);
           const input = parsed.input;
-          if (descriptor?.inputSchema) {
-            const result = validateJson(descriptor.inputSchema, input);
-            if (!result.valid) {
-              res.statusCode = 400;
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
-              return;
-            }
-          }
-
-          const { workflowId, runId, version } = await runtime.startWorkflow({
-            workflowName: name,
-            input,
-            definition: wfDef,
-          });
-
-          const task: WorkflowTask = {
-            id: `wf-task-${workflowId}-${runId}`,
-            type: "workflow",
-            workflowId,
-            runId,
-            createdAt: new Date().toISOString(),
-            scheduledAt: new Date().toISOString(),
-            workerType: "workflow",
-            targetQueue: "workflows",
-          };
-          await taskQueue.enqueue(task);
+          const { workflowId, runId, version } = await enqueueWorkflowStart(name, input);
 
           res.statusCode = 201;
           res.setHeader("Content-Type", "application/json");
@@ -1034,10 +1069,32 @@ async function main(): Promise<void> {
     }, recoverIntervalMs);
   }
 
+  let designerSchedulerTimer: ReturnType<typeof setInterval> | undefined;
+  const designerSchedulerMs = Math.max(
+    10_000,
+    parseInt(process.env.FTN_DESIGNER_SCHEDULER_INTERVAL_MS ?? "30000", 10)
+  );
+  designerSchedulerTimer = setInterval(() => {
+    if (cancellation.aborted) {
+      return;
+    }
+    void runScheduledWorkflowTick({
+      listSchedulerRows,
+      recordScheduledRun,
+      startWorkflow: async (name, input) => {
+        await enqueueWorkflowStart(name, input);
+      },
+      log,
+    });
+  }, designerSchedulerMs);
+
   const shutdown = async () => {
     cancellation.aborted = true;
     if (recoverTimer) {
       clearInterval(recoverTimer);
+    }
+    if (designerSchedulerTimer) {
+      clearInterval(designerSchedulerTimer);
     }
     if (pool) {
       await pool.end();

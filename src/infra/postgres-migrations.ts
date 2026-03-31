@@ -74,6 +74,23 @@ COMMENT ON COLUMN ftn_workflow_events.event_json IS
   'WorkflowEvent serializado; debe incluir type, workflowId, runId, version, id, startedAt tras append.';
 `,
   },
+  {
+    version: 4,
+    name: "designer_workflows",
+    sql: `
+CREATE TABLE IF NOT EXISTS ftn_designer_workflows (
+  id TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  last_scheduled_run_at TIMESTAMPTZ NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ftn_designer_workflows_updated ON ftn_designer_workflows (updated_at);
+
+COMMENT ON TABLE ftn_designer_workflows IS
+  'Workflows del designer (JSON). last_scheduled_run_at evita dobles disparos el mismo día (TZ de la schedule).';
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
