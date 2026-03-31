@@ -168,6 +168,17 @@ export interface CatalogWorkflow {
   resultSchema?: JsonSchema;
 }
 
+export interface CredentialSummary {
+  provider: string;
+  config: Record<string, unknown>;
+  hasSecrets: boolean;
+  updatedAt: string;
+}
+
+export interface CredentialDetail extends CredentialSummary {
+  secrets: Record<string, unknown>;
+}
+
 export interface DesignerConditionalStep extends DesignerBaseStep {
   kind: "conditional";
   expression: string;
