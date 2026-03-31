@@ -30,7 +30,7 @@ import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, read
 import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/auth-registration";
 import { hashPassword, verifyPassword } from "./passwords";
-import { getUserPasswordHash, insertUser } from "./postgres-users";
+import { getUserPasswordHash, insertUser } from "./users";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";

@@ -4,7 +4,7 @@ import { Pool } from "pg";
 
 import { runPostgresMigrations } from "../../infra/postgres-migrations";
 import { hashPassword, verifyPassword } from "../../infra/passwords";
-import { getUserPasswordHash, insertUser } from "../../infra/postgres-users";
+import { getUserPasswordHash, insertUser } from "../../infra/users";
 
 const engineUrl = process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL;
 const describePg = engineUrl ? describe : describe.skip;
