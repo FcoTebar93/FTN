@@ -105,17 +105,26 @@ export interface JsonSchema {
   required?: string[];
 }
 
+export type DesignerWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type DesignerExecutionSchedule =
+  | { type: "instant" }
+  | { type: "daily"; hour: number; minute: number; timezone?: string }
+  | { type: "weekly"; weekdays: DesignerWeekday[]; hour: number; minute: number; timezone?: string };
+
 export interface DesignerWorkflowSummary {
   id: string;
   version: string;
   displayName: string;
   description?: string;
   tags?: string[];
+  schedule?: DesignerExecutionSchedule;
 }
 
 export interface DesignerStoredWorkflow extends DesignerWorkflowSummary {
   inputSchema?: JsonSchema;
   resultSchema?: JsonSchema;
+  scheduledInput?: unknown;
   steps: DesignerWorkflowStep[];
   entryStepId: string;
 }
