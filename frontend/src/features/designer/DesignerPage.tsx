@@ -1,7 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerExecutionSchedule, DesignerWeekday } from "../../api/types";
 import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
-import { startWorkflow } from "../../api/workflows";
 
 const TIMEZONES = [
   "UTC",
@@ -69,9 +68,6 @@ export function DesignerPage() {
   const [current, setCurrent] = useState<DesignerStoredWorkflow | null>(null);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [errorCurrent, setErrorCurrent] = useState<Error | null>(null);
-  const [testRunJson, setTestRunJson] = useState("{}");
-  const [testRunResult, setTestRunResult] = useState<string | null>(null);
-  const [testRunLoading, setTestRunLoading] = useState(false);
   const [schedInputDraft, setSchedInputDraft] = useState("{}");
 
   useEffect(() => {
@@ -94,28 +90,8 @@ export function DesignerPage() {
   function handleNew() {
     setCurrent(structuredClone(EMPTY_WORKFLOW));
     setErrorCurrent(null);
-    setTestRunJson("{}");
     setSchedInputDraft("{}");
-    setTestRunResult(null);
     setMode("edit");
-  }
-
-  async function handleTestRun() {
-    if (!current?.id?.trim()) return;
-    setTestRunLoading(true);
-    setTestRunResult(null);
-    try {
-      let input: unknown = {};
-      if (testRunJson.trim()) {
-        input = JSON.parse(testRunJson);
-      }
-      const res = await startWorkflow(current.id, input);
-      setTestRunResult(JSON.stringify(res, null, 2));
-    } catch (e) {
-      setTestRunResult(`Error: ${(e as Error).message}`);
-    } finally {
-      setTestRunLoading(false);
-    }
   }
 
   function handleEdit(id: string) {
@@ -131,13 +107,10 @@ export function DesignerPage() {
         setCurrent(normalized);
         try {
           const inj = JSON.stringify(normalized.scheduledInput ?? {}, null, 2);
-          setTestRunJson(inj);
           setSchedInputDraft(inj);
         } catch {
-          setTestRunJson("{}");
           setSchedInputDraft("{}");
         }
-        setTestRunResult(null);
         setMode("edit");
       })
       .catch((e) => setErrorCurrent(e as Error))
@@ -920,49 +893,6 @@ export function DesignerPage() {
                         })}
                       </ul>
                     </>
-                  )}
-                </section>
-
-                <section class="workflow-section">
-                  <h3>Probar ejecución</h3>
-                  <p class="detail-muted">
-                    Lanza <code>POST /workflows</code> con el id de este workflow (debe estar guardado). Input JSON
-                    independiente del bloque anterior si quieres probar otro payload.
-                  </p>
-                  <div class="form-row">
-                    <label>Input (JSON)</label>
-                    <textarea
-                      rows={5}
-                      style={{ width: "100%", fontFamily: "monospace", fontSize: "12px" }}
-                      value={testRunJson}
-                      onInput={(e) => setTestRunJson((e.target as HTMLTextAreaElement).value)}
-                    />
-                  </div>
-                  <div class="form-row">
-                    <button
-                      type="button"
-                      class="workflow-filter-btn"
-                      disabled={!current.id?.trim() || testRunLoading}
-                      onClick={() => void handleTestRun()}
-                    >
-                      {testRunLoading ? "Lanzando…" : "Ejecutar ahora"}
-                    </button>
-                  </div>
-                  {testRunResult && (
-                    <pre
-                      class="detail-muted"
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        fontSize: "12px",
-                        maxHeight: "160px",
-                        overflow: "auto",
-                        padding: "8px",
-                        background: "var(--panel-bg, #1a1a1e)",
-                        borderRadius: "6px",
-                      }}
-                    >
-                      {testRunResult}
-                    </pre>
                   )}
                 </section>
 
