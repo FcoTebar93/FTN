@@ -4,6 +4,7 @@ export interface DesignerTemplate {
   id: string;
   label: string;
   description: string;
+  requiredActivities: string[];
   build: () => DesignerStoredWorkflow;
 }
 
@@ -12,6 +13,7 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
     id: "kyc-daily-email",
     label: "KYC diario + email",
     description: "Verificación de identidad y envío de email diario a una hora fija.",
+    requiredActivities: ["identity.verifyIdentity:v1", "notifications.sendEmail:v1"],
     build: () => ({
       id: "kyc-daily-email",
       version: "v1",
@@ -71,6 +73,12 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
     id: "signup-payment-crm",
     label: "Alta con pago + CRM",
     description: "Checkout de pago, notificación email y alta/actualización en CRM.",
+    requiredActivities: [
+      "payments.stripeCreateCheckoutSession:v1",
+      "payments.getPaymentStatus:v1",
+      "notifications.sendEmail:v1",
+      "crm.upsertUser:v1",
+    ],
     build: () => ({
       id: "signup-payment-crm",
       version: "v1",
@@ -169,6 +177,11 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
     id: "order-processing-instant",
     label: "Procesar pedido (instantáneo)",
     description: "Valida, cobra y crea envío al guardar el workflow.",
+    requiredActivities: [
+      "payments.validateOrder:v1",
+      "payments.chargePayment:v1",
+      "logistics.createShipment:v1",
+    ],
     build: () => ({
       id: "order-processing-instant",
       version: "v1",
@@ -235,6 +248,7 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
     id: "sms-weekly-reminder",
     label: "Recordatorio SMS semanal",
     description: "Envía SMS de recordatorio en días y hora seleccionados.",
+    requiredActivities: ["notifications.sendSms:v1"],
     build: () => ({
       id: "sms-weekly-reminder",
       version: "v1",
@@ -282,6 +296,7 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
     id: "webhook-weekly-crm",
     label: "Webhook semanal → CRM",
     description: "Consulta HTTP y upsert en CRM de lunes a viernes.",
+    requiredActivities: ["http.request:v1", "crm.upsertUser:v1"],
     build: () => ({
       id: "webhook-weekly-crm",
       version: "v1",

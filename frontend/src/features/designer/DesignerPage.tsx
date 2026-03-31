@@ -3,7 +3,7 @@ import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowS
 import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
 import { TIMEZONES, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
-import { WORKFLOW_TEMPLATES } from "./templates";
+import { WORKFLOW_TEMPLATES, type DesignerTemplate } from "./templates";
 
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
@@ -35,6 +35,7 @@ export function DesignerPage() {
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [errorCurrent, setErrorCurrent] = useState<Error | null>(null);
   const [schedInputDraft, setSchedInputDraft] = useState("{}");
+  const [templateError, setTemplateError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoadingActivities(true);
@@ -56,16 +57,28 @@ export function DesignerPage() {
   function handleNew() {
     setCurrent(structuredClone(EMPTY_WORKFLOW));
     setErrorCurrent(null);
+    setTemplateError(null);
     setSchedInputDraft("{}");
     setMode("edit");
+  }
+
+  function missingActivitiesForTemplate(template: DesignerTemplate): string[] {
+    const available = new Set(activities.map((a) => a.name));
+    return template.requiredActivities.filter((name) => !available.has(name));
   }
 
   function handleNewFromTemplate(templateId: string) {
     const tpl = WORKFLOW_TEMPLATES.find((t) => t.id === templateId);
     if (!tpl) return;
+    const missing = missingActivitiesForTemplate(tpl);
+    if (missing.length > 0) {
+      setTemplateError(`La plantilla "${tpl.label}" requiere activities no registradas: ${missing.join(", ")}`);
+      return;
+    }
     const wf = tpl.build();
     setCurrent(structuredClone(wf));
     setErrorCurrent(null);
+    setTemplateError(null);
     try {
       setSchedInputDraft(JSON.stringify(wf.scheduledInput ?? {}, null, 2));
     } catch {
@@ -225,6 +238,7 @@ export function DesignerPage() {
           <h2 class="panel-title">Designer · Workflows JSON</h2>
           {loadingActivities && <p class="detail-muted">Cargando catálogo de activities…</p>}
           {activitiesError && <p class="panel panel-error">Activities: {activitiesError.message}</p>}
+          {templateError && <p class="panel panel-error">{templateError}</p>}
           <button type="button" class="workflow-filter-btn" onClick={handleNew}>
             + Nuevo workflow
           </button>
@@ -241,14 +255,21 @@ export function DesignerPage() {
                 }}
               >
                 <option value="">(crear desde plantilla…)</option>
-                {WORKFLOW_TEMPLATES.map((tpl) => (
-                  <option key={tpl.id} value={tpl.id}>
-                    {tpl.label}
-                  </option>
-                ))}
+                {WORKFLOW_TEMPLATES.map((tpl) => {
+                  const missing = missingActivitiesForTemplate(tpl);
+                  const ok = missing.length === 0;
+                  return (
+                    <option key={tpl.id} value={tpl.id} title={tpl.description}>
+                      {ok ? tpl.label : `⚠ ${tpl.label} (faltan ${missing.length})`}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
+          <p class="detail-muted" style={{ marginTop: "6px" }}>
+            Una plantilla solo se aplica si sus activities requeridas están registradas en este entorno.
+          </p>
           {loadingList ? (
             <p class="detail-muted">Cargando…</p>
           ) : errorList ? (
