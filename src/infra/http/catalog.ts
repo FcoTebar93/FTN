@@ -1,6 +1,5 @@
 import type http from "node:http";
 import type { ActivityRegistry } from "../../core/activity-registry";
-import { WorkflowDefinition } from "../../core/ftn";
 import { JsonSchema } from "../../shared/json-schema";
 
 export interface ActivityDescriptor {

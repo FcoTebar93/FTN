@@ -2,7 +2,7 @@ import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import { createShipmentActivityDefinition } from "./create-shipment";
 
-export interface LogisticsConfig extends IntegrationModuleConfig {}
+export type LogisticsConfig = IntegrationModuleConfig;
 
 export const LogisticsModule: IntegrationModule = {
   name: "logistics",

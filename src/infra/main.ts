@@ -1139,12 +1139,7 @@ async function main(): Promise<void> {
     }, recoverIntervalMs);
   }
 
-  let designerSchedulerTimer: ReturnType<typeof setInterval> | undefined;
-  const designerSchedulerMs = Math.max(
-    10_000,
-    parseInt(process.env.FTN_DESIGNER_SCHEDULER_INTERVAL_MS ?? "30000", 10)
-  );
-  designerSchedulerTimer = setInterval(() => {
+  const designerSchedulerTimer: ReturnType<typeof setInterval> = setInterval(() => {
     if (cancellation.aborted) {
       return;
     }
@@ -1156,16 +1151,17 @@ async function main(): Promise<void> {
       },
       log,
     });
-  }, designerSchedulerMs);
+  }, Math.max(
+    10_000,
+    parseInt(process.env.FTN_DESIGNER_SCHEDULER_INTERVAL_MS ?? "30000", 10)
+  ));
 
   const shutdown = async () => {
     cancellation.aborted = true;
     if (recoverTimer) {
       clearInterval(recoverTimer);
     }
-    if (designerSchedulerTimer) {
-      clearInterval(designerSchedulerTimer);
-    }
+    clearInterval(designerSchedulerTimer);
     if (pool) {
       await pool.end();
     }

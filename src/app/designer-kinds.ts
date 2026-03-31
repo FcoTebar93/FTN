@@ -1,5 +1,3 @@
-import type { JsonSchema } from "../shared/json-schema";
-
 export type DesignerFieldType = "string" | "number" | "boolean" | "json" | "activity-select";
 
 export interface DesignerKindField {

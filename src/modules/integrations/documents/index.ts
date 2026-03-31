@@ -1,6 +1,6 @@
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { ActivityDefinition, AnyActivityDefinition } from "../../../core/activities";
+import type { AnyActivityDefinition } from "../../../core/activities";
 import { generateQrCodeActivityDefinition } from "./generate-qr-code";
 import { renderPdfFromTemplateActivityDefinition } from "./render-pdf-from-template";
 

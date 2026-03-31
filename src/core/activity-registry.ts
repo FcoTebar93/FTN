@@ -1,4 +1,4 @@
-import type { ActivityDefinition, ActivityName, AnyActivityDefinition } from "./activities";
+import type { ActivityName, AnyActivityDefinition } from "./activities";
 
 export interface ActivityRegistry {
   register(def: AnyActivityDefinition): void;

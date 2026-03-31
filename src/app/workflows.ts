@@ -13,7 +13,7 @@ const workflowCatalog: WorkflowCatalog = new Map();
 export function getWorkflowDescriptor(name: string): Omit<WorkflowDescriptor, "definition"> | undefined {
   const d = workflowCatalog.get(name);
   if (!d) return undefined;
-  const { definition, ...meta } = d;
+  const { definition: _definition, ...meta } = d;
   return meta;
 }
 
@@ -23,7 +23,7 @@ export function registerWorkflow<TInput, TResult>(descriptor: WorkflowDescriptor
 
 export function listWorkflows(): Array<Omit<WorkflowDescriptor, "definition">> {
   return Array.from(workflowCatalog.values())
-    .map(({ definition, ...meta }) => meta)
+    .map(({ definition: _definition, ...meta }) => meta)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

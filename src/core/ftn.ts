@@ -1,6 +1,6 @@
 import type { ActivityId, WorkflowId, RunId } from "../shared/types";
 
-export interface ActivityHandle<TResult> {
+export interface ActivityHandle<_TResult> {
     id: ActivityId;
     name: string;
 }

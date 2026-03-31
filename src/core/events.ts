@@ -1,4 +1,4 @@
-import type { WorkflowId, RunId, ActivityId, WorkerId, EventId, Version, StepId } from "../shared/types";
+import type { WorkflowId, RunId, ActivityId, EventId, Version, StepId } from "../shared/types";
 
 export type WorkflowEventType =
     | "WorkflowStarted"

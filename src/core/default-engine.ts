@@ -186,7 +186,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                 };
             }
             case "RetryGivenUp": {
-                const { stepId, attempts, reason } = event.payload;
+                const { stepId, attempts } = event.payload;
               
                 return {
                   ...nextState,

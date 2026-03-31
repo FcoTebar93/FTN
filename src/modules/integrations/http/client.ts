@@ -81,7 +81,7 @@ export async function executeHttpRequest(
 
     const text = new TextDecoder("utf-8", { fatal: false }).decode(slice);
     let bodyJson: unknown | undefined;
-    const looksJson = contentType.includes("json") || /^\s*[\[{]/.test(text);
+    const looksJson = contentType.includes("json") || /^(?:\s*\{|\s*\[)/.test(text);
     if (looksJson && text.length > 0) {
       try {
         bodyJson = JSON.parse(text) as unknown;
