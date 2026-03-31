@@ -8,6 +8,8 @@ export const FTN_SCOPES = {
   catalogRead: "catalog:read",
   designerRead: "designer:read",
   designerWrite: "designer:write",
+  credentialsRead: "credentials:read",
+  credentialsWrite: "credentials:write",
   workflowsRead: "workflows:read",
   workflowsWrite: "workflows:write",
   paymentsWrite: "payments:write",
@@ -264,6 +266,13 @@ export function requiredScopesForRoute(method: string, pathWithoutQuery: string)
       return [FTN_SCOPES.designerWrite];
     }
     return [FTN_SCOPES.designerRead];
+  }
+
+  if (p.startsWith("/credentials")) {
+    if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+      return [FTN_SCOPES.credentialsWrite];
+    }
+    return [FTN_SCOPES.credentialsRead];
   }
 
   if (p.startsWith("/workflows")) {

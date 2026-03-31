@@ -91,6 +91,20 @@ COMMENT ON TABLE ftn_designer_workflows IS
   'Workflows del designer (JSON). last_scheduled_run_at evita dobles disparos el mismo día (TZ de la schedule).';
 `,
   },
+  {
+    version: 5,
+    name: "credentials_store",
+    sql: `
+CREATE TABLE IF NOT EXISTS ftn_credentials (
+  provider TEXT PRIMARY KEY,
+  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  encrypted_secrets TEXT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ftn_credentials_updated_at ON ftn_credentials (updated_at DESC);
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
