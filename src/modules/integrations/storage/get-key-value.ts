@@ -1,4 +1,3 @@
-import { Pool } from "pg";
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import type { GetKeyValueInput, GetKeyValueResult } from "./types";
 import type { StorageConfig } from "./index";
@@ -6,13 +5,10 @@ import type { StorageConfig } from "./index";
 export function getKeyValueActivityDefinition(
   config: StorageConfig
 ): ActivityDefinition<GetKeyValueInput, GetKeyValueResult> {
-  const { databaseUrl } = config;
-
-  if (!databaseUrl) {
-    throw new Error("Config inválida para storage.getKeyValue: falta databaseUrl");
+  const pool = config.pool;
+  if (!pool) {
+    throw new Error("storage: falta pool");
   }
-
-  const pool = new Pool({ connectionString: databaseUrl });
 
   return {
     name: "storage.getKeyValue:v1",

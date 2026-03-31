@@ -1,3 +1,4 @@
+import { Pool } from "pg";
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
@@ -8,6 +9,7 @@ import { getKeyValueActivityDefinition } from "./get-key-value";
 export interface StorageConfig {
   enabled: boolean;
   databaseUrl?: string;
+  pool?: Pool;
 }
 
 export const StorageModule: IntegrationModule = {
@@ -15,13 +17,18 @@ export const StorageModule: IntegrationModule = {
   registerActivities(registry: ActivityRegistry, config: StorageConfig) {
     if (!config.enabled) return;
 
-    const defs: AnyActivityDefinition[] = [];
+    const pool =
+      config.pool ??
+      (config.databaseUrl ? new Pool({ connectionString: config.databaseUrl }) : undefined);
+    if (!pool) return;
 
-    if (config.databaseUrl) {
-      defs.push(dbExecuteActivityDefinition(config));
-      defs.push(putKeyValueActivityDefinition(config));
-      defs.push(getKeyValueActivityDefinition(config));
-    }
+    const merged: StorageConfig = { ...config, pool };
+
+    const defs: AnyActivityDefinition[] = [
+      dbExecuteActivityDefinition(merged),
+      putKeyValueActivityDefinition(merged),
+      getKeyValueActivityDefinition(merged),
+    ];
 
     for (const def of defs) {
       registry.register(def);

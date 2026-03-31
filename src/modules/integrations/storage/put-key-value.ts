@@ -1,16 +1,12 @@
-import { Pool } from "pg";
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import type { PutKeyValueInput, PutKeyValueResult } from "./types";
 import type { StorageConfig } from "./index";
 
 export function putKeyValueActivityDefinition(config: StorageConfig): ActivityDefinition<PutKeyValueInput, PutKeyValueResult> {
-  const { databaseUrl } = config;
-
-  if (!databaseUrl) {
-    throw new Error("Config inválida para storage.putKeyValue: falta databaseUrl");
+  const pool = config.pool;
+  if (!pool) {
+    throw new Error("storage: falta pool");
   }
-
-  const pool = new Pool({ connectionString: databaseUrl });
 
   return {
     name: "storage.putKeyValue:v1",
