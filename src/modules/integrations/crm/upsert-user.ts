@@ -1,16 +1,12 @@
-import { Pool } from "pg";
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import type { UpsertUserInput, UpsertUserResult } from "./types";
 import type { CrmConfig } from "./index";
 
 export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinition<UpsertUserInput, UpsertUserResult> {
-  const { databaseUrl } = config;
-
-  if (!databaseUrl) {
-    throw new Error("Config inválida para crm.upsertUser: falta databaseUrl");
+  const pool = config.pool;
+  if (!pool) {
+    throw new Error("crm: falta pool");
   }
-
-  const pool = new Pool({ connectionString: databaseUrl });
 
   return {
     name: "crm.upsertUser:v1",
