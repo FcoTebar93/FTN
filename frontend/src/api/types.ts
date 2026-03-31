@@ -188,5 +188,4 @@ export type DesignerWorkflowStep =
   | DesignerSleepStep
   | DesignerSignalStep
   | DesignerConditionalStep
-  | DesignerParallelStep
-  | CatalogWorkflow;
+  | DesignerParallelStep;

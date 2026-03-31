@@ -1,6 +1,44 @@
 import { useEffect, useState } from "preact/hooks";
-import type {DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, DesignerKind, ActivityCatalogItem } from "../../api/types";
-import {getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog, getDesignerKinds } from "../../api/designer";
+import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerExecutionSchedule, DesignerWeekday } from "../../api/types";
+import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
+import { startWorkflow } from "../../api/workflows";
+
+const TIMEZONES = [
+  "UTC",
+  "Europe/Madrid",
+  "Europe/London",
+  "America/Argentina/Buenos_Aires",
+  "America/Mexico_City",
+  "America/New_York",
+];
+
+const WEEKDAY_LABELS: { value: DesignerWeekday; label: string }[] = [
+  { value: 0, label: "Lun" },
+  { value: 1, label: "Mar" },
+  { value: 2, label: "Mié" },
+  { value: 3, label: "Jue" },
+  { value: 4, label: "Vie" },
+  { value: 5, label: "Sáb" },
+  { value: 6, label: "Dom" },
+];
+
+function formatHM(h: number, m: number): string {
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function parseHM(s: string): { hour: number; minute: number } {
+  const [a, b] = s.split(":");
+  const hour = Number(a);
+  const minute = Number(b);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return { hour: 9, minute: 0 };
+  return { hour: Math.max(0, Math.min(23, hour)), minute: Math.max(0, Math.min(59, minute)) };
+}
+
+function scheduleSummary(s?: DesignerExecutionSchedule): string {
+  if (!s || s.type === "instant") return "Instantánea";
+  if (s.type === "daily") return `Diaria ${formatHM(s.hour, s.minute)} (${s.timezone ?? "UTC"})`;
+  return `Semanal ${formatHM(s.hour, s.minute)} · ${s.weekdays.length} día(s)`;
+}
 
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
@@ -8,6 +46,8 @@ const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   displayName: "",
   description: "",
   tags: [],
+  schedule: { type: "instant" },
+  scheduledInput: {},
   inputSchema: undefined,
   resultSchema: undefined,
   steps: [],
@@ -17,11 +57,10 @@ const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
 export function DesignerPage() {
   type Mode = "list" | "edit";
 
-  const [kinds, setKinds] = useState<DesignerKind[]>([]);
   const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
-  const [loadingMeta, setLoadingMeta] = useState(false);
-  const [errorMeta, setErrorMeta] = useState<Error | null>(null);
-  
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [activitiesError, setActivitiesError] = useState<Error | null>(null);
+
   const [mode, setMode] = useState<Mode>("list");
   const [workflows, setWorkflows] = useState<DesignerWorkflowSummary[]>([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -30,26 +69,53 @@ export function DesignerPage() {
   const [current, setCurrent] = useState<DesignerStoredWorkflow | null>(null);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [errorCurrent, setErrorCurrent] = useState<Error | null>(null);
+  const [testRunJson, setTestRunJson] = useState("{}");
+  const [testRunResult, setTestRunResult] = useState<string | null>(null);
+  const [testRunLoading, setTestRunLoading] = useState(false);
+  const [schedInputDraft, setSchedInputDraft] = useState("{}");
 
   useEffect(() => {
-    setLoadingMeta(true);
-    Promise.all([getDesignerKinds(), getActivitiesCatalog()])
-      .then(([k, a]) => {
-        setKinds(k);
-        setActivities(a);
-      })
-      .catch((e) => setErrorMeta(e as Error))
-      .finally(() => setLoadingMeta(false));
+    setLoadingActivities(true);
+    getActivitiesCatalog()
+      .then(setActivities)
+      .catch((e) => setActivitiesError(e as Error))
+      .finally(() => setLoadingActivities(false));
+  }, []);
 
-    getDesignerKinds()
-      .then(setKinds)
-      .catch((e) => setErrorMeta(e as Error));
+  useEffect(() => {
+    setLoadingList(true);
+    setErrorList(null);
+    getDesignerWorkflows()
+      .then(setWorkflows)
+      .catch((e) => setErrorList(e as Error))
+      .finally(() => setLoadingList(false));
   }, []);
 
   function handleNew() {
     setCurrent(structuredClone(EMPTY_WORKFLOW));
     setErrorCurrent(null);
+    setTestRunJson("{}");
+    setSchedInputDraft("{}");
+    setTestRunResult(null);
     setMode("edit");
+  }
+
+  async function handleTestRun() {
+    if (!current?.id?.trim()) return;
+    setTestRunLoading(true);
+    setTestRunResult(null);
+    try {
+      let input: unknown = {};
+      if (testRunJson.trim()) {
+        input = JSON.parse(testRunJson);
+      }
+      const res = await startWorkflow(current.id, input);
+      setTestRunResult(JSON.stringify(res, null, 2));
+    } catch (e) {
+      setTestRunResult(`Error: ${(e as Error).message}`);
+    } finally {
+      setTestRunLoading(false);
+    }
   }
 
   function handleEdit(id: string) {
@@ -57,7 +123,21 @@ export function DesignerPage() {
     setErrorCurrent(null);
     getDesignerWorkflow(id)
       .then((wf) => {
-        setCurrent(wf);
+        const normalized: DesignerStoredWorkflow = {
+          ...wf,
+          schedule: wf.schedule ?? { type: "instant" },
+          scheduledInput: wf.scheduledInput ?? {},
+        };
+        setCurrent(normalized);
+        try {
+          const inj = JSON.stringify(normalized.scheduledInput ?? {}, null, 2);
+          setTestRunJson(inj);
+          setSchedInputDraft(inj);
+        } catch {
+          setTestRunJson("{}");
+          setSchedInputDraft("{}");
+        }
+        setTestRunResult(null);
         setMode("edit");
       })
       .catch((e) => setErrorCurrent(e as Error))
@@ -87,10 +167,28 @@ export function DesignerPage() {
         throw new Error("entryStepId debe ser el id de un step existente");
       }
 
+      const sched = current.schedule ?? { type: "instant" as const };
+      if (sched.type === "weekly" && (!sched.weekdays || sched.weekdays.length === 0)) {
+        throw new Error("En ejecución semanal elige al menos un día");
+      }
+
+      let scheduledInput: unknown = {};
+      try {
+        scheduledInput = schedInputDraft.trim() === "" ? {} : JSON.parse(schedInputDraft);
+      } catch {
+        throw new Error("Input programado: JSON inválido");
+      }
+
+      const toSave: DesignerStoredWorkflow = {
+        ...current,
+        schedule: sched,
+        scheduledInput,
+      };
+
       if (workflows.some((w) => w.id === current.id)) {
-        await updateDesignerWorkflow(current.id, current);
+        await updateDesignerWorkflow(current.id, toSave);
       } else {
-        await createDesignerWorkflow(current);
+        await createDesignerWorkflow(toSave);
       }
 
       const updatedList = await getDesignerWorkflows();
@@ -149,6 +247,8 @@ export function DesignerPage() {
       <div class="sidebar">
         <div class="panel">
           <h2 class="panel-title">Designer · Workflows JSON</h2>
+          {loadingActivities && <p class="detail-muted">Cargando catálogo de activities…</p>}
+          {activitiesError && <p class="panel panel-error">Activities: {activitiesError.message}</p>}
           <button type="button" class="workflow-filter-btn" onClick={handleNew}>
             + Nuevo workflow
           </button>
@@ -170,6 +270,9 @@ export function DesignerPage() {
                   <div class="workflow-name">{w.displayName || w.id}</div>
                   <div class="workflow-meta">
                     <span>{w.id}</span> · <span>v{w.version}</span>
+                  </div>
+                  <div class="detail-muted" style={{ fontSize: "11px", marginTop: "4px" }}>
+                    {scheduleSummary(w.schedule)}
                   </div>
                 </li>
               ))}
@@ -248,6 +351,166 @@ export function DesignerPage() {
                         updateCurrent((prev) => ({ ...prev, tags }));
                       }}
                     />
+                  </div>
+                </section>
+
+                <section class="workflow-section workflow-section--meta">
+                  <h3>Ejecución</h3>
+                  <p class="detail-muted">
+                    Instantánea: se lanza al guardar por primera vez. Diaria / semanal: el servidor comprueba cada
+                    minuto (intervalo configurable) la hora en la zona indicada.
+                  </p>
+                  <div class="form-row">
+                    <label>Modo</label>
+                    <select
+                      value={current.schedule?.type ?? "instant"}
+                      onInput={(e) => {
+                        const v = (e.target as HTMLSelectElement).value;
+                        updateCurrent((prev) => {
+                          if (v === "instant") {
+                            return { ...prev, schedule: { type: "instant" } };
+                          }
+                          if (v === "daily") {
+                            return {
+                              ...prev,
+                              schedule: {
+                                type: "daily",
+                                hour: 9,
+                                minute: 0,
+                                timezone: "Europe/Madrid",
+                              },
+                            };
+                          }
+                          return {
+                            ...prev,
+                            schedule: {
+                              type: "weekly",
+                              weekdays: [0, 1, 2, 3, 4],
+                              hour: 9,
+                              minute: 0,
+                              timezone: "Europe/Madrid",
+                            },
+                          };
+                        });
+                      }}
+                    >
+                      <option value="instant">Instantánea (al crear)</option>
+                      <option value="daily">Diaria</option>
+                      <option value="weekly">Semanal (días concretos)</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>Zona horaria (IANA)</label>
+                    <select
+                      value={
+                        current.schedule?.type === "instant"
+                          ? "UTC"
+                          : (current.schedule?.timezone ?? "UTC")
+                      }
+                      disabled={current.schedule?.type === "instant"}
+                      onInput={(e) => {
+                        const tz = (e.target as HTMLSelectElement).value;
+                        updateCurrent((prev) => {
+                          const s = prev.schedule;
+                          if (!s || s.type === "instant") return prev;
+                          return { ...prev, schedule: { ...s, timezone: tz } };
+                        });
+                      }}
+                    >
+                      {TIMEZONES.map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tz}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {current.schedule?.type === "daily" && (
+                    <div class="form-row">
+                      <label>Hora (en la zona elegida)</label>
+                      <input
+                        type="time"
+                        value={formatHM(current.schedule.hour, current.schedule.minute)}
+                        onInput={(e) => {
+                          const { hour, minute } = parseHM((e.target as HTMLInputElement).value);
+                          updateCurrent((prev) => ({
+                            ...prev,
+                            schedule:
+                              prev.schedule?.type === "daily"
+                                ? { ...prev.schedule, hour, minute }
+                                : prev.schedule,
+                          }));
+                        }}
+                      />
+                    </div>
+                  )}
+                  {current.schedule?.type === "weekly" && (
+                    <>
+                      <div class="form-row">
+                        <label>Días</label>
+                        <div class="weekday-chips">
+                          {WEEKDAY_LABELS.map(({ value, label }) => {
+                            const sel = (current.schedule?.type === "weekly" ? current.schedule.weekdays : []).includes(
+                              value
+                            );
+                            return (
+                              <label key={value} class="weekday-chip">
+                                <input
+                                  type="checkbox"
+                                  checked={sel}
+                                  onChange={() => {
+                                    updateCurrent((prev) => {
+                                      if (prev.schedule?.type !== "weekly") return prev;
+                                      const set = new Set(prev.schedule.weekdays);
+                                      if (set.has(value)) set.delete(value);
+                                      else set.add(value);
+                                      return {
+                                        ...prev,
+                                        schedule: {
+                                          ...prev.schedule,
+                                          weekdays: [...set].sort() as DesignerWeekday[],
+                                        },
+                                      };
+                                    });
+                                  }}
+                                />
+                                {label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div class="form-row">
+                        <label>Hora (en la zona elegida)</label>
+                        <input
+                          type="time"
+                          value={
+                            current.schedule?.type === "weekly"
+                              ? formatHM(current.schedule.hour, current.schedule.minute)
+                              : "09:00"
+                          }
+                          onInput={(e) => {
+                            const { hour, minute } = parseHM((e.target as HTMLInputElement).value);
+                            updateCurrent((prev) => ({
+                              ...prev,
+                              schedule:
+                                prev.schedule?.type === "weekly"
+                                  ? { ...prev.schedule, hour, minute }
+                                  : prev.schedule,
+                            }));
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div class="form-row">
+                    <label>Input programado / prueba (JSON)</label>
+                    <textarea
+                      rows={4}
+                      style={{ width: "100%", fontFamily: "monospace", fontSize: "12px" }}
+                      value={schedInputDraft}
+                      onInput={(e) => setSchedInputDraft((e.target as HTMLTextAreaElement).value)}
+                    />
+                    <p class="detail-muted">Se usa en la ejecución instantánea al crear y en cada run programado.</p>
                   </div>
                 </section>
 
@@ -590,7 +853,7 @@ export function DesignerPage() {
                         {step.kind === "parallel" && (
                         <>
                           {Array.isArray((step as any).branches) &&
-                            (step as any).branches.map((branch: string[], idx: number) => (
+                            (step as any).branches.map((_branch: string[], idx: number) => (
                               <div class="form-row" key={idx}>
                                 <label>Rama {idx + 1}</label>
                                 <select
@@ -657,6 +920,49 @@ export function DesignerPage() {
                         })}
                       </ul>
                     </>
+                  )}
+                </section>
+
+                <section class="workflow-section">
+                  <h3>Probar ejecución</h3>
+                  <p class="detail-muted">
+                    Lanza <code>POST /workflows</code> con el id de este workflow (debe estar guardado). Input JSON
+                    independiente del bloque anterior si quieres probar otro payload.
+                  </p>
+                  <div class="form-row">
+                    <label>Input (JSON)</label>
+                    <textarea
+                      rows={5}
+                      style={{ width: "100%", fontFamily: "monospace", fontSize: "12px" }}
+                      value={testRunJson}
+                      onInput={(e) => setTestRunJson((e.target as HTMLTextAreaElement).value)}
+                    />
+                  </div>
+                  <div class="form-row">
+                    <button
+                      type="button"
+                      class="workflow-filter-btn"
+                      disabled={!current.id?.trim() || testRunLoading}
+                      onClick={() => void handleTestRun()}
+                    >
+                      {testRunLoading ? "Lanzando…" : "Ejecutar ahora"}
+                    </button>
+                  </div>
+                  {testRunResult && (
+                    <pre
+                      class="detail-muted"
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        fontSize: "12px",
+                        maxHeight: "160px",
+                        overflow: "auto",
+                        padding: "8px",
+                        background: "var(--panel-bg, #1a1a1e)",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      {testRunResult}
+                    </pre>
                   )}
                 </section>
 
