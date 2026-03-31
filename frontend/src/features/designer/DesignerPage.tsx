@@ -1,64 +1,9 @@
 import { useEffect, useState } from "preact/hooks";
-import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerExecutionSchedule, DesignerWeekday } from "../../api/types";
+import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerWeekday } from "../../api/types";
 import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
+import { TIMEZONES, WEEKDAY_LABELS } from "./constants";
+import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { WORKFLOW_TEMPLATES } from "./templates";
-
-const TIMEZONES = [
-  "UTC",
-  "Europe/Madrid",
-  "Europe/London",
-  "America/Argentina/Buenos_Aires",
-  "America/Mexico_City",
-  "America/New_York",
-];
-
-const WEEKDAY_LABELS: { value: DesignerWeekday; label: string }[] = [
-  { value: 0, label: "Lun" },
-  { value: 1, label: "Mar" },
-  { value: 2, label: "Mié" },
-  { value: 3, label: "Jue" },
-  { value: 4, label: "Vie" },
-  { value: 5, label: "Sáb" },
-  { value: 6, label: "Dom" },
-];
-
-function formatHM(h: number, m: number): string {
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function parseHM(s: string): { hour: number; minute: number } {
-  const [a, b] = s.split(":");
-  const hour = Number(a);
-  const minute = Number(b);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return { hour: 9, minute: 0 };
-  return { hour: Math.max(0, Math.min(23, hour)), minute: Math.max(0, Math.min(59, minute)) };
-}
-
-function scheduleSummary(s?: DesignerExecutionSchedule): string {
-  if (!s || s.type === "instant") return "Instantánea";
-  if (s.type === "daily") return `Diaria ${formatHM(s.hour, s.minute)} (${s.timezone ?? "UTC"})`;
-  return `Semanal ${formatHM(s.hour, s.minute)} · ${s.weekdays.length} día(s)`;
-}
-
-function defaultValueBySchemaType(type?: string | string[]): unknown {
-  const t = Array.isArray(type) ? type[0] : type;
-  if (t === "number" || t === "integer") return 0;
-  if (t === "boolean") return false;
-  if (t === "array") return [];
-  if (t === "object") return {};
-  return "";
-}
-
-function buildDefaultInputFromSchema(schema?: unknown): Record<string, unknown> {
-  if (!schema || typeof schema !== "object") return {};
-  const s = schema as { type?: string | string[]; properties?: Record<string, { type?: string | string[] }> };
-  if (s.type !== "object" || !s.properties) return {};
-  const defaults: Record<string, unknown> = {};
-  for (const [key, prop] of Object.entries(s.properties)) {
-    defaults[key] = defaultValueBySchemaType(prop?.type);
-  }
-  return defaults;
-}
 
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
