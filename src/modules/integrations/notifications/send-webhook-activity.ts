@@ -1,4 +1,5 @@
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
+import { executeHttpRequest } from "../http/client";
 import type { NotificationsConfig } from "./index";
 import type { SendWebhookInput, SendWebhookResult } from "./types";
 
@@ -36,37 +37,16 @@ export function sendWebhookActivityDefinition(_config: NotificationsConfig): Act
         url: input.url,
         method,
       });
-
-      const fetchFn: (url: string, init?: any) => Promise<any> =
-        (globalThis as any).fetch;
-
-      if (!fetchFn) {
-        throw new Error("fetch global no disponible en este entorno");
-      }
-
-      const controller = new AbortController();
-      const timeout = input.timeoutMs ?? 10000;
-      const id = setTimeout(() => controller.abort(), timeout);
-
-      try {
-        const res = await fetchFn(input.url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            ...(input.headers ?? {}),
-          },
-          body: input.body !== undefined ? JSON.stringify(input.body) : undefined,
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          throw new Error(`Webhook error: ${res.status} ${res.statusText}`);
+      const response = await executeHttpRequest(
+        { ...input, method, timeoutMs: input.timeoutMs ?? 10_000 },
+        {
+          // Mantiene el comportamiento previo de webhook:
+          // permite URLs privadas (útil en integraciones internas) y exige 2xx.
+          allowPrivateUrls: true,
+          requireOk: true,
         }
-
-        return { status: res.status };
-      } finally {
-        clearTimeout(id);
-      }
+      );
+      return { status: response.status };
     },
   };
 }

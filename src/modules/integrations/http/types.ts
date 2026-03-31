@@ -11,7 +11,7 @@ export interface HttpRequestInput {
   url: string;
   method?: HttpRequestMethod;
   headers?: Record<string, string>;
-  body?: string | Record<string, unknown> | unknown[];
+  body?: unknown;
   timeoutMs?: number;
 }
 
