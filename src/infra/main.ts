@@ -86,6 +86,7 @@ async function main(): Promise<void> {
     storage: {
       enabled: !!databaseUrl,
       databaseUrl,
+      ...(pool ? { pool } : {}),
     },
     documents: {
       enabled: true,
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
     crm: {
       enabled: !!databaseUrl,
       databaseUrl,
+      ...(pool ? { pool } : {}),
     },
     http: {
       enabled: process.env.FTN_HTTP_DISABLED !== "1" && process.env.FTN_HTTP_DISABLED !== "true",
