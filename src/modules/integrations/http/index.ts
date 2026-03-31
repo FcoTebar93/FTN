@@ -2,7 +2,7 @@ import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
 import type { HttpConfig } from "./types";
-import { httpRequestActivityDefinition } from "./http-request";
+import { httpRequestActivityDefinition } from "./request";
 
 export type { HttpConfig } from "./types";
 

@@ -1,4 +1,5 @@
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
+import { executeHttpRequest } from "../http/client";
 import type { VerifyIdentityInput, VerifyIdentityResult } from "./types";
 
 export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIdentityInput, VerifyIdentityResult> {
@@ -29,23 +30,31 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
             const providerUrl = process.env.KYC_PROVIDER_URL?.trim();
             const providerToken = process.env.KYC_PROVIDER_TOKEN?.trim();
             if (providerUrl && providerToken) {
-              const res = await fetch(providerUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${providerToken}`,
+              const response = await executeHttpRequest(
+                {
+                  url: providerUrl,
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${providerToken}`,
+                  },
+                  body: {
+                    userId: input.userId,
+                    documentType: input.documentType,
+                    documentImageUrl: input.documentImageUrl,
+                  },
+                  timeoutMs: 60_000,
                 },
-                body: JSON.stringify({
-                  userId: input.userId,
-                  documentType: input.documentType,
-                  documentImageUrl: input.documentImageUrl,
-                }),
-              });
-              if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`KYC provider ${res.status}: ${errText.slice(0, 500)}`);
-              }
-              const data = (await res.json()) as Partial<VerifyIdentityResult>;
+                {
+                  requireOk: true,
+                  // Mantiene compatibilidad con proveedores internos.
+                  allowPrivateUrls: true,
+                }
+              );
+              const data =
+                response.bodyJson && typeof response.bodyJson === "object"
+                  ? (response.bodyJson as Partial<VerifyIdentityResult>)
+                  : {};
               return {
                 success: Boolean(data.success),
                 score: typeof data.score === "number" ? data.score : 0,

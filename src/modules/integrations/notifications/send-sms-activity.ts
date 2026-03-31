@@ -1,4 +1,5 @@
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
+import { executeHttpRequest } from "../http/client";
 import type { NotificationsConfig } from "./index";
 import type { SendSmsInput, SendSmsResult } from "./types";
 
@@ -33,20 +34,24 @@ export function sendSmsActivityDefinition(_config: NotificationsConfig): Activit
           Body: input.text,
         });
         const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${auth}`,
-            "Content-Type": "application/x-www-form-urlencoded",
+        const response = await executeHttpRequest(
+          {
+            url,
+            method: "POST",
+            headers: {
+              Authorization: `Basic ${auth}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+            timeoutMs: 10_000,
           },
-          body: body.toString(),
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Twilio SMS ${res.status}: ${errText.slice(0, 500)}`);
-        }
-        const json = (await res.json()) as { sid?: string };
-        ctx.log("SMS enviado (Twilio)", { to: input.to, sid: json.sid });
+          { requireOk: true }
+        );
+        const sid =
+          response.bodyJson && typeof response.bodyJson === "object" && "sid" in response.bodyJson
+            ? String((response.bodyJson as { sid?: unknown }).sid ?? "")
+            : undefined;
+        ctx.log("SMS enviado (Twilio)", { to: input.to, sid });
         return;
       }
 
