@@ -37,6 +37,7 @@ import { StoredWorkflow } from "../app/designer-types";
 import { configureDesignerStore, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledRun } from "../app/designer-store";
 import { runScheduledWorkflowTick } from "../app/designer-scheduler";
 import { normalizeStoredWorkflow, validateSchedule } from "../app/designer-schedule";
+import { configureCredentialsStore, getCredential, listCredentials, upsertCredential } from "../app/credentials";
 
 import { DESIGNER_KINDS } from "../app/designer-kinds";
 import { runPostgresMigrations } from "./postgres-migrations";
@@ -62,6 +63,7 @@ async function main(): Promise<void> {
   }
 
   configureDesignerStore(pool);
+  configureCredentialsStore(pool);
 
   const eventStore = pool ? new PostgresEventStore(pool) : new InMemoryEventStore();
   const snapshotStore = pool ? new PostgresSnapshotStore(pool) : new InMemorySnapshotStore();
@@ -512,6 +514,72 @@ async function main(): Promise<void> {
 
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(wf));
+        return;
+      }
+
+      if (req.method === "GET" && (rawPath === "/credentials" || rawPath.startsWith("/credentials?"))) {
+        const items = await listCredentials();
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(items));
+        return;
+      }
+
+      if (req.method === "GET" && rawPath.startsWith("/credentials/")) {
+        const parts = rawPath.split("/");
+        if (parts.length !== 3 || !parts[2]) {
+          res.statusCode = 400;
+          res.end("Expected /credentials/:provider");
+          return;
+        }
+        const provider = decodeURIComponent(parts[2]);
+        const cred = await getCredential(provider);
+        if (!cred) {
+          res.statusCode = 404;
+          res.end("Credential not found");
+          return;
+        }
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(cred));
+        return;
+      }
+
+      if (req.method === "PUT" && rawPath.startsWith("/credentials/")) {
+        const parts = rawPath.split("/");
+        if (parts.length !== 3 || !parts[2]) {
+          res.statusCode = 400;
+          res.end("Expected /credentials/:provider");
+          return;
+        }
+        const provider = decodeURIComponent(parts[2]);
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        try {
+          const parsed = JSON.parse(body || "{}") as {
+            config?: unknown;
+            secrets?: unknown;
+          };
+          const config =
+            parsed.config && typeof parsed.config === "object" && !Array.isArray(parsed.config)
+              ? (parsed.config as Record<string, unknown>)
+              : undefined;
+          const secrets =
+            parsed.secrets && typeof parsed.secrets === "object" && !Array.isArray(parsed.secrets)
+              ? (parsed.secrets as Record<string, unknown>)
+              : undefined;
+          if (!config && !secrets) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Payload must include config or secrets object" }));
+            return;
+          }
+          const saved = await upsertCredential(provider, { config, secrets });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(saved));
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: (e as Error).message }));
+        }
         return;
       }
 
