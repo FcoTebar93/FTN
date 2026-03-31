@@ -6,6 +6,7 @@ import { DesignerPage } from "./features/designer/DesignerPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { SessionToolbar } from "./features/auth/SessionToolbar";
+import { CredentialsPage } from "./features/credentials/CredentialsPage";
 import { fetchAuthStatus } from "./auth/session";
 import type { AuthStatus } from "./auth/session";
 import { API_BASE_URL, getAccessToken } from "./config";
@@ -139,6 +140,10 @@ export function App() {
 
   if (path.startsWith("/designer")) {
     return wrapped(<DesignerPage />);
+  }
+
+  if (path.startsWith("/credentials")) {
+    return wrapped(<CredentialsPage />);
   }
 
   return wrapped(<WorkflowsPage />);
