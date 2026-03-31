@@ -39,6 +39,26 @@ function scheduleSummary(s?: DesignerExecutionSchedule): string {
   return `Semanal ${formatHM(s.hour, s.minute)} · ${s.weekdays.length} día(s)`;
 }
 
+function defaultValueBySchemaType(type?: string | string[]): unknown {
+  const t = Array.isArray(type) ? type[0] : type;
+  if (t === "number" || t === "integer") return 0;
+  if (t === "boolean") return false;
+  if (t === "array") return [];
+  if (t === "object") return {};
+  return "";
+}
+
+function buildDefaultInputFromSchema(schema?: unknown): Record<string, unknown> {
+  if (!schema || typeof schema !== "object") return {};
+  const s = schema as { type?: string | string[]; properties?: Record<string, { type?: string | string[] }> };
+  if (s.type !== "object" || !s.properties) return {};
+  const defaults: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(s.properties)) {
+    defaults[key] = defaultValueBySchemaType(prop?.type);
+  }
+  return defaults;
+}
+
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
   version: "v1",
@@ -212,6 +232,29 @@ export function DesignerPage() {
     updateCurrent((prev) => ({
       ...prev,
       steps: prev.steps.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
+    }));
+  }
+
+  function handleStepKindChange(id: string, kind: DesignerStepKind) {
+    if (!current) return;
+    updateCurrent((prev) => ({
+      ...prev,
+      steps: prev.steps.map((s) => {
+        if (s.id !== id) return s;
+        if (kind === "activity") {
+          return { ...s, kind, activityName: (s as any).activityName ?? "", input: (s as any).input ?? {} } as any;
+        }
+        if (kind === "sleep") {
+          return { ...s, kind, milliseconds: (s as any).milliseconds ?? 1000 } as any;
+        }
+        if (kind === "signal") {
+          return { ...s, kind, signalName: (s as any).signalName ?? "signal-name" } as any;
+        }
+        if (kind === "conditional") {
+          return { ...s, kind, expression: (s as any).expression ?? "input.amount > 0", thenNext: (s as any).thenNext ?? null, elseNext: (s as any).elseNext ?? null } as any;
+        }
+        return { ...s, kind, branches: Array.isArray((s as any).branches) ? (s as any).branches : [[]] } as any;
+      }),
     }));
   }
 
@@ -541,11 +584,13 @@ export function DesignerPage() {
                               <label>Kind</label>
                               <select
                                 value={step.kind}
-                                onInput={(e) => handleStepFieldChange(step.id, "kind", (e.target as HTMLSelectElement).value as DesignerStepKind)}
+                                onInput={(e) => handleStepKindChange(step.id, (e.target as HTMLSelectElement).value as DesignerStepKind)}
                               >
                                 <option value="activity">activity</option>
                                 <option value="sleep">sleep</option>
                                 <option value="signal">signal</option>
+                                <option value="conditional">conditional</option>
+                                <option value="parallel">parallel</option>
                               </select>
                             </div>
                             {step.kind === "activity" && (
@@ -575,13 +620,16 @@ export function DesignerPage() {
                                 <label>Activity</label>
                                 <select
                                   value={(step as any).activityName ?? ""}
-                                  onInput={(e) =>
-                                    handleStepFieldChange(
-                                      step.id,
-                                      "activityName",
-                                      (e.target as HTMLSelectElement).value,
-                                    )
-                                  }
+                                  onInput={(e) => {
+                                    const activityName = (e.target as HTMLSelectElement).value;
+                                    const activity = activities.find((a) => a.name === activityName);
+                                    const defaults = buildDefaultInputFromSchema(activity?.inputSchema);
+                                    handleStepFieldChange(step.id, "activityName", activityName);
+                                    handleStepFieldChange(step.id, "input", {
+                                      ...defaults,
+                                      ...((step as any).input ?? {}),
+                                    });
+                                  }}
                                 >
                                   <option value="">(elige una activity)</option>
                                   {Object.entries(

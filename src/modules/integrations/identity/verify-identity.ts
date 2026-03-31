@@ -8,7 +8,7 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
         maxAttempts: 1,
         timeoutMs: 60_000,
         tags: ["identity", "kyc"],
-        version: "1.0.0",
+        version: "v1",
         inputSchema: {
           type: "object",
           required: ["userId", "documentType", "documentImageUrl"],
