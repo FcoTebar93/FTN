@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerExecutionSchedule, DesignerWeekday } from "../../api/types";
 import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
+import { WORKFLOW_TEMPLATES } from "./templates";
 
 const TIMEZONES = [
   "UTC",
@@ -111,6 +112,20 @@ export function DesignerPage() {
     setCurrent(structuredClone(EMPTY_WORKFLOW));
     setErrorCurrent(null);
     setSchedInputDraft("{}");
+    setMode("edit");
+  }
+
+  function handleNewFromTemplate(templateId: string) {
+    const tpl = WORKFLOW_TEMPLATES.find((t) => t.id === templateId);
+    if (!tpl) return;
+    const wf = tpl.build();
+    setCurrent(structuredClone(wf));
+    setErrorCurrent(null);
+    try {
+      setSchedInputDraft(JSON.stringify(wf.scheduledInput ?? {}, null, 2));
+    } catch {
+      setSchedInputDraft("{}");
+    }
     setMode("edit");
   }
 
@@ -268,6 +283,27 @@ export function DesignerPage() {
           <button type="button" class="workflow-filter-btn" onClick={handleNew}>
             + Nuevo workflow
           </button>
+          {WORKFLOW_TEMPLATES.length > 0 && (
+            <div class="form-row" style={{ marginTop: "8px" }}>
+              <label>Plantillas</label>
+              <select
+                onInput={(e) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  if (v) {
+                    handleNewFromTemplate(v);
+                    (e.target as HTMLSelectElement).value = "";
+                  }
+                }}
+              >
+                <option value="">(crear desde plantilla…)</option>
+                {WORKFLOW_TEMPLATES.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {loadingList ? (
             <p class="detail-muted">Cargando…</p>
           ) : errorList ? (
