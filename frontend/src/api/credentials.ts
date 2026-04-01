@@ -1,5 +1,5 @@
 import { fetchJson, putJson } from "./client";
-import type { CredentialDetail, CredentialSummary } from "./types";
+import type { CredentialDetail, CredentialSummary, IntegrationStatusItem } from "./types";
 
 export function listCredentials(): Promise<CredentialSummary[]> {
   return fetchJson<CredentialSummary[]>("/credentials");
@@ -14,4 +14,10 @@ export async function saveCredential(
   payload: { config?: Record<string, unknown>; secrets?: Record<string, unknown> }
 ): Promise<CredentialSummary> {
   return putJson<CredentialSummary>(`/credentials/${encodeURIComponent(provider)}`, payload);
+}
+
+export function getIntegrationsStatus(): Promise<IntegrationStatusItem[]> {
+  return fetchJson<{ items?: IntegrationStatusItem[] } | IntegrationStatusItem[]>("/integrations/status").then((res) =>
+    "items" in res && Array.isArray(res.items) ? res.items : (res as IntegrationStatusItem[])
+  );
 }

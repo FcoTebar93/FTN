@@ -275,51 +275,111 @@ async function main(): Promise<void> {
     source: "credentials" | "env" | "none";
     details?: string;
   }>> {
-    const hasAny = (v: unknown): boolean =>
-      Boolean(v && typeof v === "object" && !Array.isArray(v) && Object.keys(v as Record<string, unknown>).length > 0);
-    const cfgFromCred = async (provider: string): Promise<{ configured: boolean; source: "credentials" | "env" | "none" }> => {
-      const cred = await getCredential(subject, provider);
-      if (cred && (hasAny(cred.config) || hasAny(cred.secrets))) {
-        return { configured: true, source: "credentials" };
-      }
-      return { configured: false, source: "none" };
-    };
+    const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+    const obj = (v: unknown): Record<string, unknown> =>
+      v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
-    const stripe = await cfgFromCred("stripe");
-    const twilio = await cfgFromCred("twilio");
-    const kyc = await cfgFromCred("kyc");
-    const notifications = await cfgFromCred("notifications");
+    const credStripe = await getCredential(subject, "stripe");
+    const stripeKey =
+      str(obj(credStripe?.secrets).stripeSecretKey) ??
+      str(obj(credStripe?.secrets).secretKey) ??
+      str(obj(credStripe?.config).stripeSecretKey);
+    const stripeEnvKey = str(process.env.STRIPE_SECRET_KEY);
+    const stripeConfigured = Boolean(stripeKey || stripeEnvKey);
+    const stripeSource: "credentials" | "env" | "none" = stripeKey ? "credentials" : stripeEnvKey ? "env" : "none";
+    const stripeDetails = stripeConfigured
+      ? undefined
+      : "Falta stripeSecretKey en credenciales (secrets/config) o STRIPE_SECRET_KEY en entorno.";
 
-    const stripeEnv = Boolean(process.env.STRIPE_SECRET_KEY?.trim());
-    const twilioEnv = Boolean(process.env.TWILIO_ACCOUNT_SID?.trim() && process.env.TWILIO_AUTH_TOKEN?.trim());
-    const kycEnv = Boolean(process.env.KYC_PROVIDER_URL?.trim() && process.env.KYC_PROVIDER_TOKEN?.trim());
-    const sendgridEnv = Boolean(process.env.SENDGRID_API_KEY?.trim() && (process.env.EMAIL_FROM?.trim() || process.env.SMTP_FROM?.trim()));
-    const slackEnv = Boolean(process.env.SLACK_WEBHOOK_URL?.trim());
+    const credTwilio = await getCredential(subject, "twilio");
+    const twilioSid =
+      str(obj(credTwilio?.secrets).accountSid) ??
+      str(obj(credTwilio?.secrets).twilioAccountSid) ??
+      str(obj(credTwilio?.config).accountSid);
+    const twilioToken =
+      str(obj(credTwilio?.secrets).authToken) ??
+      str(obj(credTwilio?.secrets).twilioAuthToken) ??
+      str(obj(credTwilio?.config).authToken);
+    const twilioFrom =
+      str(obj(credTwilio?.config).fromNumber) ??
+      str(obj(credTwilio?.config).twilioFromNumber) ??
+      str(process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER);
+    const twilioEnv =
+      str(process.env.TWILIO_ACCOUNT_SID) && str(process.env.TWILIO_AUTH_TOKEN)
+        ? true
+        : false;
+    const twilioConfigured = Boolean((twilioSid && twilioToken && twilioFrom) || twilioEnv);
+    const twilioSource: "credentials" | "env" | "none" =
+      twilioSid && twilioToken && twilioFrom ? "credentials" : twilioEnv ? "env" : "none";
+    const twilioDetails = twilioConfigured
+      ? undefined
+      : "Faltan accountSid/authToken/fromNumber en twilio o TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN (+ from).";
+
+    const credKyc = await getCredential(subject, "kyc");
+    const kycUrl =
+      str(obj(credKyc?.secrets).providerUrl) ??
+      str(obj(credKyc?.config).providerUrl) ??
+      str(process.env.KYC_PROVIDER_URL);
+    const kycToken =
+      str(obj(credKyc?.secrets).providerToken) ??
+      str(obj(credKyc?.secrets).token) ??
+      str(obj(credKyc?.config).providerToken) ??
+      str(process.env.KYC_PROVIDER_TOKEN);
+    const kycEnv = Boolean(str(process.env.KYC_PROVIDER_URL) && str(process.env.KYC_PROVIDER_TOKEN));
+    const kycConfigured = Boolean((kycUrl && kycToken) || kycEnv);
+    const kycSource: "credentials" | "env" | "none" = kycUrl && kycToken ? "credentials" : kycEnv ? "env" : "none";
+    const kycDetails = kycConfigured ? undefined : "Faltan providerUrl y providerToken para KYC.";
+
+    const credNotifications = await getCredential(subject, "notifications");
+    const sendgridKey =
+      str(obj(credNotifications?.secrets).sendgridApiKey) ??
+      str(obj(credNotifications?.secrets).apiKey) ??
+      str(obj(credNotifications?.config).sendgridApiKey);
+    const emailFrom =
+      str(obj(credNotifications?.config).emailFrom) ??
+      str(obj(credNotifications?.config).from) ??
+      str(process.env.EMAIL_FROM ?? process.env.SMTP_FROM);
+    const slackWebhook =
+      str(obj(credNotifications?.secrets).slackWebhookUrl) ??
+      str(obj(credNotifications?.config).slackWebhookUrl) ??
+      str(process.env.SLACK_WEBHOOK_URL);
+    const sendgridEnv = Boolean(str(process.env.SENDGRID_API_KEY) && str(process.env.EMAIL_FROM ?? process.env.SMTP_FROM));
+    const slackEnv = Boolean(str(process.env.SLACK_WEBHOOK_URL));
+    const notificationsConfigured = Boolean((sendgridKey && emailFrom) || slackWebhook || sendgridEnv || slackEnv);
+    const notificationsSource: "credentials" | "env" | "none" =
+      (sendgridKey && emailFrom) || slackWebhook ? "credentials" : sendgridEnv || slackEnv ? "env" : "none";
+    const notificationsDetails = notificationsConfigured
+      ? undefined
+      : "Configura SendGrid (sendgridApiKey + emailFrom) o slackWebhookUrl.";
 
     return [
       {
         key: "stripe",
         label: "Stripe",
-        configured: stripe.configured || stripeEnv,
-        source: stripe.configured ? "credentials" : stripeEnv ? "env" : "none",
+        configured: stripeConfigured,
+        source: stripeSource,
+        details: stripeDetails,
       },
       {
         key: "twilio",
         label: "Twilio SMS",
-        configured: twilio.configured || twilioEnv,
-        source: twilio.configured ? "credentials" : twilioEnv ? "env" : "none",
+        configured: twilioConfigured,
+        source: twilioSource,
+        details: twilioDetails,
       },
       {
         key: "kyc",
         label: "KYC Provider",
-        configured: kyc.configured || kycEnv,
-        source: kyc.configured ? "credentials" : kycEnv ? "env" : "none",
+        configured: kycConfigured,
+        source: kycSource,
+        details: kycDetails,
       },
       {
         key: "notifications",
         label: "Email/Slack",
-        configured: notifications.configured || sendgridEnv || slackEnv,
-        source: notifications.configured ? "credentials" : sendgridEnv || slackEnv ? "env" : "none",
+        configured: notificationsConfigured,
+        source: notificationsSource,
+        details: notificationsDetails,
       },
       {
         key: "postgres",

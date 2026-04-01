@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { getCredential, listCredentials, saveCredential } from "../../api/credentials";
-import type { CredentialSummary } from "../../api/types";
+import { getCredential, getIntegrationsStatus, listCredentials, saveCredential } from "../../api/credentials";
+import type { CredentialSummary, IntegrationStatusItem } from "../../api/types";
 
 const PROVIDERS = ["stripe", "notifications", "crm", "twilio", "kyc"] as const;
 
@@ -13,6 +13,7 @@ export function CredentialsPage() {
   const [secretsDraft, setSecretsDraft] = useState("{}");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [statusMap, setStatusMap] = useState<Record<string, IntegrationStatusItem>>({});
 
   const current = useMemo(() => items.find((x) => x.provider === provider), [items, provider]);
 
@@ -22,6 +23,12 @@ export function CredentialsPage() {
     try {
       const rows = await listCredentials();
       setItems(rows);
+      const statuses = await getIntegrationsStatus();
+      const mapped: Record<string, IntegrationStatusItem> = {};
+      for (const s of statuses) {
+        mapped[s.key] = s;
+      }
+      setStatusMap(mapped);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -91,6 +98,7 @@ export function CredentialsPage() {
           {loading ? <p>Cargando...</p> : null}
           {PROVIDERS.map((p) => {
             const item = items.find((x) => x.provider === p);
+            const st = statusMap[p];
             return (
               <button
                 type="button"
@@ -99,7 +107,7 @@ export function CredentialsPage() {
                 onClick={() => setProvider(p)}
               >
                 <span>{p}</span>
-                <span>{item?.hasSecrets ? "secrets: ok" : "sin secrets"}</span>
+                <span>{st ? (st.configured ? `ok (${st.source})` : "error") : item?.hasSecrets ? "secrets: ok" : "sin secrets"}</span>
               </button>
             );
           })}
@@ -108,6 +116,11 @@ export function CredentialsPage() {
         <section className="credentials-editor">
           <h2>{provider}</h2>
           <p>Última actualización: {current?.updatedAt ? new Date(current.updatedAt).toLocaleString() : "nunca"}</p>
+          {statusMap[provider] && !statusMap[provider].configured ? (
+            <p className="credentials-error">
+              Validación: {statusMap[provider].details ?? "Configuración incompleta"}
+            </p>
+          ) : null}
           <label>
             Config (JSON)
             <textarea value={configDraft} onInput={(e) => setConfigDraft((e.target as HTMLTextAreaElement).value)} rows={10} />
