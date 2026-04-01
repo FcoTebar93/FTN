@@ -71,6 +71,67 @@ Frontend (`frontend/package.json`):
 - `npm run build`
 - `npm run preview`
 
+## Deploy reproducible (Docker Compose)
+
+`docker-compose.yml` levanta stack completo en local:
+
+- Backend FTN (`http://localhost:8000` por defecto)
+- Frontend (`http://localhost:5173` por defecto)
+- Postgres (`localhost:55432` por defecto)
+- Redis (`localhost:56379` por defecto)
+
+### Arranque
+
+```bash
+docker compose up --build
+```
+
+### Validación rápida
+
+1. Abre `http://localhost:8000/health`.
+2. Abre `http://localhost:8000/ready` y verifica `status: "ready"`.
+3. Abre frontend en `http://localhost:5173`.
+4. Swagger UI en `http://localhost:8000/docs`.
+5. Login demo:
+   - usuario: `demo`
+   - contraseña: `demo-password-123`
+
+### Operación
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose logs -f backend
+docker compose restart backend
+docker compose down
+docker compose down -v
+```
+
+### Troubleshooting rápido
+
+- Si aparece `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`, inicia Docker Desktop (engine Linux) y reintenta.
+- Valida que Docker esté operativo:
+
+```bash
+docker version
+docker compose ps
+```
+
+### Puertos configurables
+
+Puedes sobreescribir sin tocar el compose:
+
+- `FTN_BACKEND_PORT` (por defecto `8000`, mapea a `container:4000`)
+- `FTN_FRONTEND_PORT` (por defecto `5173`, mapea a `container:80`)
+- `FTN_POSTGRES_PORT` (por defecto `55432`, mapea a `container:5432`)
+- `FTN_REDIS_PORT` (por defecto `56379`, mapea a `container:6379`)
+
+Ejemplo:
+
+```bash
+FTN_BACKEND_PORT=8010 FTN_FRONTEND_PORT=5174 FTN_POSTGRES_PORT=55433 FTN_REDIS_PORT=56380 docker compose up --build
+```
+
 ## Estructura principal
 
 ```text
@@ -103,13 +164,12 @@ deploy/.env.example    # Variables de entorno de referencia
 
 ## Qué falta por tocar (Aún en construcción)
 
-1. **Deploy reproducible**: agregar `docker-compose.yml` y guía operativa (arranque backend + frontend + Postgres + Redis).
-2. **Documentación funcional**: ejemplos end-to-end por integración (payloads reales y respuestas esperadas).
-3. **Cobertura de tests**:
+1. **Documentación funcional**: ejemplos end-to-end por integración (payloads reales y respuestas esperadas).
+2. **Cobertura de tests**:
   - casos de fallo/reintento en workers,
   - casos de seguridad (auth/scope/rate limit),
   - pruebas E2E API + frontend.
-4. **Observabilidad**: métricas y trazas (profundizar sobre el logger actual).
-5. **Versionado de workflows**: estrategia explícita de compatibilidad entre versiones y migración de estado/eventos.
-6. **Hardening de producción**: límites, timeouts, política de errores y secretos por entorno.
+3. **Observabilidad**: métricas y trazas (profundizar sobre el logger actual).
+4. **Versionado de workflows**: estrategia explícita de compatibilidad entre versiones y migración de estado/eventos.
+5. **Hardening de producción**: límites, timeouts, política de errores y secretos por entorno.
 

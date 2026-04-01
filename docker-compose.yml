@@ -1,24 +1,69 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: ftn-postgres
     environment:
       POSTGRES_USER: ftn
       POSTGRES_PASSWORD: ftn
       POSTGRES_DB: ftn
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ftn -d ftn"]
       interval: 5s
-      timeout: 5s
-      retries: 8
+      timeout: 3s
+      retries: 20
+    ports:
+      - "${FTN_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - ftn_postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    container_name: ftn-redis
+    command: ["redis-server", "--appendonly", "yes"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 8
+      retries: 20
+    ports:
+      - "${FTN_REDIS_PORT:-56379}:6379"
+    volumes:
+      - ftn_redis_data:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ftn-backend
+    environment:
+      PORT: 4000
+      FTN_ENGINE_DATABASE_URL: postgres://ftn:ftn@postgres:5432/ftn
+      DATABASE_URL: postgres://ftn:ftn@postgres:5432/ftn
+      REDIS_URL: redis://redis:6379
+      FTN_JWT_SECRET: change-this-in-real-env-32-chars-min
+      FTN_DEFAULT_USER_USERNAME: demo
+      FTN_DEFAULT_USER_PASSWORD: demo-password-123
+      FRONTEND_BASE_URL: http://localhost:${FTN_FRONTEND_PORT:-5173}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${FTN_BACKEND_PORT:-8000}:4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:${FTN_BACKEND_PORT:-8000}
+    container_name: ftn-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FTN_FRONTEND_PORT:-5173}:80"
+
+volumes:
+  ftn_postgres_data:
+  ftn_redis_data:
