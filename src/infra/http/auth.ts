@@ -251,6 +251,14 @@ function authenticate(req: http.IncomingMessage, config: ApiSecurityConfig): Aut
   return { kind: "invalid" };
 }
 
+export function authenticatePrincipal(
+  req: http.IncomingMessage,
+  config: ApiSecurityConfig
+): AuthPrincipal | undefined {
+  const attempt = authenticate(req, config);
+  return attempt.kind === "ok" ? attempt.principal : undefined;
+}
+
 export function requiredScopesForRoute(method: string, pathWithoutQuery: string): string[] {
   const p = pathWithoutQuery.split("?")[0] ?? "";
 

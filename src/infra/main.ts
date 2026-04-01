@@ -27,7 +27,7 @@ import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog";
 import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/security";
-import { checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
+import { authenticatePrincipal, checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword, verifyPassword } from "./passwords";
 import { getUserPasswordHash, insertUser } from "./users";
@@ -84,6 +84,58 @@ async function main(): Promise<void> {
   }
 
   const databaseUrl = process.env.DATABASE_URL?.trim();
+  const systemSubject = process.env.FTN_SYSTEM_SUBJECT?.trim() || "system";
+  const stripeCredential = await getCredential(systemSubject, "stripe");
+  const twilioCredential = await getCredential(systemSubject, "twilio");
+  const kycCredential = await getCredential(systemSubject, "kyc");
+  const notificationsCredential = await getCredential(systemSubject, "notifications");
+  const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+  const stripeSecretKey =
+    str(stripeCredential?.secrets?.stripeSecretKey) ??
+    str(stripeCredential?.secrets?.secretKey) ??
+    str(stripeCredential?.config?.stripeSecretKey) ??
+    str(process.env.STRIPE_SECRET_KEY);
+
+  const sendgridApiKey =
+    str(notificationsCredential?.secrets?.sendgridApiKey) ??
+    str(notificationsCredential?.secrets?.apiKey) ??
+    str(notificationsCredential?.config?.sendgridApiKey) ??
+    str(process.env.SENDGRID_API_KEY);
+  const emailFrom =
+    str(notificationsCredential?.config?.emailFrom) ??
+    str(notificationsCredential?.config?.from) ??
+    str(process.env.EMAIL_FROM ?? process.env.SMTP_FROM);
+  const slackWebhookUrl =
+    str(notificationsCredential?.secrets?.slackWebhookUrl) ??
+    str(notificationsCredential?.config?.slackWebhookUrl) ??
+    str(process.env.SLACK_WEBHOOK_URL);
+
+  const twilioAccountSid =
+    str(twilioCredential?.secrets?.accountSid) ??
+    str(twilioCredential?.secrets?.twilioAccountSid) ??
+    str(twilioCredential?.config?.accountSid) ??
+    str(process.env.TWILIO_ACCOUNT_SID);
+  const twilioAuthToken =
+    str(twilioCredential?.secrets?.authToken) ??
+    str(twilioCredential?.secrets?.twilioAuthToken) ??
+    str(twilioCredential?.config?.authToken) ??
+    str(process.env.TWILIO_AUTH_TOKEN);
+  const twilioFromNumber =
+    str(twilioCredential?.config?.fromNumber) ??
+    str(twilioCredential?.config?.twilioFromNumber) ??
+    str(process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER);
+
+  const kycProviderUrl =
+    str(kycCredential?.secrets?.providerUrl) ??
+    str(kycCredential?.config?.providerUrl) ??
+    str(process.env.KYC_PROVIDER_URL);
+  const kycProviderToken =
+    str(kycCredential?.secrets?.providerToken) ??
+    str(kycCredential?.secrets?.token) ??
+    str(kycCredential?.config?.providerToken) ??
+    str(process.env.KYC_PROVIDER_TOKEN);
+
   const integrationsConfig: IntegrationsConfig = {
     storage: {
       enabled: !!databaseUrl,
@@ -95,16 +147,21 @@ async function main(): Promise<void> {
     },
     notifications: {
       enabled: true,
-      sendgridApiKey: process.env.SENDGRID_API_KEY,
-      emailFrom: process.env.EMAIL_FROM ?? process.env.SMTP_FROM,
-      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
+      sendgridApiKey,
+      emailFrom,
+      slackWebhookUrl,
+      twilioAccountSid,
+      twilioAuthToken,
+      twilioFromNumber,
     },
     payments: {
       enabled: process.env.FTN_PAYMENTS_DISABLED !== "1" && process.env.FTN_PAYMENTS_DISABLED !== "true",
-      stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+      stripeSecretKey,
     },
     identity: {
       enabled: true,
+      providerUrl: kycProviderUrl,
+      providerToken: kycProviderToken,
     },
     logistics: {
       enabled: true,
@@ -236,6 +293,10 @@ async function main(): Promise<void> {
       res.end(JSON.stringify({ error: "Forbidden", detail: "Insufficient scope" }));
       return;
     }
+    const principal = authenticatePrincipal(req, apiSecurity);
+    const requestSubject =
+      principal?.subject ??
+      (principal?.kind === "api_key" ? "api_key" : systemSubject);
 
     if (!rateLimiter(getClientIp(req, apiSecurity.trustProxy))) {
       res.statusCode = 429;
@@ -518,7 +579,7 @@ async function main(): Promise<void> {
       }
 
       if (req.method === "GET" && (rawPath === "/credentials" || rawPath.startsWith("/credentials?"))) {
-        const items = await listCredentials();
+        const items = await listCredentials(requestSubject);
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(items));
         return;
@@ -532,7 +593,7 @@ async function main(): Promise<void> {
           return;
         }
         const provider = decodeURIComponent(parts[2]);
-        const cred = await getCredential(provider);
+        const cred = await getCredential(requestSubject, provider);
         if (!cred) {
           res.statusCode = 404;
           res.end("Credential not found");
@@ -572,7 +633,7 @@ async function main(): Promise<void> {
             res.end(JSON.stringify({ error: "Payload must include config or secrets object" }));
             return;
           }
-          const saved = await upsertCredential(provider, { config, secrets });
+          const saved = await upsertCredential(requestSubject, provider, { config, secrets });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(saved));
         } catch (e) {

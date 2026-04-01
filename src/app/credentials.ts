@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { decryptCredentials, encryptCredentials } from "../infra/credentials";
 
 export interface CredentialRecord {
+  subject: string;
   provider: string;
   config: Record<string, unknown>;
   hasSecrets: boolean;
@@ -19,15 +20,27 @@ export function configureCredentialsStore(p: Pool | undefined): void {
   pool = p;
 }
 
-export async function listCredentials(): Promise<CredentialRecord[]> {
+function key(subject: string, provider: string): string {
+  return `${subject}::${provider}`;
+}
+
+export async function listCredentials(subject: string): Promise<CredentialRecord[]> {
   if (pool) {
     const { rows } = await pool.query<{
+      subject: string;
       provider: string;
       config_json: unknown;
       encrypted_secrets: string | null;
       updated_at: Date;
-    }>(`SELECT provider, config_json, encrypted_secrets, updated_at FROM ftn_credentials ORDER BY provider`);
+    }>(
+      `SELECT subject, provider, config_json, encrypted_secrets, updated_at
+       FROM ftn_credentials
+       WHERE subject = $1
+       ORDER BY provider`,
+      [subject]
+    );
     return rows.map((r) => ({
+      subject: r.subject,
       provider: r.provider,
       config: (r.config_json && typeof r.config_json === "object" ? r.config_json : {}) as Record<string, unknown>,
       hasSecrets: Boolean(r.encrypted_secrets),
@@ -35,8 +48,10 @@ export async function listCredentials(): Promise<CredentialRecord[]> {
     }));
   }
   return Array.from(memory.entries())
-    .map(([provider, v]) => ({
-      provider,
+    .filter(([k]) => k.startsWith(`${subject}::`))
+    .map(([k, v]) => ({
+      subject,
+      provider: k.split("::")[1] ?? "",
       config: v.config,
       hasSecrets: Boolean(v.encryptedSecrets),
       updatedAt: v.updatedAt,
@@ -44,16 +59,23 @@ export async function listCredentials(): Promise<CredentialRecord[]> {
     .sort((a, b) => a.provider.localeCompare(b.provider));
 }
 
-export async function getCredential(provider: string): Promise<CredentialDetail | undefined> {
+export async function getCredential(subject: string, provider: string): Promise<CredentialDetail | undefined> {
   if (pool) {
     const { rows } = await pool.query<{
+      subject: string;
       config_json: unknown;
       encrypted_secrets: string | null;
       updated_at: Date;
-    }>(`SELECT config_json, encrypted_secrets, updated_at FROM ftn_credentials WHERE provider = $1`, [provider]);
+    }>(
+      `SELECT subject, config_json, encrypted_secrets, updated_at
+       FROM ftn_credentials
+       WHERE subject = $1 AND provider = $2`,
+      [subject, provider]
+    );
     if (!rows[0]) return undefined;
     const row = rows[0];
     return {
+      subject: row.subject,
       provider,
       config: (row.config_json && typeof row.config_json === "object" ? row.config_json : {}) as Record<string, unknown>,
       hasSecrets: Boolean(row.encrypted_secrets),
@@ -61,9 +83,10 @@ export async function getCredential(provider: string): Promise<CredentialDetail 
       updatedAt: row.updated_at.toISOString(),
     };
   }
-  const local = memory.get(provider);
+  const local = memory.get(key(subject, provider));
   if (!local) return undefined;
   return {
+    subject,
     provider,
     config: local.config,
     hasSecrets: Boolean(local.encryptedSecrets),
@@ -73,10 +96,11 @@ export async function getCredential(provider: string): Promise<CredentialDetail 
 }
 
 export async function upsertCredential(
+  subject: string,
   provider: string,
   patch: { config?: Record<string, unknown>; secrets?: Record<string, unknown> }
 ): Promise<CredentialRecord> {
-  const existing = await getCredential(provider);
+  const existing = await getCredential(subject, provider);
   const config = patch.config ?? existing?.config ?? {};
   const secrets = patch.secrets ?? existing?.secrets ?? {};
   const encryptedSecrets = Object.keys(secrets).length > 0 ? encryptCredentials(secrets) : null;
@@ -84,19 +108,20 @@ export async function upsertCredential(
 
   if (pool) {
     await pool.query(
-      `INSERT INTO ftn_credentials (provider, config_json, encrypted_secrets, updated_at)
-       VALUES ($1, $2::jsonb, $3, NOW())
-       ON CONFLICT (provider) DO UPDATE SET
+      `INSERT INTO ftn_credentials (subject, provider, config_json, encrypted_secrets, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, NOW())
+       ON CONFLICT (subject, provider) DO UPDATE SET
          config_json = EXCLUDED.config_json,
          encrypted_secrets = EXCLUDED.encrypted_secrets,
          updated_at = NOW()`,
-      [provider, JSON.stringify(config), encryptedSecrets]
+      [subject, provider, JSON.stringify(config), encryptedSecrets]
     );
   } else {
-    memory.set(provider, { config, encryptedSecrets, updatedAt });
+    memory.set(key(subject, provider), { config, encryptedSecrets, updatedAt });
   }
 
   return {
+    subject,
     provider,
     config,
     hasSecrets: Boolean(encryptedSecrets),

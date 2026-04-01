@@ -105,6 +105,22 @@ CREATE TABLE IF NOT EXISTS ftn_credentials (
 CREATE INDEX IF NOT EXISTS ftn_credentials_updated_at ON ftn_credentials (updated_at DESC);
 `,
   },
+  {
+    version: 6,
+    name: "credentials_per_subject",
+    sql: `
+ALTER TABLE ftn_credentials
+  ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT 'system';
+
+ALTER TABLE ftn_credentials
+  DROP CONSTRAINT IF EXISTS ftn_credentials_pkey;
+
+ALTER TABLE ftn_credentials
+  ADD CONSTRAINT ftn_credentials_pkey PRIMARY KEY (subject, provider);
+
+CREATE INDEX IF NOT EXISTS ftn_credentials_subject_provider ON ftn_credentials (subject, provider);
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
