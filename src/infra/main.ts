@@ -268,6 +268,27 @@ async function main(): Promise<void> {
   const apiSecurity = loadApiSecurityConfigFromEnv();
   const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
 
+  if (pool && apiSecurity.jwtSecret) {
+    const defaultUsernameRaw = process.env.FTN_DEFAULT_USER_USERNAME?.trim() || "demo";
+    const defaultPasswordRaw = process.env.FTN_DEFAULT_USER_PASSWORD?.trim() || "demo-password-123";
+    const defaultUsername = normalizeAndValidateUsername(defaultUsernameRaw);
+    if (defaultUsername && validatePlainPassword(defaultPasswordRaw)) {
+      const exists = await getUserPasswordHash(pool, defaultUsername);
+      if (!exists) {
+        const hash = await hashPassword(defaultPasswordRaw);
+        const inserted = await insertUser(pool, defaultUsername, hash);
+        if (inserted === "ok") {
+          log.info("ftn.auth.defaultUser.created", { username: defaultUsername });
+        }
+      }
+    } else {
+      log.error("ftn.auth.defaultUser.invalidConfig", {
+        username: defaultUsernameRaw,
+        passwordMinLength: 10,
+      });
+    }
+  }
+
   const server = http.createServer(async (req, res) => {
     applyCorsHeaders(req, res, apiSecurity.corsOrigins);
 
@@ -377,7 +398,7 @@ async function main(): Promise<void> {
 
         if (validateLoginCredentials(apiSecurity, u, p)) {
           ({ token, expiresIn } = issueAccessToken(apiSecurity));
-        } else if (pool && apiSecurity.registrationEnabled) {
+        } else if (pool && apiSecurity.jwtSecret) {
           const normalized = normalizeAndValidateUsername(u);
           if (!normalized) {
             res.statusCode = 401;
