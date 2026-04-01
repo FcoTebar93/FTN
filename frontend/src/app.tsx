@@ -7,7 +7,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { SessionToolbar } from "./features/auth/SessionToolbar";
 import { CredentialsPage } from "./features/credentials/CredentialsPage";
-import { fetchAuthStatus } from "./auth/session";
+import { fetchAuthStatus, getCurrentSessionSubject } from "./auth/session";
 import type { AuthStatus } from "./auth/session";
 import { API_BASE_URL, getAccessToken } from "./config";
 import { onUnauthorized } from "./api/client";
@@ -129,7 +129,7 @@ export function App() {
           No se pudo comprobar /auth/status: {statusError}
         </p>
       ) : null}
-      {hasSession ? <SessionToolbar onLogout={handleLogout} /> : null}
+      {hasSession ? <SessionToolbar onLogout={handleLogout} userLabel={getCurrentSessionSubject()} /> : null}
       {children}
     </div>
   );

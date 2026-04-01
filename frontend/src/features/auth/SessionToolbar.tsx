@@ -2,13 +2,15 @@ import { logout } from "../../auth/session";
 
 type SessionToolbarProps = {
   onLogout: () => void;
+  userLabel?: string | null;
 };
 
-export function SessionToolbar({ onLogout }: SessionToolbarProps) {
+export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
   return (
     <div className="session-toolbar">
       <div className="session-toolbar-left">
         <span className="session-toolbar-brand">FTN</span>
+        {userLabel ? <span className="session-toolbar-user">@{userLabel}</span> : null}
         <a className="session-toolbar-link" href="/">
           Runs
         </a>

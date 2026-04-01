@@ -1,4 +1,5 @@
 import { API_BASE_URL, clearAccessToken, setAccessToken } from "../config";
+import { getAccessToken } from "../config";
 
 export type AuthStatus = {
   loginConfigured: boolean;
@@ -74,4 +75,24 @@ export async function registerUser(username: string, password: string): Promise<
 
 export function logout(): void {
   clearAccessToken();
+}
+
+function decodeBase64Url(input: string): string {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  return atob(padded);
+}
+
+export function getCurrentSessionSubject(): string | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const json = decodeBase64Url(parts[1] ?? "");
+    const parsed = JSON.parse(json) as { sub?: unknown };
+    return typeof parsed.sub === "string" && parsed.sub.trim() ? parsed.sub.trim() : null;
+  } catch {
+    return null;
+  }
 }
