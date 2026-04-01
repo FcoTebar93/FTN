@@ -179,6 +179,14 @@ export interface CredentialDetail extends CredentialSummary {
   secrets: Record<string, unknown>;
 }
 
+export interface IntegrationStatusItem {
+  key: string;
+  label: string;
+  configured: boolean;
+  source: "credentials" | "env" | "none";
+  details?: string;
+}
+
 export interface DesignerConditionalStep extends DesignerBaseStep {
   kind: "conditional";
   expression: string;
