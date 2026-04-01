@@ -121,6 +121,22 @@ ALTER TABLE ftn_credentials
 CREATE INDEX IF NOT EXISTS ftn_credentials_subject_provider ON ftn_credentials (subject, provider);
 `,
   },
+  {
+    version: 7,
+    name: "designer_workflows_per_subject",
+    sql: `
+ALTER TABLE ftn_designer_workflows
+  ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT 'system';
+
+ALTER TABLE ftn_designer_workflows
+  DROP CONSTRAINT IF EXISTS ftn_designer_workflows_pkey;
+
+ALTER TABLE ftn_designer_workflows
+  ADD CONSTRAINT ftn_designer_workflows_pkey PRIMARY KEY (subject, id);
+
+CREATE INDEX IF NOT EXISTS ftn_designer_workflows_subject_id ON ftn_designer_workflows (subject, id);
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
