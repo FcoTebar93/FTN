@@ -7,6 +7,7 @@ import { normalizeStoredWorkflow } from "./designer-schedule";
 let pool: Pool | undefined;
 const memory = new Map<string, StoredWorkflow>();
 const memoryLastScheduled = new Map<string, Date>();
+const memoryLastScheduledError = new Map<string, string>();
 
 export function configureDesignerStore(p: Pool | undefined): void {
   pool = p;
@@ -44,7 +45,8 @@ export async function loadAllFromDatabase(): Promise<void> {
     id: string;
     payload: unknown;
     last_scheduled_run_at: Date | null;
-  }>(`SELECT subject, id, payload, last_scheduled_run_at FROM ftn_designer_workflows ORDER BY subject, id`);
+    last_scheduled_error: string | null;
+  }>(`SELECT subject, id, payload, last_scheduled_run_at, last_scheduled_error FROM ftn_designer_workflows ORDER BY subject, id`);
 
   for (const row of rows) {
     const payload = row.payload as StoredWorkflow;
@@ -52,6 +54,9 @@ export async function loadAllFromDatabase(): Promise<void> {
     memory.set(memKey(row.subject, row.id), normalized);
     if (row.last_scheduled_run_at) {
       memoryLastScheduled.set(memKey(row.subject, row.id), row.last_scheduled_run_at);
+    }
+    if (row.last_scheduled_error) {
+      memoryLastScheduledError.set(memKey(row.subject, row.id), row.last_scheduled_error);
     }
     registerOne(row.subject, normalized);
   }
@@ -96,12 +101,17 @@ export async function getStoredWorkflow(subject: string, id: string): Promise<St
 export type DesignerWorkflowListItem = Pick<
   StoredWorkflow,
   "id" | "version" | "displayName" | "description" | "tags"
-> & { schedule: ExecutionSchedule };
+> & { schedule: ExecutionSchedule; lastScheduledRunAt?: string; lastScheduledError?: string };
 
 export async function listStoredWorkflows(subject: string): Promise<DesignerWorkflowListItem[]> {
   if (pool) {
-    const { rows } = await pool.query<{ payload: unknown }>(
-      `SELECT payload FROM ftn_designer_workflows WHERE subject = $1 ORDER BY id`,
+    const { rows } = await pool.query<{
+      payload: unknown;
+      last_scheduled_run_at: Date | null;
+      last_scheduled_error: string | null;
+    }>(
+      `SELECT payload, last_scheduled_run_at, last_scheduled_error
+       FROM ftn_designer_workflows WHERE subject = $1 ORDER BY id`,
       [subject]
     );
     return rows.map((r) => {
@@ -113,6 +123,8 @@ export async function listStoredWorkflows(subject: string): Promise<DesignerWork
         description: w.description,
         tags: w.tags,
         schedule: w.schedule ?? { type: "instant" },
+        ...(r.last_scheduled_run_at ? { lastScheduledRunAt: r.last_scheduled_run_at.toISOString() } : {}),
+        ...(r.last_scheduled_error ? { lastScheduledError: r.last_scheduled_error } : {}),
       };
     });
   }
@@ -127,12 +139,18 @@ export async function listStoredWorkflows(subject: string): Promise<DesignerWork
       description: n.description,
       tags: n.tags,
       schedule: n.schedule ?? { type: "instant" },
+      ...(memoryLastScheduled.get(memKey(subject, n.id))
+        ? { lastScheduledRunAt: memoryLastScheduled.get(memKey(subject, n.id))!.toISOString() }
+        : {}),
+      ...(memoryLastScheduledError.get(memKey(subject, n.id))
+        ? { lastScheduledError: memoryLastScheduledError.get(memKey(subject, n.id))! }
+        : {}),
     };
   });
 }
 
 export async function listSchedulerRows(): Promise<
-  Array<{ subject: string; id: string; runtimeName: string; payload: StoredWorkflow; lastRun: Date | null }>
+  Array<{ subject: string; id: string; runtimeName: string; payload: StoredWorkflow; lastRun: Date | null; lastError: string | null }>
 > {
   if (pool) {
     const { rows } = await pool.query<{
@@ -140,13 +158,15 @@ export async function listSchedulerRows(): Promise<
       id: string;
       payload: unknown;
       last_scheduled_run_at: Date | null;
-    }>(`SELECT subject, id, payload, last_scheduled_run_at FROM ftn_designer_workflows`);
+      last_scheduled_error: string | null;
+    }>(`SELECT subject, id, payload, last_scheduled_run_at, last_scheduled_error FROM ftn_designer_workflows`);
     return rows.map((r) => ({
       subject: r.subject,
       id: r.id,
       runtimeName: getDesignerRuntimeName(r.subject, r.id),
       payload: normalizeStoredWorkflow(r.payload as StoredWorkflow),
       lastRun: r.last_scheduled_run_at,
+      lastError: r.last_scheduled_error,
     }));
   }
   return Array.from(memory.entries()).map(([k, w]) => {
@@ -159,15 +179,31 @@ export async function listSchedulerRows(): Promise<
     runtimeName: getDesignerRuntimeName(subject, id),
     payload: normalizeStoredWorkflow(w),
     lastRun: memoryLastScheduled.get(k) ?? null,
+    lastError: memoryLastScheduledError.get(k) ?? null,
   };});
 }
 
 export async function recordScheduledRun(subject: string, id: string, at: Date): Promise<void> {
   memoryLastScheduled.set(memKey(subject, id), at);
+  memoryLastScheduledError.delete(memKey(subject, id));
   if (pool) {
     await pool.query(
-      `UPDATE ftn_designer_workflows SET last_scheduled_run_at = $3 WHERE subject = $1 AND id = $2`,
+      `UPDATE ftn_designer_workflows
+       SET last_scheduled_run_at = $3, last_scheduled_error = NULL
+       WHERE subject = $1 AND id = $2`,
       [subject, id, at]
+    );
+  }
+}
+
+export async function recordScheduledFailure(subject: string, id: string, error: string): Promise<void> {
+  memoryLastScheduledError.set(memKey(subject, id), error);
+  if (pool) {
+    await pool.query(
+      `UPDATE ftn_designer_workflows
+       SET last_scheduled_error = $3
+       WHERE subject = $1 AND id = $2`,
+      [subject, id, error]
     );
   }
 }
