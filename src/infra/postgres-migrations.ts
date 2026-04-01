@@ -137,6 +137,14 @@ ALTER TABLE ftn_designer_workflows
 CREATE INDEX IF NOT EXISTS ftn_designer_workflows_subject_id ON ftn_designer_workflows (subject, id);
 `,
   },
+  {
+    version: 8,
+    name: "designer_scheduler_last_error",
+    sql: `
+ALTER TABLE ftn_designer_workflows
+  ADD COLUMN IF NOT EXISTS last_scheduled_error TEXT NULL;
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
