@@ -24,9 +24,9 @@ export interface IntegrationsConfig {
 export function registerIntegrations(registry: ActivityRegistry, config: IntegrationsConfig) {
   StorageModule.registerActivities(registry, { enabled: config.storage.enabled });
   DocumentsModule.registerActivities(registry, { enabled: config.documents.enabled });
-  NotificationsModule.registerActivities(registry, { enabled: config.notifications.enabled });
+  NotificationsModule.registerActivities(registry, config.notifications);
   PaymentsModule.registerActivities(registry, config.payments);
-  IdentityModule.registerActivities(registry, { enabled: config.identity.enabled });
+  IdentityModule.registerActivities(registry, config.identity);
   LogisticsModule.registerActivities(registry, config.logistics);
   CrmModule.registerActivities(registry, config.crm);
   HttpModule.registerActivities(registry, config.http);

@@ -21,10 +21,9 @@ export function sendSmsActivityDefinition(_config: NotificationsConfig): Activit
     },
     
     async execute(input: SendSmsInput, ctx: ActivityExecutionContext): Promise<SendSmsResult> {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-      const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-      const from =
-        process.env.TWILIO_FROM_NUMBER?.trim() ?? process.env.TWILIO_PHONE_NUMBER?.trim();
+      const accountSid = _config.twilioAccountSid?.trim();
+      const authToken = _config.twilioAuthToken?.trim();
+      const from = _config.twilioFromNumber?.trim();
 
       if (accountSid && authToken && from) {
         const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
@@ -55,7 +54,7 @@ export function sendSmsActivityDefinition(_config: NotificationsConfig): Activit
         return;
       }
 
-      ctx.log("SMS modo demo (sin TWILIO_*): no se envía mensaje real", {
+      ctx.log("SMS modo demo (sin credenciales Twilio): no se envía mensaje real", {
         to: input.to,
         textLength: input.text.length,
       });
