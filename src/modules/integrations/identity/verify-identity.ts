@@ -1,8 +1,9 @@
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import { executeHttpRequest } from "../http/client";
 import type { VerifyIdentityInput, VerifyIdentityResult } from "./types";
+import type { IdentityConfig } from ".";
 
-export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIdentityInput, VerifyIdentityResult> {
+export function verifyIdentityActivityDefinition(config: IdentityConfig): ActivityDefinition<VerifyIdentityInput, VerifyIdentityResult> {
     return {
         name: "identity.verifyIdentity:v1",
         maxAttempts: 1,
@@ -27,8 +28,8 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
               documentImageUrl: input.documentImageUrl,
             });
 
-            const providerUrl = process.env.KYC_PROVIDER_URL?.trim();
-            const providerToken = process.env.KYC_PROVIDER_TOKEN?.trim();
+            const providerUrl = config.providerUrl?.trim();
+            const providerToken = config.providerToken?.trim();
             if (providerUrl && providerToken) {
               const response = await executeHttpRequest(
                 {
@@ -47,7 +48,6 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
                 },
                 {
                   requireOk: true,
-                  // Mantiene compatibilidad con proveedores internos.
                   allowPrivateUrls: true,
                 }
               );
@@ -62,7 +62,7 @@ export function verifyIdentityActivityDefinition(): ActivityDefinition<VerifyIde
               };
             }
 
-            ctx.log("KYC modo demo (sin KYC_PROVIDER_URL + KYC_PROVIDER_TOKEN)", {
+            ctx.log("KYC modo demo (sin credenciales de proveedor)", {
               userId: input.userId,
             });
             return {

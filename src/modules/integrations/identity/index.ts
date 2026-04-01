@@ -1,11 +1,13 @@
-import type { IntegrationModule } from "../types";
+import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
 import { verifyIdentityActivityDefinition } from "./verify-identity";
 import { checkFraudScoreActivityDefinition } from "./check-fraud-score";
 
-export interface IdentityConfig {
+export interface IdentityConfig extends IntegrationModuleConfig {
     enabled: boolean;
+    providerUrl?: string;
+    providerToken?: string;
 }
 
 export const IdentityModule: IntegrationModule = {
@@ -16,7 +18,10 @@ export const IdentityModule: IntegrationModule = {
             return;
         }
 
-        const defs: AnyActivityDefinition[] = [verifyIdentityActivityDefinition(), checkFraudScoreActivityDefinition()];
+        const defs: AnyActivityDefinition[] = [
+          verifyIdentityActivityDefinition(config),
+          checkFraudScoreActivityDefinition(),
+        ];
 
         for (const def of defs) {
             registry.register(def);
