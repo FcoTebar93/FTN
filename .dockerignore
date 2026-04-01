@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.cursor
+coverage
+npm-debug.log
+frontend/node_modules
+frontend/dist
+frontend/.git
+frontend/.cursor
+**/*.log

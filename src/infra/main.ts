@@ -266,6 +266,7 @@ async function main(): Promise<void> {
   activityQueueWorker.runForever(cancellation).catch((err) => log.error("activityQueueWorker.runForever", { err: String(err) }));
 
   const apiSecurity = loadApiSecurityConfigFromEnv();
+  const hasDbLogin = Boolean(pool && apiSecurity.jwtSecret);
   const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
 
   async function getIntegrationsStatusForSubject(subject: string): Promise<Array<{
@@ -531,7 +532,7 @@ async function main(): Promise<void> {
       const rawPath = req.url.split("?")[0] ?? "";
 
       if (req.method === "POST" && rawPath === "/auth/login") {
-        if (!isLoginConfigured(apiSecurity)) {
+        if (!isLoginConfigured(apiSecurity) && !hasDbLogin) {
           res.statusCode = 404;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ error: "Not found" }));
@@ -656,7 +657,7 @@ async function main(): Promise<void> {
         res.setHeader("Content-Type", "application/json");
         res.end(
           JSON.stringify({
-            loginConfigured: isLoginConfigured(apiSecurity),
+            loginConfigured: isLoginConfigured(apiSecurity) || hasDbLogin,
             authRequired: isAuthConfigured(apiSecurity),
             registrationEnabled: Boolean(apiSecurity.registrationEnabled && pool),
           })
