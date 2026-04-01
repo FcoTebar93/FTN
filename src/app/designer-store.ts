@@ -12,11 +12,19 @@ export function configureDesignerStore(p: Pool | undefined): void {
   pool = p;
 }
 
-function registerOne(w: StoredWorkflow): void {
+export function getDesignerRuntimeName(subject: string, id: string): string {
+  return `${subject}::${id}`;
+}
+
+function memKey(subject: string, id: string): string {
+  return `${subject}::${id}`;
+}
+
+function registerOne(subject: string, w: StoredWorkflow): void {
   const normalized = normalizeStoredWorkflow(w);
   const definition = buildWorkflowDefinitionFromStored(normalized);
   registerWorkflow({
-    name: normalized.id,
+    name: getDesignerRuntimeName(subject, normalized.id),
     version: normalized.version,
     displayName: normalized.displayName,
     description: normalized.description,
@@ -32,51 +40,53 @@ export async function loadAllFromDatabase(): Promise<void> {
     return;
   }
   const { rows } = await pool.query<{
+    subject: string;
     id: string;
     payload: unknown;
     last_scheduled_run_at: Date | null;
-  }>(`SELECT id, payload, last_scheduled_run_at FROM ftn_designer_workflows ORDER BY id`);
+  }>(`SELECT subject, id, payload, last_scheduled_run_at FROM ftn_designer_workflows ORDER BY subject, id`);
 
   for (const row of rows) {
     const payload = row.payload as StoredWorkflow;
     const normalized = normalizeStoredWorkflow(payload);
-    memory.set(row.id, normalized);
+    memory.set(memKey(row.subject, row.id), normalized);
     if (row.last_scheduled_run_at) {
-      memoryLastScheduled.set(row.id, row.last_scheduled_run_at);
+      memoryLastScheduled.set(memKey(row.subject, row.id), row.last_scheduled_run_at);
     }
-    registerOne(normalized);
+    registerOne(row.subject, normalized);
   }
 }
 
-export async function upsertStoredWorkflow(w: StoredWorkflow): Promise<void> {
+export async function upsertStoredWorkflow(subject: string, w: StoredWorkflow): Promise<void> {
   const normalized = normalizeStoredWorkflow(w);
-  memory.set(normalized.id, normalized);
-  registerOne(normalized);
+  memory.set(memKey(subject, normalized.id), normalized);
+  registerOne(subject, normalized);
 
   if (pool) {
     await pool.query(
-      `INSERT INTO ftn_designer_workflows (id, payload, updated_at)
-       VALUES ($1, $2::jsonb, NOW())
-       ON CONFLICT (id) DO UPDATE SET
+      `INSERT INTO ftn_designer_workflows (subject, id, payload, updated_at)
+       VALUES ($1, $2, $3::jsonb, NOW())
+       ON CONFLICT (subject, id) DO UPDATE SET
          payload = EXCLUDED.payload,
          updated_at = NOW()`,
-      [normalized.id, JSON.stringify(normalized)]
+      [subject, normalized.id, JSON.stringify(normalized)]
     );
   }
 }
 
-export async function getStoredWorkflow(id: string): Promise<StoredWorkflow | undefined> {
-  if (memory.has(id)) {
-    return memory.get(id);
+export async function getStoredWorkflow(subject: string, id: string): Promise<StoredWorkflow | undefined> {
+  const k = memKey(subject, id);
+  if (memory.has(k)) {
+    return memory.get(k);
   }
   if (pool) {
     const { rows } = await pool.query<{ payload: unknown }>(
-      `SELECT payload FROM ftn_designer_workflows WHERE id = $1`,
-      [id]
+      `SELECT payload FROM ftn_designer_workflows WHERE subject = $1 AND id = $2`,
+      [subject, id]
     );
     if (rows[0]) {
       const w = normalizeStoredWorkflow(rows[0].payload as StoredWorkflow);
-      memory.set(id, w);
+      memory.set(k, w);
       return w;
     }
   }
@@ -88,10 +98,11 @@ export type DesignerWorkflowListItem = Pick<
   "id" | "version" | "displayName" | "description" | "tags"
 > & { schedule: ExecutionSchedule };
 
-export async function listStoredWorkflows(): Promise<DesignerWorkflowListItem[]> {
+export async function listStoredWorkflows(subject: string): Promise<DesignerWorkflowListItem[]> {
   if (pool) {
     const { rows } = await pool.query<{ payload: unknown }>(
-      `SELECT payload FROM ftn_designer_workflows ORDER BY id`
+      `SELECT payload FROM ftn_designer_workflows WHERE subject = $1 ORDER BY id`,
+      [subject]
     );
     return rows.map((r) => {
       const w = normalizeStoredWorkflow(r.payload as StoredWorkflow);
@@ -105,7 +116,9 @@ export async function listStoredWorkflows(): Promise<DesignerWorkflowListItem[]>
       };
     });
   }
-  return Array.from(memory.values()).map((w) => {
+  return Array.from(memory.entries())
+    .filter(([k]) => k.startsWith(`${subject}::`))
+    .map(([, w]) => {
     const n = normalizeStoredWorkflow(w);
     return {
       id: n.id,
@@ -119,30 +132,42 @@ export async function listStoredWorkflows(): Promise<DesignerWorkflowListItem[]>
 }
 
 export async function listSchedulerRows(): Promise<
-  Array<{ id: string; payload: StoredWorkflow; lastRun: Date | null }>
+  Array<{ subject: string; id: string; runtimeName: string; payload: StoredWorkflow; lastRun: Date | null }>
 > {
   if (pool) {
     const { rows } = await pool.query<{
+      subject: string;
       id: string;
       payload: unknown;
       last_scheduled_run_at: Date | null;
-    }>(`SELECT id, payload, last_scheduled_run_at FROM ftn_designer_workflows`);
+    }>(`SELECT subject, id, payload, last_scheduled_run_at FROM ftn_designer_workflows`);
     return rows.map((r) => ({
+      subject: r.subject,
       id: r.id,
+      runtimeName: getDesignerRuntimeName(r.subject, r.id),
       payload: normalizeStoredWorkflow(r.payload as StoredWorkflow),
       lastRun: r.last_scheduled_run_at,
     }));
   }
-  return Array.from(memory.entries()).map(([id, w]) => ({
+  return Array.from(memory.entries()).map(([k, w]) => {
+    const sep = k.indexOf("::");
+    const subject = sep >= 0 ? k.slice(0, sep) : "system";
+    const id = sep >= 0 ? k.slice(sep + 2) : k;
+    return {
+    subject,
     id,
+    runtimeName: getDesignerRuntimeName(subject, id),
     payload: normalizeStoredWorkflow(w),
-    lastRun: memoryLastScheduled.get(id) ?? null,
-  }));
+    lastRun: memoryLastScheduled.get(k) ?? null,
+  };});
 }
 
-export async function recordScheduledRun(id: string, at: Date): Promise<void> {
-  memoryLastScheduled.set(id, at);
+export async function recordScheduledRun(subject: string, id: string, at: Date): Promise<void> {
+  memoryLastScheduled.set(memKey(subject, id), at);
   if (pool) {
-    await pool.query(`UPDATE ftn_designer_workflows SET last_scheduled_run_at = $2 WHERE id = $1`, [id, at]);
+    await pool.query(
+      `UPDATE ftn_designer_workflows SET last_scheduled_run_at = $3 WHERE subject = $1 AND id = $2`,
+      [subject, id, at]
+    );
   }
 }

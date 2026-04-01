@@ -2,8 +2,8 @@ import type { ExecutionSchedule, StoredWorkflow } from "./designer-types";
 import { shouldFireScheduledWorkflow } from "./designer-schedule";
 
 export interface DesignerSchedulerDeps {
-  listSchedulerRows: () => Promise<Array<{ id: string; payload: StoredWorkflow; lastRun: Date | null }>>;
-  recordScheduledRun: (id: string, at: Date) => Promise<void>;
+  listSchedulerRows: () => Promise<Array<{ subject: string; id: string; runtimeName: string; payload: StoredWorkflow; lastRun: Date | null }>>;
+  recordScheduledRun: (subject: string, id: string, at: Date) => Promise<void>;
   startWorkflow: (name: string, input: unknown) => Promise<void>;
   log: { error: (msg: string, meta?: Record<string, unknown>) => void };
 }
@@ -20,10 +20,10 @@ export async function runScheduledWorkflowTick(deps: DesignerSchedulerDeps): Pro
       continue;
     }
     try {
-      await deps.startWorkflow(row.id, row.payload.scheduledInput ?? {});
-      await deps.recordScheduledRun(row.id, now);
+      await deps.startWorkflow(row.runtimeName, row.payload.scheduledInput ?? {});
+      await deps.recordScheduledRun(row.subject, row.id, now);
     } catch (e) {
-      deps.log.error("designer.scheduler", { id: row.id, err: String(e) });
+      deps.log.error("designer.scheduler", { subject: row.subject, id: row.id, err: String(e) });
     }
   }
 }
