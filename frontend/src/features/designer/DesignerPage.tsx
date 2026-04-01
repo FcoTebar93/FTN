@@ -318,6 +318,16 @@ export function DesignerPage() {
                   <div class="detail-muted" style={{ fontSize: "11px", marginTop: "4px" }}>
                     {scheduleSummary(w.schedule)}
                   </div>
+                  {w.lastScheduledRunAt ? (
+                    <div class="detail-muted" style={{ fontSize: "11px", marginTop: "2px" }}>
+                      Última ejecución: {new Date(w.lastScheduledRunAt).toLocaleString()}
+                    </div>
+                  ) : null}
+                  {w.lastScheduledError ? (
+                    <div class="panel panel-error" style={{ marginTop: "6px", fontSize: "11px" }}>
+                      Último error: {w.lastScheduledError}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

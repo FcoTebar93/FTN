@@ -119,6 +119,8 @@ export interface DesignerWorkflowSummary {
   description?: string;
   tags?: string[];
   schedule?: DesignerExecutionSchedule;
+  lastScheduledRunAt?: string;
+  lastScheduledError?: string;
 }
 
 export interface DesignerStoredWorkflow extends DesignerWorkflowSummary {

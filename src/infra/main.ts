@@ -34,7 +34,7 @@ import { getUserPasswordHash, insertUser } from "./users";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
-import { configureDesignerStore, getDesignerRuntimeName, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledRun } from "../app/designer-store";
+import { configureDesignerStore, getDesignerRuntimeName, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
 import { runScheduledWorkflowTick } from "../app/designer-scheduler";
 import { normalizeStoredWorkflow, validateSchedule } from "../app/designer-schedule";
 import { configureCredentialsStore, getCredential, listCredentials, upsertCredential } from "../app/credentials";
@@ -1399,6 +1399,7 @@ async function main(): Promise<void> {
     void runScheduledWorkflowTick({
       listSchedulerRows,
       recordScheduledRun,
+      recordScheduledFailure,
       startWorkflow: async (name, input) => {
         await enqueueWorkflowStart(name, input);
       },
