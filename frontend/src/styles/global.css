@@ -712,6 +712,41 @@
   .credentials-error {
     color: var(--danger);
   }
+  .integration-status {
+    margin: 10px 0 12px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: rgba(248, 250, 252, 0.7);
+  }
+  .integration-status-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .integration-status-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .integration-status-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+  .integration-status-item.ok {
+    background: rgba(22, 163, 74, 0.08);
+    color: #15803d;
+  }
+  .integration-status-item.missing {
+    background: rgba(220, 38, 38, 0.08);
+    color: var(--danger);
+  }
 
   .login-screen {
     min-height: 100vh;

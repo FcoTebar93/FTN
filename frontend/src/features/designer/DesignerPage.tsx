@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerWeekday } from "../../api/types";
-import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog } from "../../api/designer";
+import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerWeekday, IntegrationStatusItem } from "../../api/types";
+import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog, getIntegrationsStatus } from "../../api/designer";
 import { TIMEZONES, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { WORKFLOW_TEMPLATES, type DesignerTemplate } from "./templates";
@@ -25,6 +25,8 @@ export function DesignerPage() {
   const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [activitiesError, setActivitiesError] = useState<Error | null>(null);
+  const [integrationsStatus, setIntegrationsStatus] = useState<IntegrationStatusItem[]>([]);
+  const [integrationsStatusError, setIntegrationsStatusError] = useState<Error | null>(null);
 
   const [mode, setMode] = useState<Mode>("list");
   const [workflows, setWorkflows] = useState<DesignerWorkflowSummary[]>([]);
@@ -43,6 +45,13 @@ export function DesignerPage() {
       .then(setActivities)
       .catch((e) => setActivitiesError(e as Error))
       .finally(() => setLoadingActivities(false));
+  }, []);
+
+  useEffect(() => {
+    setIntegrationsStatusError(null);
+    getIntegrationsStatus()
+      .then(setIntegrationsStatus)
+      .catch((e) => setIntegrationsStatusError(e as Error));
   }, []);
 
   useEffect(() => {
@@ -239,6 +248,23 @@ export function DesignerPage() {
           {loadingActivities && <p class="detail-muted">Cargando catálogo de activities…</p>}
           {activitiesError && <p class="panel panel-error">Activities: {activitiesError.message}</p>}
           {templateError && <p class="panel panel-error">{templateError}</p>}
+          <div class="integration-status">
+            <div class="integration-status-title">Estado de integraciones</div>
+            {integrationsStatusError ? (
+              <p class="detail-muted">No se pudo cargar estado: {integrationsStatusError.message}</p>
+            ) : integrationsStatus.length === 0 ? (
+              <p class="detail-muted">Sin datos de estado.</p>
+            ) : (
+              <ul class="integration-status-list">
+                {integrationsStatus.map((s) => (
+                  <li key={s.key} class={`integration-status-item ${s.configured ? "ok" : "missing"}`}>
+                    <span>{s.label}</span>
+                    <span>{s.configured ? `OK (${s.source})` : "Falta"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button type="button" class="workflow-filter-btn" onClick={handleNew}>
             + Nuevo workflow
           </button>

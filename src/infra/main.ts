@@ -268,6 +268,74 @@ async function main(): Promise<void> {
   const apiSecurity = loadApiSecurityConfigFromEnv();
   const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
 
+  async function getIntegrationsStatusForSubject(subject: string): Promise<Array<{
+    key: string;
+    label: string;
+    configured: boolean;
+    source: "credentials" | "env" | "none";
+    details?: string;
+  }>> {
+    const hasAny = (v: unknown): boolean =>
+      Boolean(v && typeof v === "object" && !Array.isArray(v) && Object.keys(v as Record<string, unknown>).length > 0);
+    const cfgFromCred = async (provider: string): Promise<{ configured: boolean; source: "credentials" | "env" | "none" }> => {
+      const cred = await getCredential(subject, provider);
+      if (cred && (hasAny(cred.config) || hasAny(cred.secrets))) {
+        return { configured: true, source: "credentials" };
+      }
+      return { configured: false, source: "none" };
+    };
+
+    const stripe = await cfgFromCred("stripe");
+    const twilio = await cfgFromCred("twilio");
+    const kyc = await cfgFromCred("kyc");
+    const notifications = await cfgFromCred("notifications");
+
+    const stripeEnv = Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+    const twilioEnv = Boolean(process.env.TWILIO_ACCOUNT_SID?.trim() && process.env.TWILIO_AUTH_TOKEN?.trim());
+    const kycEnv = Boolean(process.env.KYC_PROVIDER_URL?.trim() && process.env.KYC_PROVIDER_TOKEN?.trim());
+    const sendgridEnv = Boolean(process.env.SENDGRID_API_KEY?.trim() && (process.env.EMAIL_FROM?.trim() || process.env.SMTP_FROM?.trim()));
+    const slackEnv = Boolean(process.env.SLACK_WEBHOOK_URL?.trim());
+
+    return [
+      {
+        key: "stripe",
+        label: "Stripe",
+        configured: stripe.configured || stripeEnv,
+        source: stripe.configured ? "credentials" : stripeEnv ? "env" : "none",
+      },
+      {
+        key: "twilio",
+        label: "Twilio SMS",
+        configured: twilio.configured || twilioEnv,
+        source: twilio.configured ? "credentials" : twilioEnv ? "env" : "none",
+      },
+      {
+        key: "kyc",
+        label: "KYC Provider",
+        configured: kyc.configured || kycEnv,
+        source: kyc.configured ? "credentials" : kycEnv ? "env" : "none",
+      },
+      {
+        key: "notifications",
+        label: "Email/Slack",
+        configured: notifications.configured || sendgridEnv || slackEnv,
+        source: notifications.configured ? "credentials" : sendgridEnv || slackEnv ? "env" : "none",
+      },
+      {
+        key: "postgres",
+        label: "Postgres",
+        configured: Boolean(pool),
+        source: pool ? "env" : "none",
+      },
+      {
+        key: "redis",
+        label: "Redis",
+        configured: Boolean(redis),
+        source: redis ? "env" : "none",
+      },
+    ];
+  }
+
   if (pool && apiSecurity.jwtSecret) {
     const defaultUsernameRaw = process.env.FTN_DEFAULT_USER_USERNAME?.trim() || "demo";
     const defaultPasswordRaw = process.env.FTN_DEFAULT_USER_PASSWORD?.trim() || "demo-password-123";
@@ -567,6 +635,13 @@ async function main(): Promise<void> {
       if (req.method === "GET" && req.url === "/designer/kinds") {
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(DESIGNER_KINDS));
+        return;
+      }
+
+      if (req.method === "GET" && (rawPath === "/integrations/status" || rawPath.startsWith("/integrations/status?"))) {
+        const items = await getIntegrationsStatusForSubject(requestSubject);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ items }));
         return;
       }
 
