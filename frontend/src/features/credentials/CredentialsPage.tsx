@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { getCredential, listCredentials, saveCredential } from "../../api/credentials";
 import type { CredentialSummary } from "../../api/types";
 
-const PROVIDERS = ["stripe", "crm", "twilio", "kyc"] as const;
+const PROVIDERS = ["stripe", "notifications", "crm", "twilio", "kyc"] as const;
 
 export function CredentialsPage() {
   const [items, setItems] = useState<CredentialSummary[]>([]);
