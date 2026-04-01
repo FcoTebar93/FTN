@@ -34,7 +34,7 @@ import { getUserPasswordHash, insertUser } from "./users";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
-import { configureDesignerStore, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledRun } from "../app/designer-store";
+import { configureDesignerStore, getDesignerRuntimeName, getStoredWorkflow, listStoredWorkflows, upsertStoredWorkflow, loadAllFromDatabase, listSchedulerRows, recordScheduledRun } from "../app/designer-store";
 import { runScheduledWorkflowTick } from "../app/designer-scheduler";
 import { normalizeStoredWorkflow, validateSchedule } from "../app/designer-schedule";
 import { configureCredentialsStore, getCredential, listCredentials, upsertCredential } from "../app/credentials";
@@ -550,7 +550,7 @@ async function main(): Promise<void> {
       }
 
       if (req.method === "GET" && (req.url === "/designer/workflows" || req.url?.startsWith("/designer/workflows?"))) {
-        const items = await listStoredWorkflows();
+        const items = await listStoredWorkflows(requestSubject);
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(items));
         return;
@@ -566,7 +566,7 @@ async function main(): Promise<void> {
         }
 
         const id = decodeURIComponent(parts[3]);
-        const wf = await getStoredWorkflow(id);
+        const wf = await getStoredWorkflow(requestSubject, id);
         if (wf === undefined) {
           res.statusCode = 404;
           res.end("Designer workflow not found");
@@ -656,7 +656,7 @@ async function main(): Promise<void> {
             return;
           }
 
-          if ((await getStoredWorkflow(parsed.id)) !== undefined) {
+          if ((await getStoredWorkflow(requestSubject, parsed.id)) !== undefined) {
             res.statusCode = 409;
             res.end(`StoredWorkflow "${parsed.id}" already exists`);
             return;
@@ -671,11 +671,14 @@ async function main(): Promise<void> {
             return;
           }
 
-          await upsertStoredWorkflow(normalized);
+          await upsertStoredWorkflow(requestSubject, normalized);
 
           if (normalized.schedule?.type === "instant") {
             try {
-              await enqueueWorkflowStart(normalized.id, normalized.scheduledInput ?? {});
+              await enqueueWorkflowStart(
+                getDesignerRuntimeName(requestSubject, normalized.id),
+                normalized.scheduledInput ?? {}
+              );
             } catch (e) {
               res.statusCode = 201;
               res.setHeader("Content-Type", "application/json");
@@ -734,7 +737,7 @@ async function main(): Promise<void> {
             return;
           }
 
-          await upsertStoredWorkflow(normalized);
+          await upsertStoredWorkflow(requestSubject, normalized);
 
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ ok: true, id: normalized.id, version: normalized.version }));
