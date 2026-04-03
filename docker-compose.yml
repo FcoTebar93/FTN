@@ -41,6 +41,8 @@ services:
       DATABASE_URL: postgres://ftn:ftn@postgres:5432/ftn
       REDIS_URL: redis://redis:6379
       FTN_JWT_SECRET: change-this-in-real-env-32-chars-min
+      FTN_AUTH_LOGIN_USERNAME: ftn
+      FTN_AUTH_LOGIN_PASSWORD: super-secret-ftn-login
       FTN_DEFAULT_USER_USERNAME: demo
       FTN_DEFAULT_USER_PASSWORD: demo-password-123
       FRONTEND_BASE_URL: http://localhost:${FTN_FRONTEND_PORT:-5173}
