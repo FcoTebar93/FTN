@@ -1,7 +1,7 @@
 {
     "name": "ftn-dsl-project",
     "version": "0.1.0",
-    "description": "A project about DSLs",
+    "description": "Deterministic workflow engine in TypeScript with event sourcing, snapshots, workers, and optional Postgres/Redis backends.",
     "author": "Francisco Tébar Navarro",
     "license": "MIT",
     "engines": {
