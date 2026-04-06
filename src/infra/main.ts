@@ -258,6 +258,10 @@ async function main(): Promise<void> {
       queueName: "workflows",
       leaseTimeoutMs: 10_000,
       pollIntervalMs: 100,
+      concurrencyRetryMaxAttempts: Math.max(1, Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_MAX_ATTEMPTS ?? "8", 10) || 8),
+      concurrencyRetryBaseDelayMs: Math.max(0, Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_BASE_DELAY_MS ?? "25", 10) || 25),
+      concurrencyRetryMaxDelayMs: Math.max(1, Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_MAX_DELAY_MS ?? "1000", 10) || 1000),
+      concurrencyRetryJitterRatio: Math.max(0, Number.parseFloat(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_JITTER_RATIO ?? "0.2") || 0.2),
     },
   });
 

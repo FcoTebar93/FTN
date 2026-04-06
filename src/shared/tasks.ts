@@ -16,6 +16,7 @@ export interface WorkflowTask extends BaseTask {
     type: "workflow";
     workflowId: WorkflowId;
     runId: RunId;
+    retryCount?: number;
 }
 
 export interface ActivityTask extends BaseTask {
