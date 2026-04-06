@@ -54,6 +54,11 @@ test("requiredScopesForRoute: logout y audit", () => {
   assert.deepEqual(requiredScopesForRoute("GET", "/audit/logs"), [FTN_SCOPES.workflowsRead]);
 });
 
+test("requiredScopesForRoute: integrations/status y metrics", () => {
+  assert.deepEqual(requiredScopesForRoute("GET", "/integrations/status"), [FTN_SCOPES.workflowsRead]);
+  assert.deepEqual(requiredScopesForRoute("GET", "/metrics"), [FTN_SCOPES.workflowsRead]);
+});
+
 test("requiredScopesForRoute asigna scopes esperados", () => {
   assert.deepEqual(requiredScopesForRoute("GET", "/activities"), [FTN_SCOPES.catalogRead]);
   assert.deepEqual(requiredScopesForRoute("GET", "/catalog/workflows"), [FTN_SCOPES.catalogRead]);
@@ -69,6 +74,10 @@ test("requiredScopesForRoute asigna scopes esperados", () => {
 
 test("GET /openapi.json es ruta pública", () => {
   assert.equal(isPublicPath("GET", "/openapi.json"), true);
+});
+
+test("GET /metrics es ruta pública", () => {
+  assert.equal(isPublicPath("GET", "/metrics"), true);
 });
 
 test("GET /docs y /swagger son rutas públicas", () => {
