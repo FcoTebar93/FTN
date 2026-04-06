@@ -1,5 +1,6 @@
 import type { WorkflowWorkerDeps } from "../workers/workflow-worker";
 import type { TaskLease, WorkflowTask } from "../shared/tasks";
+import { ConcurrencyError } from "../modules/event-store";
 
 export class InMemoryWorkflowWorker {
     private readonly workerId;
@@ -37,6 +38,9 @@ export class InMemoryWorkflowWorker {
             tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId);
         } catch (error) {
             console.error("[workflow-worker] runWorkflowTick error:", error);
+            if (error instanceof ConcurrencyError) {
+                await this.taskQueue.requeueTask(task.id);
+            }
             await this.taskQueue.completeTask(lease.leaseId);
             return;
         }

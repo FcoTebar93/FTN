@@ -86,7 +86,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const workflowId = generateWorkflowId();
         const runId = generateRunId();
 
-        const { workflowName, input } = options;
+        const { workflowName, workflowVersion, input } = options;
 
         const key = makeWorkflowKey(workflowId, runId);
         this.definitions.set(key, {
@@ -101,6 +101,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             runId,
             payload: {
                 name: workflowName,
+                workflowVersion,
                 input,
             },
         };
