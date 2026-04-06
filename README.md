@@ -113,6 +113,10 @@ docker compose down -v
 ### Troubleshooting rápido
 
 - Si aparece `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`, inicia Docker Desktop (engine Linux) y reintenta.
+- Si aparece `500 Internal Server Error` hacia `dockerDesktopLinuxEngine` o `unable to get image ... json`, el motor de Docker va mal: reinicia Docker Desktop, comprueba `docker version`, y en caso extremo actualiza Docker Desktop o ejecuta `wsl --shutdown` (si usas WSL2) y reinicia.
+- **`EADDRINUSE` ... `port: 4000` dentro del contenedor**: el backend ya está en marcha (`CMD` del `Dockerfile.backend`). No ejecutes otra vez `node dist/infra/main.js` con `docker exec` salvo que uses otro `PORT` o detengas el proceso que escucha. Para ver logs usa `docker logs ftn-backend`; para una shell sin arrancar el servidor: `docker exec -it ftn-backend sh`.
+- **`docker compose up --build frontend` recompila también el backend**: es normal si Compose considera que debe reconstruir dependencias. Para **solo** la imagen del frontend: `docker compose build frontend` y luego `docker compose up -d frontend`.
+- **Build del frontend muy lento o `rpc error ... EOF`**: suele ser contexto Docker enorme (p. ej. sin `frontend/.dockerignore`) o Docker Desktop saturado. Cierra otras cargas, aumenta recursos en Docker Desktop, y reintenta; el repo incluye `frontend/.dockerignore` para excluir `node_modules` y `dist` del contexto.
 - Valida que Docker esté operativo:
 
 ```bash
