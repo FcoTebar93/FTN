@@ -37,9 +37,14 @@ export class InMemoryWorkflowWorker {
         try {
             tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId);
         } catch (error) {
-            console.error("[workflow-worker] runWorkflowTick error:", error);
             if (error instanceof ConcurrencyError) {
+                console.warn("[workflow-worker] concurrent tick detected, requeueing task", {
+                    workflowId: task.workflowId,
+                    runId: task.runId,
+                });
                 await this.taskQueue.requeueTask(task.id);
+            } else {
+                console.error("[workflow-worker] runWorkflowTick error:", error);
             }
             await this.taskQueue.completeTask(lease.leaseId);
             return;
