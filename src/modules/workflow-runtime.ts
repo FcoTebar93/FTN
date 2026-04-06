@@ -21,6 +21,7 @@ export interface WorkflowRuntimeDeps {
 
 export interface StartWorkflowOptions<TInput, TResult> {
     workflowName: string;
+    workflowVersion?: string;
     input: TInput;
     definition: WorkflowDefinition<TInput, TResult>;
 }

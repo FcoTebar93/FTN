@@ -32,6 +32,7 @@ export interface WorkflowStartedEvent extends BaseWorkflowEvent {
     type: "WorkflowStarted";
     payload: {
         name: string;
+        workflowVersion?: string;
         input: unknown;
     };
 }
