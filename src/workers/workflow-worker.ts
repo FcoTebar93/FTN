@@ -7,6 +7,10 @@ export interface WorkflowWorkerConfig {
     queueName: string;
     leaseTimeoutMs: number;
     pollIntervalMs: number;
+    concurrencyRetryMaxAttempts?: number;
+    concurrencyRetryBaseDelayMs?: number;
+    concurrencyRetryMaxDelayMs?: number;
+    concurrencyRetryJitterRatio?: number;
 }
 
 export interface WorkflowWorkerDeps {
