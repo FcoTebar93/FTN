@@ -145,6 +145,47 @@ ALTER TABLE ftn_designer_workflows
   ADD COLUMN IF NOT EXISTS last_scheduled_error TEXT NULL;
 `,
   },
+  {
+    version: 9,
+    name: "auth_scopes_refresh_revocation_audit",
+    sql: `
+ALTER TABLE ftn_users
+  ADD COLUMN IF NOT EXISTS scopes TEXT NULL;
+
+COMMENT ON COLUMN ftn_users.scopes IS
+  'Scopes RBAC separados por espacio o coma; NULL usa FTN_AUTH_LOGIN_SCOPES al emitir JWT.';
+
+CREATE TABLE IF NOT EXISTS ftn_refresh_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ftn_refresh_tokens_hash ON ftn_refresh_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS ftn_refresh_tokens_username ON ftn_refresh_tokens (username);
+CREATE INDEX IF NOT EXISTS ftn_refresh_tokens_expires ON ftn_refresh_tokens (expires_at);
+
+CREATE TABLE IF NOT EXISTS ftn_revoked_access_tokens (
+  jti TEXT PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ftn_revoked_access_tokens_expires ON ftn_revoked_access_tokens (expires_at);
+
+CREATE TABLE IF NOT EXISTS ftn_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  subject TEXT NOT NULL,
+  action TEXT NOT NULL,
+  resource TEXT NULL,
+  detail_json JSONB NULL
+);
+
+CREATE INDEX IF NOT EXISTS ftn_audit_log_occurred ON ftn_audit_log (occurred_at DESC);
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
