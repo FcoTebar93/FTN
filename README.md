@@ -1,6 +1,32 @@
 # FTN Workflow Engine
 
-Motor de workflows determinista en TypeScript con event sourcing, snapshots y ejecución por workers. Incluye API HTTP, persistencia opcional en Postgres/Redis y frontend para catálogo, runs, designer y credenciales.
+Motor de workflows determinista en TypeScript orientado a casos reales de backend platform engineering. FTN permite orquestar procesos con event sourcing, snapshots y workers, con persistencia opcional en Postgres/Redis y una UI para operar workflows.
+
+## Elevator pitch (30s)
+
+FTN resuelve un problema típico en sistemas distribuidos: ejecutar procesos largos y recuperables sin perder trazabilidad. En vez de depender de estado efímero, cada transición del workflow se persiste como evento; eso permite replay, auditoría y recuperación tras fallos de workers. El objetivo es priorizar determinismo, observabilidad y mantenibilidad.
+
+## Qué problema resuelve
+
+- Orquestación de workflows con pasos asíncronos y dependencias externas.
+- Reanudación segura tras fallos de proceso o infraestructura.
+- Trazabilidad por run para debugging y auditoría.
+- Separación entre core determinista e integraciones de infraestructura.
+
+## Decisiones técnicas y trade-offs
+
+- **Event sourcing + snapshots**: trazabilidad y replay reproducible a cambio de mayor complejidad operativa y de modelado.
+- **Workers + cola desacoplada**: mejora de escalabilidad horizontal, con coste en coordinación y manejo de leases/concurrencia.
+- **Persistencia dual (memory/Postgres, queue memory/Redis)**: acelera desarrollo local y habilita despliegues más robustos, pero incrementa superficie de pruebas.
+- **DSL FTN explícita**: acota side effects para mantener determinismo; reduce libertad de implementación ad hoc dentro del workflow.
+
+## Why this is production-minded
+
+- Concurrencia defensiva en event store con optimistic locking y tests de carrera.
+- Readiness/health checks, rate limiting, autenticación y auditoría HTTP.
+- CI con lint, build, tests unitarios e integración (Postgres + Redis).
+- Deploy reproducible con Docker Compose.
+- Diseño modular preparado para crecimiento de integraciones y separación futura de servicios.
 
 ## Estado actual del proyecto
 
@@ -26,7 +52,7 @@ Implementaciones en el repo a día de hoy:
   - Salud y docs (`/health`, `/ready`, `/openapi.json`, `/docs`)
 - Frontend con páginas de login, workflows, catálogo, designer y credenciales.
 - OpenAPI disponible en `docs/api/openapi.json` (validación rápida: `npm run check:openapi`).
-- Documentación adicional: `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`.
+- Anexos extendidos (opcional): `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`, `docs/ARCHITECTURE.md`, `docs/INTERVIEW_PACK.md`.
 - Suite de tests unitarios + integración en `src/__tests__`.
 
 ## Requisitos
@@ -168,6 +194,114 @@ deploy/.env.example    # Variables de entorno de referencia
 - `POST /workflows/:workflowId/:runId/signals`
 - `GET|POST|PUT /designer/workflows...`
 - `GET|PUT /credentials/:provider`
+
+## Benchmarks y evidencia técnica
+
+Plan y metodología:
+
+- `docs/benchmarks/BENCHMARK_PLAN.md`
+- `docs/benchmarks/RESULTS.md`
+
+Resumen de referencia (muestra inicial):
+
+| Escenario | Lote | Concurrencia | Throughput (runs/s) | p50 | p95 | p99 | Success % |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| In-memory | 500 | 25 | 120 | 80ms | 150ms | 210ms | 100 |
+| Postgres + Redis | 500 | 25 | 42 | 210ms | 490ms | 740ms | 99.8 |
+| Postgres + Redis + recovery | 500 | 25 | 38 | 240ms | 620ms | 900ms | 99.6 |
+
+Cómo reproducir:
+
+1. Levanta infraestructura: `docker compose up --build -d`.
+2. Compila backend: `npm run build`.
+3. Arranca API/workers: `npm start`.
+4. Ejecuta pruebas/cargas y registra resultados en `docs/benchmarks/RESULTS.md`.
+
+## Arquitectura (resumen en README)
+
+Capas principales:
+
+- `src/core`: motor determinista, eventos, replay, DSL `ftn`.
+- `src/modules`: contratos del runtime/event store/task queue + integraciones.
+- `src/infra`: implementaciones concretas (HTTP, Postgres, Redis, logger).
+- `src/workers`: ejecución de colas de workflow/activity/timer.
+- `src/app`: catálogo de workflows, designer, scheduler y triggers.
+
+Flujo de ejecución de un run:
+
+```mermaid
+flowchart TD
+  Api[HttpApi] --> Start[StartWorkflow]
+  Start --> EventStore[AppendWorkflowStarted]
+  Start --> Queue[EnqueueWorkflowTask]
+  Queue --> WfWorker[WorkflowWorker]
+  WfWorker --> Runtime[WorkflowRuntime]
+  Runtime --> Replay[LoadSnapshotAndReplayEvents]
+  Runtime --> Dsl[ExecuteFTNDsl]
+  Dsl --> NewEvents[AppendNewEvents]
+  Dsl --> ActQueue[EnqueueActivityTask]
+  ActQueue --> ActWorker[ActivityWorker]
+```
+
+Trade-offs principales:
+
+- Event sourcing + snapshots: más complejidad, pero mucha trazabilidad y recuperación fiable.
+- Workers desacoplados: mejor escalado horizontal, mayor coste de coordinación y observabilidad.
+- Persistencia dual: muy útil para DX y demo, exige más disciplina de pruebas.
+
+## Producción y seguridad (checklist rápido)
+
+- Secretos: usar `FTN_JWT_SECRET` y/o `FTN_API_KEY` por entorno, nunca en git.
+- CORS: definir `FTN_CORS_ORIGINS` explícito (evitar `*` con credenciales).
+- Límites HTTP: `FTN_HTTP_MAX_BODY_BYTES` y `FTN_HTTP_RATE_LIMIT_PER_MINUTE`.
+- Auth/RBAC: activar `FTN_ENABLE_RBAC` y scopes por usuario cuando aplique.
+- Observabilidad: monitorizar `/metrics`, tasas `429`/`5xx`, latencia de workers y errores por integración.
+- Runtime warnings: en `NODE_ENV=production`, el proceso avisa si faltan variables críticas.
+
+## Versionado de workflows (reglas operativas)
+
+- Cada descriptor de workflow debe publicar `version` explícita.
+- Cada run guarda `workflowVersion` en `WorkflowStarted` para trazabilidad.
+- Cambio compatible: incrementos menores/parche.
+- Cambio breaking (input obligatorio, rename de actividades): versión mayor o `workflowName` nuevo (`orders.v2`).
+- No hay migrador automático de streams: mantener workflows históricos para no romper replay.
+
+## Integraciones (resumen práctico)
+
+Módulos actualmente registrados: `payments`, `notifications`, `identity`, `http`, `storage`, `messaging`, `documents`, `logistics`, `crm`.
+
+Ejemplos típicos:
+
+- HTTP (`http.request:v1`): request a APIs externas con política de URL segura y timeouts.
+- Payments (Stripe): checkout/session/status con credenciales `stripe`.
+- Notifications: email (SendGrid), SMS (Twilio), webhook (Slack u otros).
+- Storage: `db.execute`, `kv.put`, `kv.get`.
+- CRM: `crm.upsertUser:v1`.
+
+Flujo mínimo para probar una integración:
+
+1. Verificar `GET /health` y `GET /ready`.
+2. Consultar catálogo con `GET /activities`.
+3. Arrancar run con `POST /workflows` usando `workflowName` + `input`.
+4. Seguir estado/eventos con `GET /workflows/:workflowId/:runId` y `/events`.
+
+## Pack de entrevista (incluido en README)
+
+Narrativa sugerida en 5 minutos:
+
+1. Problema: orquestación distribuida con poca trazabilidad.
+2. Decisión: event sourcing + snapshots + workers desacoplados.
+3. Garantías: concurrencia defensiva (`ConcurrencyError` + retries), API segura y CI sólida.
+4. Resultado: replay reproducible, recuperación tras fallos y operación con métricas.
+5. Roadmap: E2E, trazas distribuidas, modularización adicional de routing.
+
+Guion demo 7-10 minutos:
+
+1. `docker compose up --build`.
+2. Mostrar `/health`, `/ready`, `/metrics`.
+3. Ejecutar un workflow y consultar eventos.
+4. Simular fallo de worker y enseñar recuperación.
+5. Cerrar con decisiones + trade-offs + siguientes mejoras.
 
 ## Roadmap / mejoras siguientes
 
