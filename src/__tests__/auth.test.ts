@@ -49,6 +49,11 @@ test("verifyJwtHs256 respeta iss y aud", () => {
   assert.equal(verifyJwtHs256(token, secret, { audience: "other" }), null);
 });
 
+test("requiredScopesForRoute: logout y audit", () => {
+  assert.deepEqual(requiredScopesForRoute("POST", "/auth/logout"), []);
+  assert.deepEqual(requiredScopesForRoute("GET", "/audit/logs"), [FTN_SCOPES.workflowsRead]);
+});
+
 test("requiredScopesForRoute asigna scopes esperados", () => {
   assert.deepEqual(requiredScopesForRoute("GET", "/activities"), [FTN_SCOPES.catalogRead]);
   assert.deepEqual(requiredScopesForRoute("GET", "/catalog/workflows"), [FTN_SCOPES.catalogRead]);
@@ -145,8 +150,9 @@ test("signJwtHs256 e issueAccessToken son coherentes con verifyJwtHs256", () => 
   assert.ok(validateLoginCredentials(cfg, "alice", "pw"));
   assert.equal(validateLoginCredentials(cfg, "alice", "wrong"), false);
 
-  const { token, expiresIn } = issueAccessToken(cfg);
+  const { token, expiresIn, jti } = issueAccessToken(cfg);
   assert.equal(expiresIn, 120);
+  assert.ok(typeof jti === "string" && jti.length > 0);
   const payload = verifyJwtHs256(token, secret);
   assert.ok(payload);
   assert.equal(payload!.sub, "alice");
@@ -156,6 +162,7 @@ test("signJwtHs256 e issueAccessToken son coherentes con verifyJwtHs256", () => 
   const p2 = verifyJwtHs256(t2, secret);
   assert.ok(p2);
   assert.equal(p2!.sub, "bob");
+  assert.ok(typeof p2!.jti === "string");
 });
 
 test("RBAC: JWT con scope adecuado", () => {
