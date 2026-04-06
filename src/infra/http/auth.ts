@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type http from "node:http";
 
 import type { ApiSecurityConfig } from "./security";
@@ -19,6 +19,8 @@ export interface AuthPrincipal {
   kind: "api_key" | "jwt";
   subject?: string;
   scopes: Set<string>;
+  /** Presente en JWT emitidos por FTN (revocación / logout). */
+  jti?: string;
 }
 
 function timingSafeEqualString(a: string, b: string): boolean {
@@ -44,6 +46,7 @@ interface JwtPayload {
   aud?: string | string[];
   scope?: string;
   ftn_scopes?: string[];
+  jti?: string;
 }
 
 function parseJwtPayload(raw: string): JwtPayload | null {
@@ -151,16 +154,20 @@ export function validateLoginCredentials(
 
 export function issueAccessTokenForSubject(
   config: ApiSecurityConfig,
-  subject: string
-): { token: string; expiresIn: number } {
+  subject: string,
+  options?: { scopeStrOverride?: string | null }
+): { token: string; expiresIn: number; jti: string } {
   const now = Math.floor(Date.now() / 1000);
   const ttl = config.jwtTtlSeconds;
-  const scopeStr = config.loginScopes.replace(/,/g, " ").trim() || "*";
+  const fallback = config.loginScopes.replace(/,/g, " ").trim() || "*";
+  const scopeStr = (options?.scopeStrOverride ?? fallback).replace(/,/g, " ").trim() || "*";
+  const jti = randomUUID();
   const payload: Record<string, unknown> = {
     sub: subject,
     iat: now,
     exp: now + ttl,
     scope: scopeStr,
+    jti,
   };
   if (config.jwtIssuer) {
     payload.iss = config.jwtIssuer;
@@ -169,10 +176,10 @@ export function issueAccessTokenForSubject(
     payload.aud = config.jwtAudience;
   }
   const token = signJwtHs256(payload, config.jwtSecret!);
-  return { token, expiresIn: ttl };
+  return { token, expiresIn: ttl, jti };
 }
 
-export function issueAccessToken(config: ApiSecurityConfig): { token: string; expiresIn: number } {
+export function issueAccessToken(config: ApiSecurityConfig): { token: string; expiresIn: number; jti: string } {
   return issueAccessTokenForSubject(config, config.loginUsername);
 }
 
@@ -227,6 +234,7 @@ function authenticate(req: http.IncomingMessage, config: ApiSecurityConfig): Aut
         kind: "jwt",
         subject: typeof payload.sub === "string" ? payload.sub : undefined,
         scopes,
+        jti: typeof payload.jti === "string" && payload.jti.length > 0 ? payload.jti : undefined,
       },
     };
   }
@@ -298,6 +306,14 @@ export function requiredScopesForRoute(method: string, pathWithoutQuery: string)
 
   if (method === "POST" && p === "/pay/checkout") {
     return [FTN_SCOPES.paymentsWrite];
+  }
+
+  if (method === "POST" && p === "/auth/logout") {
+    return [];
+  }
+
+  if (method === "GET" && (p === "/audit/logs" || p.startsWith("/audit/logs"))) {
+    return [FTN_SCOPES.workflowsRead];
   }
 
   if (method === "GET" || method === "HEAD") {
