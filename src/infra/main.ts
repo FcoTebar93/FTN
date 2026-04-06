@@ -65,6 +65,7 @@ import { runPostgresMigrations } from "./postgres-migrations";
 import { PostgresEventStore } from "./postgres-event-store";
 import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger, type Logger } from "./logger";
+import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { SWAGGER_UI_HTML } from "./swagger-ui";
@@ -326,158 +327,12 @@ async function main(): Promise<void> {
     source: "credentials" | "env" | "none";
     details?: string;
   }>> {
-    const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-    const obj = (v: unknown): Record<string, unknown> =>
-      v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-    const isHttpUrl = (v: string | undefined): boolean => {
-      if (!v) return false;
-      try {
-        const u = new URL(v);
-        return u.protocol === "http:" || u.protocol === "https:";
-      } catch {
-        return false;
-      }
-    };
-    const isStripeSecretKey = (v: string | undefined): boolean => Boolean(v && /^sk_(test|live)_/.test(v));
-
-    const credStripe = await getCredential(subject, "stripe");
-    const stripeKey =
-      str(obj(credStripe?.secrets).stripeSecretKey) ??
-      str(obj(credStripe?.secrets).secretKey) ??
-      str(obj(credStripe?.config).stripeSecretKey);
-    const stripeEnvKey = str(process.env.STRIPE_SECRET_KEY);
-    const stripeConfigured = Boolean((stripeKey && isStripeSecretKey(stripeKey)) || (stripeEnvKey && isStripeSecretKey(stripeEnvKey)));
-    const stripeSource: "credentials" | "env" | "none" = stripeKey ? "credentials" : stripeEnvKey ? "env" : "none";
-    const stripeDetails = stripeConfigured
-      ? undefined
-      : stripeKey || stripeEnvKey
-      ? "Formato inválido: stripeSecretKey debe empezar por sk_test_ o sk_live_."
-      : "Falta stripeSecretKey en credenciales (secrets/config) o STRIPE_SECRET_KEY en entorno.";
-
-    const credTwilio = await getCredential(subject, "twilio");
-    const twilioSid =
-      str(obj(credTwilio?.secrets).accountSid) ??
-      str(obj(credTwilio?.secrets).twilioAccountSid) ??
-      str(obj(credTwilio?.config).accountSid);
-    const twilioToken =
-      str(obj(credTwilio?.secrets).authToken) ??
-      str(obj(credTwilio?.secrets).twilioAuthToken) ??
-      str(obj(credTwilio?.config).authToken);
-    const twilioFrom =
-      str(obj(credTwilio?.config).fromNumber) ??
-      str(obj(credTwilio?.config).twilioFromNumber) ??
-      str(process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER);
-    const twilioEnv =
-      str(process.env.TWILIO_ACCOUNT_SID) && str(process.env.TWILIO_AUTH_TOKEN)
-        ? true
-        : false;
-    const twilioConfigured = Boolean(
-      (twilioSid &&
-        twilioToken &&
-        twilioFrom &&
-        /^AC[a-zA-Z0-9]{10,}$/.test(twilioSid) &&
-        twilioToken.length >= 10 &&
-        /^\+?[0-9]{6,}$/.test(twilioFrom)) ||
-        twilioEnv
-    );
-    const twilioSource: "credentials" | "env" | "none" =
-      twilioSid && twilioToken && twilioFrom ? "credentials" : twilioEnv ? "env" : "none";
-    const twilioDetails = twilioConfigured
-      ? undefined
-      : twilioSid || twilioToken || twilioFrom
-      ? "Formato inválido en Twilio: accountSid debe iniciar por AC..., authToken >= 10 chars y fromNumber debe parecer teléfono."
-      : "Faltan accountSid/authToken/fromNumber en twilio o TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN (+ from).";
-
-    const credKyc = await getCredential(subject, "kyc");
-    const kycUrl =
-      str(obj(credKyc?.secrets).providerUrl) ??
-      str(obj(credKyc?.config).providerUrl) ??
-      str(process.env.KYC_PROVIDER_URL);
-    const kycToken =
-      str(obj(credKyc?.secrets).providerToken) ??
-      str(obj(credKyc?.secrets).token) ??
-      str(obj(credKyc?.config).providerToken) ??
-      str(process.env.KYC_PROVIDER_TOKEN);
-    const kycEnv = Boolean(str(process.env.KYC_PROVIDER_URL) && str(process.env.KYC_PROVIDER_TOKEN));
-    const kycConfigured = Boolean((kycUrl && kycToken && isHttpUrl(kycUrl)) || kycEnv);
-    const kycSource: "credentials" | "env" | "none" = kycUrl && kycToken ? "credentials" : kycEnv ? "env" : "none";
-    const kycDetails = kycConfigured
-      ? undefined
-      : kycUrl || kycToken
-      ? "Formato inválido en KYC: providerUrl debe ser http(s) válido y providerToken no vacío."
-      : "Faltan providerUrl y providerToken para KYC.";
-
-    const credNotifications = await getCredential(subject, "notifications");
-    const sendgridKey =
-      str(obj(credNotifications?.secrets).sendgridApiKey) ??
-      str(obj(credNotifications?.secrets).apiKey) ??
-      str(obj(credNotifications?.config).sendgridApiKey);
-    const emailFrom =
-      str(obj(credNotifications?.config).emailFrom) ??
-      str(obj(credNotifications?.config).from) ??
-      str(process.env.EMAIL_FROM ?? process.env.SMTP_FROM);
-    const slackWebhook =
-      str(obj(credNotifications?.secrets).slackWebhookUrl) ??
-      str(obj(credNotifications?.config).slackWebhookUrl) ??
-      str(process.env.SLACK_WEBHOOK_URL);
-    const sendgridEnv = Boolean(str(process.env.SENDGRID_API_KEY) && str(process.env.EMAIL_FROM ?? process.env.SMTP_FROM));
-    const slackEnv = Boolean(str(process.env.SLACK_WEBHOOK_URL));
-    const notificationsConfigured = Boolean(
-      (sendgridKey && /^SG\./.test(sendgridKey) && emailFrom && emailFrom.includes("@")) ||
-      (slackWebhook && /^https:\/\/hooks\.slack\.com\//.test(slackWebhook)) ||
-      sendgridEnv ||
-      slackEnv
-    );
-    const notificationsSource: "credentials" | "env" | "none" =
-      (sendgridKey && emailFrom) || slackWebhook ? "credentials" : sendgridEnv || slackEnv ? "env" : "none";
-    const notificationsDetails = notificationsConfigured
-      ? undefined
-      : sendgridKey || emailFrom || slackWebhook
-      ? "Formato inválido en notifications: SendGrid key debe empezar por SG., emailFrom debe ser email, slackWebhookUrl debe ser hooks.slack.com."
-      : "Configura SendGrid (sendgridApiKey + emailFrom) o slackWebhookUrl.";
-
-    return [
-      {
-        key: "stripe",
-        label: "Stripe",
-        configured: stripeConfigured,
-        source: stripeSource,
-        details: stripeDetails,
-      },
-      {
-        key: "twilio",
-        label: "Twilio SMS",
-        configured: twilioConfigured,
-        source: twilioSource,
-        details: twilioDetails,
-      },
-      {
-        key: "kyc",
-        label: "KYC Provider",
-        configured: kycConfigured,
-        source: kycSource,
-        details: kycDetails,
-      },
-      {
-        key: "notifications",
-        label: "Email/Slack",
-        configured: notificationsConfigured,
-        source: notificationsSource,
-        details: notificationsDetails,
-      },
-      {
-        key: "postgres",
-        label: "Postgres",
-        configured: Boolean(pool),
-        source: pool ? "env" : "none",
-      },
-      {
-        key: "redis",
-        label: "Redis",
-        configured: Boolean(redis),
-        source: redis ? "env" : "none",
-      },
-    ];
+    return buildIntegrationsStatusForSubject(subject, {
+      hasPostgres: Boolean(pool),
+      hasRedis: Boolean(redis),
+      getCredential,
+      env: process.env,
+    });
   }
 
   if (pool && apiSecurity.jwtSecret) {
