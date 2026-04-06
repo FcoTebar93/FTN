@@ -48,6 +48,21 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.deepEqual(state!.result, { sum: 2 });
   });
 
+  it("persiste workflowVersion en WorkflowStarted para congelar definición del run", async () => {
+    const { runtime, eventStore } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "example-versioned",
+      workflowVersion: "v2",
+      input: { x: 1 },
+      definition: async (_ftn, input) => ({ sum: input.x + 1 }),
+    });
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.equal(events[0].type, "WorkflowStarted");
+    assert.equal(events[0].payload.workflowVersion, "v2");
+  });
+
   it("programa una ActivityScheduled usando ftn.activity y la deja en pendingActivities", async () => {
     const { runtime } = inMemoryStack();
 

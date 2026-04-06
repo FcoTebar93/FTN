@@ -8,6 +8,7 @@ import { InMemoryWorkflowRuntime } from "../../infra/inmemory-workflow-runtime";
 import { runPostgresMigrations } from "../../infra/postgres-migrations";
 import { PostgresEventStore } from "../../infra/postgres-event-store";
 import { PostgresSnapshotStore } from "../../infra/postgres-snapshot-store";
+import { ConcurrencyError } from "../../modules/event-store";
 
 const engineUrl = process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL;
 const describePg = engineUrl ? describe : describe.skip;
@@ -144,5 +145,42 @@ describePg("InMemoryWorkflowRuntime con stores Postgres", () => {
     assert.equal(state2!.status, "completed");
     assert.deepEqual(state2!.result, { v: 7 });
     assert.equal(state2!.pendingSignalWaits.length, 0);
+  });
+
+  it("dos runWorkflowTick concurrentes: un append gana y el otro lanza ConcurrencyError (Postgres)", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new PostgresEventStore(pool);
+    const snapshotStore = new PostgresSnapshotStore(pool);
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "pg-race",
+      input: {},
+      definition: async () => ({ done: true }),
+    });
+
+    const results = await Promise.allSettled([
+      runtime.runWorkflowTick(workflowId, runId),
+      runtime.runWorkflowTick(workflowId, runId),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    if (rejected[0]!.status === "rejected") {
+      assert.ok(rejected[0]!.reason instanceof ConcurrencyError);
+    }
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.equal(events.filter((e) => e.type === "WorkflowCompleted").length, 1);
   });
 });

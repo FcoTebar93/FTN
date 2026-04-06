@@ -10,7 +10,9 @@ import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
+import type { WorkflowRuntime } from "../modules/workflow-runtime";
 import type { ActivityTask } from "../shared/tasks";
+import { ConcurrencyError } from "../modules/event-store";
 
 function inMemoryStack() {
   const engine = new DefaultWorkflowEngine();
@@ -190,5 +192,103 @@ describe("InMemoryWorkflowWorker", () => {
     assert.equal(wfLease.task.workflowId, workflowId);
     assert.equal(wfLease.task.runId, runId);
     await taskQueue.completeTask(wfLease.leaseId);
+  });
+
+  it("reencola con retryCount si runWorkflowTick falla por ConcurrencyError", async () => {
+    const { taskQueue } = inMemoryStack();
+    const workflowId = "wf-race";
+    const runId = "run-race";
+    await taskQueue.enqueue(makeWorkflowTask(workflowId, runId));
+
+    let calls = 0;
+    const runtime: WorkflowRuntime = {
+      async runWorkflowTick() {
+        calls += 1;
+        throw new ConcurrencyError({
+          workflowId,
+          runId,
+          expectedVersion: 1,
+          actualVersion: 2,
+        });
+      },
+      async loadCurrentState() {
+        return null;
+      },
+      async startWorkflow() {
+        throw new Error("not implemented");
+      },
+    } as WorkflowRuntime;
+
+    const worker = new InMemoryWorkflowWorker({
+      workerId: "workflow-worker-race",
+      taskQueue,
+      runtime,
+      config: {
+        queueName: "workflows",
+        leaseTimeoutMs: 10_000,
+        pollIntervalMs: 10,
+        concurrencyRetryBaseDelayMs: 0,
+        concurrencyRetryMaxDelayMs: 0,
+        concurrencyRetryJitterRatio: 0,
+        concurrencyRetryMaxAttempts: 3,
+      },
+    });
+
+    await worker.runOnce();
+    assert.equal(calls, 1);
+
+    const requeued = await taskQueue.leaseNextTask("workflow-worker-race-2", "workflows", 1000);
+    assert.ok(requeued);
+    assert.equal(requeued.task.type, "workflow");
+    assert.equal(requeued.task.workflowId, workflowId);
+    assert.equal(requeued.task.runId, runId);
+    assert.equal((requeued.task as any).retryCount, 1);
+    await taskQueue.completeTask(requeued.leaseId);
+  });
+
+  it("deja de reencolar cuando supera concurrencyRetryMaxAttempts", async () => {
+    const { taskQueue } = inMemoryStack();
+    const workflowId = "wf-race-max";
+    const runId = "run-race-max";
+    await taskQueue.enqueue({
+      ...makeWorkflowTask(workflowId, runId),
+      retryCount: 1,
+    });
+
+    const runtime: WorkflowRuntime = {
+      async runWorkflowTick() {
+        throw new ConcurrencyError({
+          workflowId,
+          runId,
+          expectedVersion: 1,
+          actualVersion: 2,
+        });
+      },
+      async loadCurrentState() {
+        return null;
+      },
+      async startWorkflow() {
+        throw new Error("not implemented");
+      },
+    } as WorkflowRuntime;
+
+    const worker = new InMemoryWorkflowWorker({
+      workerId: "workflow-worker-race-max",
+      taskQueue,
+      runtime,
+      config: {
+        queueName: "workflows",
+        leaseTimeoutMs: 10_000,
+        pollIntervalMs: 10,
+        concurrencyRetryBaseDelayMs: 0,
+        concurrencyRetryMaxDelayMs: 0,
+        concurrencyRetryJitterRatio: 0,
+        concurrencyRetryMaxAttempts: 1,
+      },
+    });
+
+    await worker.runOnce();
+    const next = await taskQueue.leaseNextTask("workflow-worker-race-max-2", "workflows", 1000);
+    assert.equal(next, null);
   });
 });
