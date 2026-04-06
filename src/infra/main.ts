@@ -26,11 +26,32 @@ import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 import { matchHttpTrigger } from "../app/triggers";
 
 import { handleCatalogRoutes } from "./http/catalog";
-import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/security";
-import { authenticatePrincipal, checkProtectedAccess, isAuthConfigured, isLoginConfigured, issueAccessToken, issueAccessTokenForSubject, validateLoginCredentials } from "./http/auth";
+import { applyCorsHeaders, createRateLimiter, extractBearerOrApiKey, loadApiSecurityConfigFromEnv, readBodyCapped, getClientIp } from "./http/security";
+import {
+  authenticatePrincipal,
+  checkProtectedAccess,
+  isAuthConfigured,
+  isLoginConfigured,
+  issueAccessToken,
+  issueAccessTokenForSubject,
+  validateLoginCredentials,
+  verifyJwtHs256,
+} from "./http/auth";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword, verifyPassword } from "./passwords";
-import { getUserPasswordHash, insertUser } from "./users";
+import {
+  consumeRefreshToken,
+  deleteRefreshTokensForUser,
+  getUserPasswordHash,
+  getUserScopesText,
+  insertAuditLog,
+  insertUser,
+  isAccessTokenJtiRevoked,
+  newRefreshTokenRaw,
+  revokeAccessTokenJti,
+  storeRefreshToken,
+} from "./users";
+import { incHttpForbidden, incHttpRateLimited, incHttpRequest, incHttpUnauthorized, renderPrometheusText } from "./metrics";
 
 import { validateJson } from "../shared/json-schema-validate";
 import { StoredWorkflow } from "../app/designer-types";
@@ -43,10 +64,32 @@ import { DESIGNER_KINDS } from "../app/designer-kinds";
 import { runPostgresMigrations } from "./postgres-migrations";
 import { PostgresEventStore } from "./postgres-event-store";
 import { PostgresSnapshotStore } from "./postgres-snapshot-store";
-import { createLogger } from "./logger";
+import { createLogger, type Logger } from "./logger";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { SWAGGER_UI_HTML } from "./swagger-ui";
+
+function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV !== "production") {
+    return;
+  }
+
+  const hasJwt = Boolean(env.FTN_JWT_SECRET?.trim());
+  const hasApiKey = Boolean(env.FTN_API_KEY?.trim());
+  if (!hasJwt && !hasApiKey) {
+    log.warn("ftn.env.productionNoAuth", {
+      message:
+        "NODE_ENV=production sin FTN_JWT_SECRET ni FTN_API_KEY: la API queda sin autenticación HTTP.",
+    });
+  }
+
+  const hasEngineDb = Boolean((env.FTN_ENGINE_DATABASE_URL ?? env.DATABASE_URL)?.trim());
+  if (!hasEngineDb) {
+    log.warn("ftn.env.productionMemoryPersistence", {
+      message: "NODE_ENV=production sin DATABASE_URL/FTN_ENGINE_DATABASE_URL: motor en memoria (no persistente).",
+    });
+  }
+}
 
 async function main(): Promise<void> {
   const log = createLogger();
@@ -266,8 +309,10 @@ async function main(): Promise<void> {
   activityQueueWorker.runForever(cancellation).catch((err) => log.error("activityQueueWorker.runForever", { err: String(err) }));
 
   const apiSecurity = loadApiSecurityConfigFromEnv();
+  logProductionEnvWarnings(log);
   const hasDbLogin = Boolean(pool && apiSecurity.jwtSecret);
   const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
+  const refreshTtlSeconds = Math.max(60, parseInt(process.env.FTN_REFRESH_TTL_SECONDS ?? "604800", 10) || 604800);
 
   async function getIntegrationsStatusForSubject(subject: string): Promise<Array<{
     key: string;
@@ -463,25 +508,46 @@ async function main(): Promise<void> {
     const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
     const methodEarly = req.method ?? "GET";
 
+    if (methodEarly === "GET" && rawPathEarly === "/metrics") {
+      incHttpRequest();
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.end(renderPrometheusText());
+      return;
+    }
+
+    incHttpRequest();
+
     const access = checkProtectedAccess(req, apiSecurity, methodEarly, rawPathEarly);
     if (access === "unauthorized") {
+      incHttpUnauthorized();
       res.statusCode = 401;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
     if (access === "forbidden") {
+      incHttpForbidden();
       res.statusCode = 403;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Forbidden", detail: "Insufficient scope" }));
       return;
     }
     const principal = authenticatePrincipal(req, apiSecurity);
+    if (principal?.kind === "jwt" && principal.jti) {
+      if (await isAccessTokenJtiRevoked(pool, principal.jti)) {
+        incHttpUnauthorized();
+        res.statusCode = 401;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "Unauthorized", detail: "Token revoked" }));
+        return;
+      }
+    }
     const requestSubject =
       principal?.subject ??
       (principal?.kind === "api_key" ? "api_key" : systemSubject);
 
     if (!rateLimiter(getClientIp(req, apiSecurity.trustProxy))) {
+      incHttpRateLimited();
       res.statusCode = 429;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Too many requests" }));
@@ -557,9 +623,11 @@ async function main(): Promise<void> {
 
         let token: string;
         let expiresIn: number;
+        let subjectForAudit: string | undefined;
 
         if (validateLoginCredentials(apiSecurity, u, p)) {
           ({ token, expiresIn } = issueAccessToken(apiSecurity));
+          subjectForAudit = apiSecurity.loginUsername;
         } else if (pool && apiSecurity.jwtSecret) {
           const normalized = normalizeAndValidateUsername(u);
           if (!normalized) {
@@ -575,7 +643,9 @@ async function main(): Promise<void> {
             res.end(JSON.stringify({ error: "Invalid credentials" }));
             return;
           }
-          ({ token, expiresIn } = issueAccessTokenForSubject(apiSecurity, normalized));
+          const scopeFromDb = await getUserScopesText(pool, normalized);
+          ({ token, expiresIn } = issueAccessTokenForSubject(apiSecurity, normalized, { scopeStrOverride: scopeFromDb }));
+          subjectForAudit = normalized;
         } else {
           res.statusCode = 401;
           res.setHeader("Content-Type", "application/json");
@@ -583,14 +653,25 @@ async function main(): Promise<void> {
           return;
         }
 
+        const bodyOut: Record<string, unknown> = {
+          access_token: token,
+          token_type: "Bearer",
+          expires_in: expiresIn,
+        };
+        if (pool && apiSecurity.jwtSecret && subjectForAudit) {
+          const refreshRaw = newRefreshTokenRaw();
+          const refreshExpiresAt = new Date(Date.now() + refreshTtlSeconds * 1000);
+          await storeRefreshToken(pool, subjectForAudit, refreshRaw, refreshExpiresAt);
+          bodyOut.refresh_token = refreshRaw;
+          bodyOut.refresh_expires_in = refreshTtlSeconds;
+        }
+        await insertAuditLog(pool, {
+          subject: subjectForAudit ?? "api_user",
+          action: "login",
+          detail: { source: "password" },
+        });
         res.setHeader("Content-Type", "application/json");
-        res.end(
-          JSON.stringify({
-            access_token: token,
-            token_type: "Bearer",
-            expires_in: expiresIn,
-          })
-        );
+        res.end(JSON.stringify(bodyOut));
         return;
       }
 
@@ -641,15 +722,138 @@ async function main(): Promise<void> {
         }
 
         const { token, expiresIn } = issueAccessTokenForSubject(apiSecurity, normalized);
+        const bodyReg: Record<string, unknown> = {
+          access_token: token,
+          token_type: "Bearer",
+          expires_in: expiresIn,
+        };
+        if (apiSecurity.jwtSecret) {
+          const refreshRaw = newRefreshTokenRaw();
+          const refreshExpiresAt = new Date(Date.now() + refreshTtlSeconds * 1000);
+          await storeRefreshToken(pool, normalized, refreshRaw, refreshExpiresAt);
+          bodyReg.refresh_token = refreshRaw;
+          bodyReg.refresh_expires_in = refreshTtlSeconds;
+        }
+        await insertAuditLog(pool, {
+          subject: normalized,
+          action: "register",
+        });
         res.statusCode = 201;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(bodyReg));
+        return;
+      }
+
+      if (req.method === "POST" && rawPath === "/auth/refresh") {
+        if (!pool || !apiSecurity.jwtSecret) {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Refresh is not available" }));
+          return;
+        }
+        const body = await readBodyCapped(req, res, apiSecurity.maxBodyBytes);
+        if (body === null) return;
+        let parsed: { refresh_token?: unknown };
+        try {
+          parsed = JSON.parse(body || "{}");
+        } catch {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid JSON" }));
+          return;
+        }
+        const rt = typeof parsed.refresh_token === "string" ? parsed.refresh_token : "";
+        if (!rt.trim()) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Missing refresh_token" }));
+          return;
+        }
+        const consumed = await consumeRefreshToken(pool, rt.trim());
+        if (!consumed) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid refresh token" }));
+          return;
+        }
+        const scopeFromDb = await getUserScopesText(pool, consumed.username);
+        const issued = issueAccessTokenForSubject(apiSecurity, consumed.username, { scopeStrOverride: scopeFromDb });
+        const refreshRaw = newRefreshTokenRaw();
+        await storeRefreshToken(pool, consumed.username, refreshRaw, new Date(Date.now() + refreshTtlSeconds * 1000));
         res.setHeader("Content-Type", "application/json");
         res.end(
           JSON.stringify({
-            access_token: token,
+            access_token: issued.token,
             token_type: "Bearer",
-            expires_in: expiresIn,
+            expires_in: issued.expiresIn,
+            refresh_token: refreshRaw,
+            refresh_expires_in: refreshTtlSeconds,
           })
         );
+        return;
+      }
+
+      if (req.method === "POST" && rawPath === "/auth/forgot-password") {
+        res.statusCode = 501;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            error: "Not implemented",
+            detail: "El envío de email de recuperación no está configurado en esta versión.",
+          })
+        );
+        return;
+      }
+
+      if (req.method === "POST" && rawPath === "/auth/logout") {
+        const rawTok = extractBearerOrApiKey(req);
+        if (!rawTok || !apiSecurity.jwtSecret) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+        const payload = verifyJwtHs256(rawTok, apiSecurity.jwtSecret, {
+          issuer: apiSecurity.jwtIssuer,
+          audience: apiSecurity.jwtAudience,
+        });
+        const jti = typeof payload?.jti === "string" ? payload.jti : undefined;
+        if (!jti) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Token cannot be revoked (missing jti)" }));
+          return;
+        }
+        const expSec = typeof payload?.exp === "number" ? payload.exp : Math.floor(Date.now() / 1000) + apiSecurity.jwtTtlSeconds;
+        await revokeAccessTokenJti(pool, jti, new Date(expSec * 1000));
+        const sub = typeof payload?.sub === "string" ? payload.sub : undefined;
+        if (pool && sub) {
+          await deleteRefreshTokensForUser(pool, sub);
+        }
+        await insertAuditLog(pool, {
+          subject: sub ?? "unknown",
+          action: "logout",
+        });
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (req.method === "GET" && rawPath === "/audit/logs") {
+        if (!pool) {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Audit log requires Postgres" }));
+          return;
+        }
+        const auditUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+        const lim = Math.min(500, Math.max(1, parseInt(auditUrl.searchParams.get("limit") ?? "50", 10) || 50));
+        const r = await pool.query(
+          `SELECT occurred_at, subject, action, resource, detail_json FROM ftn_audit_log ORDER BY occurred_at DESC LIMIT $1`,
+          [lim]
+        );
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ items: r.rows }));
         return;
       }
 
@@ -824,6 +1028,12 @@ async function main(): Promise<void> {
             return;
           }
           const saved = await upsertCredential(requestSubject, provider, { config, secrets });
+          await insertAuditLog(pool, {
+            subject: requestSubject,
+            action: "credentials.upsert",
+            resource: provider,
+            detail: { hasConfig: Boolean(config), hasSecrets: Boolean(secrets) },
+          });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(saved));
         } catch (e) {
