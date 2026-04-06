@@ -16,14 +16,17 @@ Implementaciones en el repo a día de hoy:
   - Redis queue (`redis-task-queue`) con recuperación de leases huérfanos.
 - Integraciones modulares (`src/modules/integrations`): `payments`, `notifications`, `identity`, `http`, `storage`, `messaging`, `documents`, `logistics`, `crm`.
 - API HTTP en `src/infra/main.ts` con:
-  - Auth (`/auth/login`, `/auth/register`, `/auth/status`)
+  - Auth (`/auth/login`, `/auth/register`, `/auth/status`, `/auth/refresh`, `/auth/logout`, `POST /auth/forgot-password` stub 501)
+  - Métricas Prometheus texto en `GET /metrics`
+  - Auditoría (`GET /audit/logs?limit=`) y tabla `ftn_audit_log` (Postgres)
   - Workflows/runs (`/workflows`, detalle, eventos, señales)
   - Designer (`/designer/workflows`, `/designer/kinds`)
   - Credenciales por usuario (`/credentials/*`)
   - Catálogo (`/activities`, endpoints de catálogo)
   - Salud y docs (`/health`, `/ready`, `/openapi.json`, `/docs`)
 - Frontend con páginas de login, workflows, catálogo, designer y credenciales.
-- OpenAPI disponible en `docs/api/openapi.json`.
+- OpenAPI disponible en `docs/api/openapi.json` (validación rápida: `npm run check:openapi`).
+- Documentación adicional: `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`.
 - Suite de tests unitarios + integración en `src/__tests__`.
 
 ## Requisitos
@@ -162,14 +165,11 @@ deploy/.env.example    # Variables de entorno de referencia
 - `GET|POST|PUT /designer/workflows...`
 - `GET|PUT /credentials/:provider`
 
-## Qué falta por tocar (Aún en construcción)
+## Roadmap / mejoras siguientes
 
-1. **Documentación funcional**: ejemplos end-to-end por integración (payloads reales y respuestas esperadas).
-2. **Cobertura de tests**:
-  - casos de fallo/reintento en workers,
-  - casos de seguridad (auth/scope/rate limit),
-  - pruebas E2E API + frontend.
-3. **Observabilidad**: métricas y trazas (profundizar sobre el logger actual).
-4. **Versionado de workflows**: estrategia explícita de compatibilidad entre versiones y migración de estado/eventos.
-5. **Hardening de producción**: límites, timeouts, política de errores y secretos por entorno.
+1. **Documentación funcional**: ampliar `docs/integrations/INTEGRATIONS.md` con payloads alineados al catálogo OpenAPI por actividad.
+2. **Cobertura de tests**: E2E API + frontend; más escenarios multi-worker; propiedades de cola bajo carga.
+3. **Observabilidad**: trazas distribuidas (OpenTelemetry) además de `GET /metrics` y el logger.
+4. **Recuperación de contraseña**: sustituir el stub `501` en `POST /auth/forgot-password` por flujo con email seguro.
+5. **OpenAPI**: regenerar o sincronizar automáticamente `docs/api/openapi.json` con los endpoints nuevos (`/metrics`, `/auth/*`, `/audit/logs`).
 
