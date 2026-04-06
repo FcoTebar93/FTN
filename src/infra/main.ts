@@ -285,6 +285,7 @@ async function main(): Promise<void> {
     }
     const { workflowId, runId, version } = await runtime.startWorkflow({
       workflowName: name,
+      workflowVersion: descriptor?.version,
       input,
       definition: wfDef,
     });
@@ -1255,6 +1256,7 @@ async function main(): Promise<void> {
 
           const { workflowId, runId } = await runtime.startWorkflow({
             workflowName: trigger.workflowName,
+            workflowVersion: descriptor?.version,
             input,
             definition: wfDef,
           });
