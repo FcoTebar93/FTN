@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import Redis from "ioredis";
 
@@ -40,6 +41,8 @@ import { PostgresEventStore } from "./postgres-event-store";
 import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
+import { initFtnTelemetry, runWithHttpSpan } from "./telemetry";
+
 function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
   if (env.NODE_ENV !== "production") {
     return;
@@ -335,6 +338,12 @@ async function main(): Promise<void> {
       return;
     }
 
+    const requestId =
+      typeof req.headers["x-request-id"] === "string" && req.headers["x-request-id"].trim()
+        ? req.headers["x-request-id"].trim().slice(0, 128)
+        : randomUUID();
+    res.setHeader("X-Request-Id", requestId);
+
     const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
     const methodEarly = req.method ?? "GET";
 
@@ -419,25 +428,29 @@ async function main(): Promise<void> {
     }
 
     try {
-      await handleAppRoutes(
-        {
-          pool,
-          apiSecurity,
-          hasDbLogin,
-          refreshTtlSeconds,
-          requestSubject,
-          activities,
-          runtime,
-          eventStore,
-          taskQueue,
-          redis,
-          enqueueWorkflowStart,
-          getIntegrationsStatusForSubject,
-        },
-        req,
-        res
-      );
+      await runWithHttpSpan(req, async () => {
+        await handleAppRoutes(
+          {
+            pool,
+            apiSecurity,
+            hasDbLogin,
+            refreshTtlSeconds,
+            requestSubject,
+            activities,
+            runtime,
+            eventStore,
+            taskQueue,
+            redis,
+            enqueueWorkflowStart,
+            getIntegrationsStatusForSubject,
+            requestId,
+          },
+          req,
+          res
+        );
+      });
     } catch (err) {
+      log.error("http.handler", { err: String(err), requestId });
       res.statusCode = 500;
       res.end(`Internal error: ${(err as Error).message}`);
     }
