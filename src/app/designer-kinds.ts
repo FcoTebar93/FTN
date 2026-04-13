@@ -11,7 +11,7 @@ export interface DesignerKindField {
 }
 
 export interface DesignerKind {
-  id: "activity" | "sleep" | "signal" | "conditional" | "parallel";
+  id: "activity" | "sleep" | "signal" | "conditional" | "parallel" | "retry";
   label: string;
   description?: string;
   fields: DesignerKindField[];
@@ -81,5 +81,21 @@ export const DESIGNER_KINDS: DesignerKind[] = [
         description: "Array de arrays de ids de steps, p.ej. [[\"s1\",\"s2\"],[\"s3\"]]",
       },
     ],
-  }
+  },
+  {
+    id: "retry",
+    label: "Retry",
+    description: "Reintenta la ejecución de un paso activity (misma política que ftn.retry).",
+    fields: [
+      { name: "maxAttempts", label: "Máx. intentos", type: "number", required: true, min: 1, max: 50 },
+      { name: "backOffMs", label: "Backoff (ms)", type: "number", min: 0, description: "Opcional; espera entre intentos" },
+      {
+        name: "targetStepId",
+        label: "Paso activity (id)",
+        type: "string",
+        required: true,
+        description: "Id de otro step tipo activity en este workflow",
+      },
+    ],
+  },
 ];

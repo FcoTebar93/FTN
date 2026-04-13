@@ -1,6 +1,6 @@
 import { JsonSchema } from "../shared/json-schema";
 
-export type StepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel";
+export type StepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel" | "retry";
 
 export interface BaseStep {
   id: string;
@@ -36,7 +36,15 @@ export interface ParallelStep extends BaseStep {
   branches: string[][];
 }
 
-export type WorkflowStep = ActivityStep | SleepStep | SignalStep | ConditionalStep | ParallelStep;
+export interface RetryStep extends BaseStep {
+  kind: "retry";
+  maxAttempts: number;
+  backOffMs?: number;
+  /** Id de un paso `activity` en el mismo workflow cuya ejecución se envuelve en ftn.retry */
+  targetStepId: string;
+}
+
+export type WorkflowStep = ActivityStep | SleepStep | SignalStep | ConditionalStep | ParallelStep | RetryStep;
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 

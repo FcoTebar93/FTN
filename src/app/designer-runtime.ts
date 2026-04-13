@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from "../core/ftn";
-import type { ActivityStep, ConditionalStep, ParallelStep, StoredWorkflow, WorkflowStep } from "./designer-types";
+import type { ActivityStep, ConditionalStep, ParallelStep, RetryStep, StoredWorkflow, WorkflowStep } from "./designer-types";
 
 interface ExecutionContext {
   input: any;
@@ -101,6 +101,24 @@ export function buildWorkflowDefinitionFromStored(
         const ok = evalCondition(cond.expression, ctx);
         currentId = ok ? cond.thenNext ?? null : cond.elseNext ?? null;
         continue;
+      } else if (step.kind === "retry") {
+        const r = step as RetryStep;
+        const target = findStep(stored, r.targetStepId);
+        if (target.kind !== "activity") {
+          throw new Error(`Retry step "${step.id}" target "${r.targetStepId}" must be an activity step`);
+        }
+        const act = target as ActivityStep;
+        const resolvedInput = resolveTemplatesInValue(act.input, ctx);
+        const result = await ftn.retry(
+          { maxAttempts: Math.max(1, r.maxAttempts), backOffMs: r.backOffMs },
+          async () => {
+            const h = ftn.activity<any, any>(act.activityName, resolvedInput);
+            const [out] = await ftn.join([h]);
+            return out;
+          }
+        );
+        ctx.stepResults[step.id] = result;
+        ctx.stepResults[r.targetStepId] = result;
       } else if (step.kind === "parallel") {
         const p = step as ParallelStep;
       
@@ -188,7 +206,6 @@ function evalCondition(expression: string, ctx: ExecutionContext): boolean {
   }
 
   if (!op) {
-    console.warn("[evalCondition] Operador no reconocido en expresión:", expr);
     return false;
   }
 
