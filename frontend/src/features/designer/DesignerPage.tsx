@@ -235,6 +235,15 @@ export function DesignerPage() {
         if (kind === "conditional") {
           return { ...s, kind, expression: (s as any).expression ?? "input.amount > 0", thenNext: (s as any).thenNext ?? null, elseNext: (s as any).elseNext ?? null } as any;
         }
+        if (kind === "retry") {
+          return {
+            ...s,
+            kind,
+            maxAttempts: typeof (s as any).maxAttempts === "number" ? (s as any).maxAttempts : 3,
+            backOffMs: typeof (s as any).backOffMs === "number" ? (s as any).backOffMs : undefined,
+            targetStepId: typeof (s as any).targetStepId === "string" ? (s as any).targetStepId : "",
+          } as any;
+        }
         return { ...s, kind, branches: Array.isArray((s as any).branches) ? (s as any).branches : [[]] } as any;
       }),
     }));
@@ -629,6 +638,7 @@ export function DesignerPage() {
                                 <option value="signal">signal</option>
                                 <option value="conditional">conditional</option>
                                 <option value="parallel">parallel</option>
+                                <option value="retry">retry</option>
                               </select>
                             </div>
                             {step.kind === "activity" && (
@@ -908,6 +918,65 @@ export function DesignerPage() {
                                   }
                                 />
                               </div>
+                        )}
+                        {step.kind === "retry" && (
+                          <>
+                            <div class="form-row">
+                              <label>Máx. intentos</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={(step as any).maxAttempts ?? 3}
+                                onInput={(e) =>
+                                  handleStepFieldChange(
+                                    step.id,
+                                    "maxAttempts",
+                                    Math.max(1, Number((e.target as HTMLInputElement).value) || 1),
+                                  )
+                                }
+                              />
+                            </div>
+                            <div class="form-row">
+                              <label>Backoff (ms)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={(step as any).backOffMs ?? ""}
+                                placeholder="(opcional)"
+                                onInput={(e) => {
+                                  const v = (e.target as HTMLInputElement).value;
+                                  handleStepFieldChange(
+                                    step.id,
+                                    "backOffMs",
+                                    v === "" ? undefined : Math.max(0, Number(v) || 0),
+                                  );
+                                }}
+                              />
+                            </div>
+                            <div class="form-row">
+                              <label>Paso activity</label>
+                              <select
+                                value={(step as any).targetStepId ?? ""}
+                                onInput={(e) =>
+                                  handleStepFieldChange(
+                                    step.id,
+                                    "targetStepId",
+                                    (e.target as HTMLSelectElement).value,
+                                  )
+                                }
+                              >
+                                <option value="">(elige activity step)</option>
+                                {current.steps
+                                  .filter((s) => s.id !== step.id && s.kind === "activity")
+                                  .map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.id}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </>
                         )}
                         {step.kind === "parallel" && (
                         <>

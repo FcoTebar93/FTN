@@ -72,7 +72,7 @@ export interface WorkflowEvent {
     payload: unknown;
 }
 
-export type DesignerStepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel";
+export type DesignerStepKind = "activity" | "sleep" | "signal" | "conditional" | "parallel" | "retry";
 
 export interface DesignerBaseStep {
   id: string;
@@ -204,9 +204,17 @@ export interface DesignerParallelStep extends DesignerBaseStep {
   branches: string[][];
 }
 
+export interface DesignerRetryStep extends DesignerBaseStep {
+  kind: "retry";
+  maxAttempts: number;
+  backOffMs?: number;
+  targetStepId: string;
+}
+
 export type DesignerWorkflowStep =
   | DesignerActivityStep
   | DesignerSleepStep
   | DesignerSignalStep
   | DesignerConditionalStep
-  | DesignerParallelStep;
+  | DesignerParallelStep
+  | DesignerRetryStep;
