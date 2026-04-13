@@ -110,10 +110,8 @@ export function buildWorkflowDefinitionFromStored(
           for (const stepId of branch) {
             const targetStep = findStep(stored, stepId);
             if (targetStep.kind !== "activity") continue;
-            const handle = ftn.activity<any, any>(
-              (targetStep as ActivityStep).activityName,
-              (targetStep as any).input ?? {}
-            );
+            const resolvedBranchInput = resolveTemplatesInValue((targetStep as ActivityStep).input ?? {}, ctx);
+            const handle = ftn.activity<any, any>((targetStep as ActivityStep).activityName, resolvedBranchInput);
             branchActivityHandles.push(ftn.join([handle]).then(([r]) => {
               ctx.stepResults[stepId] = r;
             }));
