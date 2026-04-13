@@ -6,9 +6,9 @@ import Stripe from "stripe";
 import type { WorkflowTask } from "../../shared/tasks";
 import { getWorkflow, getWorkflowDescriptor } from "../../app/workflows";
 import { matchHttpTrigger } from "../../app/triggers";
-import { readBodyCapped, type ApiSecurityConfig } from "./security";
+import { readBodyCapped, extractBearerOrApiKey, type ApiSecurityConfig } from "./security";
 import {
-  extractBearerOrApiKey,
+  isAuthConfigured,
   isLoginConfigured,
   issueAccessToken,
   issueAccessTokenForSubject,
@@ -381,7 +381,7 @@ export async function handleAppRoutes(
     }
 
     if (req.method === "GET" && rawPath === "/ready") {
-      const checks: { postgres?: boolean; ctx.redis?: boolean } = {};
+      const checks: { postgres?: boolean; redis?: boolean } = {};
       if (ctx.pool) {
         try {
           await ctx.pool.query("SELECT 1");
@@ -393,14 +393,14 @@ export async function handleAppRoutes(
       if (ctx.redis) {
         try {
           await ctx.redis.ping();
-          checks.ctx.redis = true;
+          checks.redis = true;
         } catch {
-          checks.ctx.redis = false;
+          checks.redis = false;
         }
       }
       const ok =
         (!ctx.pool || checks.postgres === true) &&
-        (!ctx.redis || checks.ctx.redis === true);
+        (!ctx.redis || checks.redis === true);
       res.statusCode = ok ? 200 : 503;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ status: ok ? "ready" : "not_ready", checks }));
