@@ -9,6 +9,8 @@ export interface ActivityExecutionContext {
   scheduledAt: Date;
   log: (message: string, meta?: Record<string, unknown>) => void;
   idempotencyKey?: string;
+  /** Misma cadena que en tareas de cola / HTTP (X-Correlation-Id o X-Request-Id). */
+  correlationId?: string;
 }
 
 export interface ActivityDefinition<TInput, TResult> {
