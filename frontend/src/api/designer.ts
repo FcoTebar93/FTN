@@ -19,6 +19,14 @@ export async function updateDesignerWorkflow(id: string, payload: DesignerStored
   await putJson(`/designer/workflows/${encodeURIComponent(id)}`, payload);
 }
 
+/** Inicia un run del workflow del designer ya persistido (usa input del cuerpo o scheduledInput guardado). */
+export function postDesignerTestRun(
+  id: string,
+  body?: { input?: unknown }
+): Promise<{ workflowId: string; runId: string; version: number }> {
+  return postJson(`/designer/workflows/${encodeURIComponent(id)}/test-run`, body ?? {});
+}
+
 export function getDesignerKinds(): Promise<DesignerKind[]> {
   return fetchJson<DesignerKind[]>("/designer/kinds");
 }

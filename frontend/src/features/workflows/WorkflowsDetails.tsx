@@ -56,6 +56,28 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
         {state.id} / {state.runId}
       </h2>
       <div class="workflow-detail-header">
+        <button
+          type="button"
+          class="workflow-filter-btn"
+          style={{ marginRight: "8px" }}
+          onClick={() => {
+            const payload = {
+              state,
+              events: events ?? [],
+              steps: steps ?? [],
+              exportedAt: new Date().toISOString(),
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            const safeId = `${state.id}-${state.runId}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+            a.href = URL.createObjectURL(blob);
+            a.download = `ftn-run-${safeId}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }}
+        >
+          Exportar JSON
+        </button>
         <span class={`workflow-status status-${state.status}`}>{state.status}</span>
         <span>Comenzado: {state.startedAt ?? "N/A"}</span>
         {state.completedAt && <span>Completado: {state.completedAt}</span>}

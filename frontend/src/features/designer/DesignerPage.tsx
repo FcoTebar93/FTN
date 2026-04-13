@@ -1,6 +1,14 @@
 import { useEffect, useState } from "preact/hooks";
 import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerWorkflowStep, DesignerStepKind, ActivityCatalogItem, DesignerWeekday, IntegrationStatusItem } from "../../api/types";
-import { getDesignerWorkflows, getDesignerWorkflow, createDesignerWorkflow, updateDesignerWorkflow, getActivitiesCatalog, getIntegrationsStatus } from "../../api/designer";
+import {
+  getDesignerWorkflows,
+  getDesignerWorkflow,
+  createDesignerWorkflow,
+  updateDesignerWorkflow,
+  getActivitiesCatalog,
+  getIntegrationsStatus,
+  postDesignerTestRun,
+} from "../../api/designer";
 import { TIMEZONES, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { WORKFLOW_TEMPLATES, type DesignerTemplate } from "./templates";
@@ -37,6 +45,9 @@ export function DesignerPage() {
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [errorCurrent, setErrorCurrent] = useState<Error | null>(null);
   const [schedInputDraft, setSchedInputDraft] = useState("{}");
+  const [schedInputJsonError, setSchedInputJsonError] = useState<string | null>(null);
+  const [testRunMessage, setTestRunMessage] = useState<string | null>(null);
+  const [testRunLoading, setTestRunLoading] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -571,9 +582,68 @@ export function DesignerPage() {
                       rows={4}
                       style={{ width: "100%", fontFamily: "monospace", fontSize: "12px" }}
                       value={schedInputDraft}
-                      onInput={(e) => setSchedInputDraft((e.target as HTMLTextAreaElement).value)}
+                      onInput={(e) => {
+                        setSchedInputJsonError(null);
+                        setSchedInputDraft((e.target as HTMLTextAreaElement).value);
+                      }}
+                      onBlur={() => {
+                        const t = schedInputDraft.trim();
+                        if (t === "") {
+                          setSchedInputJsonError(null);
+                          return;
+                        }
+                        try {
+                          JSON.parse(t);
+                          setSchedInputJsonError(null);
+                        } catch {
+                          setSchedInputJsonError("JSON inválido");
+                        }
+                      }}
                     />
+                    {schedInputJsonError && <p class="panel-error">{schedInputJsonError}</p>}
                     <p class="detail-muted">Se usa en la ejecución instantánea al crear y en cada run programado.</p>
+                    <div class="form-row" style={{ marginTop: "8px" }}>
+                      <button
+                        type="button"
+                        class="workflow-filter-btn"
+                        disabled={
+                          testRunLoading ||
+                          !current.id ||
+                          !workflows.some((w) => w.id === current.id) ||
+                          Boolean(schedInputJsonError)
+                        }
+                        title={
+                          !current.id
+                            ? "Guarda el workflow primero"
+                            : !workflows.some((w) => w.id === current.id)
+                              ? "Guarda el workflow primero"
+                              : undefined
+                        }
+                        onClick={async () => {
+                          if (!current?.id) return;
+                          setTestRunMessage(null);
+                          let input: unknown = {};
+                          try {
+                            input = schedInputDraft.trim() === "" ? {} : JSON.parse(schedInputDraft);
+                          } catch {
+                            setTestRunMessage("JSON de input inválido");
+                            return;
+                          }
+                          setTestRunLoading(true);
+                          try {
+                            const r = await postDesignerTestRun(current.id, { input });
+                            setTestRunMessage(`Run iniciado: ${r.workflowId} / ${r.runId} (v${r.version})`);
+                          } catch (e) {
+                            setTestRunMessage((e as Error).message);
+                          } finally {
+                            setTestRunLoading(false);
+                          }
+                        }}
+                      >
+                        {testRunLoading ? "Iniciando…" : "Ejecutar prueba (run)"}
+                      </button>
+                      {testRunMessage && <span class="detail-muted" style={{ marginLeft: "8px" }}>{testRunMessage}</span>}
+                    </div>
                   </div>
                 </section>
 
