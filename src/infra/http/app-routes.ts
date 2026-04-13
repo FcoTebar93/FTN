@@ -37,6 +37,7 @@ import {
   upsertStoredWorkflow,
 } from "../../app/designer-store";
 import { normalizeStoredWorkflow, validateSchedule } from "../../app/designer-schedule";
+import { validateDesignerWorkflow } from "../../app/designer-validate";
 import { getCredential, listCredentials, upsertCredential } from "../../app/credentials";
 import { DESIGNER_KINDS } from "../../app/designer-kinds";
 import { SWAGGER_UI_HTML } from "../swagger-ui";
@@ -71,6 +72,7 @@ export interface FtnAppRouteContext {
       details?: string;
     }>
   >;
+  requestId: string;
 }
 
 export async function handleAppRoutes(
@@ -548,6 +550,14 @@ export async function handleAppRoutes(
           return;
         }
 
+        const graphErr = validateDesignerWorkflow(normalized);
+        if (graphErr) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: graphErr }));
+          return;
+        }
+
         await upsertStoredWorkflow(ctx.requestSubject, normalized);
 
         if (normalized.schedule?.type === "instant") {
@@ -611,6 +621,14 @@ export async function handleAppRoutes(
           res.statusCode = 400;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ error: schedErr }));
+          return;
+        }
+
+        const graphErrPut = validateDesignerWorkflow(normalized);
+        if (graphErrPut) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: graphErrPut }));
           return;
         }
 
