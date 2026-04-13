@@ -92,9 +92,6 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "POST" && pathWithoutQuery === "/auth/refresh") {
     return true;
   }
-  if (method === "POST" && pathWithoutQuery === "/auth/forgot-password") {
-    return true;
-  }
   if (method === "GET" && pathWithoutQuery === "/metrics") {
     return true;
   }
