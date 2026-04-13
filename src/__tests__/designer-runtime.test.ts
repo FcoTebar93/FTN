@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { buildWorkflowDefinitionFromStored } from "../app/designer-runtime";
-import type { FTNApi } from "../core/ftn";
+import type { FTNApi, RetryOptions } from "../core/ftn";
 import type { StoredWorkflow } from "../app/designer-types";
 import type { ActivityId } from "../shared/types";
 
@@ -24,8 +24,16 @@ function createRecordingFtn(): { ftn: FTNApi; activityInputs: unknown[] } {
     conditional() {
       throw new Error("unexpected conditional");
     },
-    retry() {
-      throw new Error("unexpected retry");
+    async retry<TResult>(options: RetryOptions, operation: (attempt: number) => Promise<TResult>): Promise<TResult> {
+      let lastErr: unknown;
+      for (let a = 1; a <= options.maxAttempts; a++) {
+        try {
+          return await operation(a);
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
     },
     sleep() {
       return Promise.resolve();
@@ -71,4 +79,26 @@ test("parallel branch activities resuelven plantillas en input como el flujo sec
 
   assert.equal(activityInputs.length, 1);
   assert.deepEqual(activityInputs[0], { msg: "hello" });
+});
+
+test("retry step ejecuta el activity referenciado vía ftn.retry", async () => {
+  const stored: StoredWorkflow = {
+    id: "wf-retry",
+    version: "v1",
+    displayName: "r",
+    steps: [
+      { id: "a1", kind: "activity", activityName: "echo", input: { x: 1 } },
+      { id: "r1", kind: "retry", maxAttempts: 2, targetStepId: "a1", next: null },
+    ],
+    entryStepId: "r1",
+  };
+
+  const { ftn, activityInputs } = createRecordingFtn();
+  const def = buildWorkflowDefinitionFromStored(stored);
+  const out = await def(ftn, {});
+
+  assert.equal(activityInputs.length, 1);
+  assert.deepEqual(activityInputs[0], { x: 1 });
+  assert.deepEqual((out as { steps: Record<string, unknown> }).steps.a1, { ok: true });
+  assert.deepEqual((out as { steps: Record<string, unknown> }).steps.r1, { ok: true });
 });
