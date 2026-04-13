@@ -11,7 +11,10 @@
     { "name": "auth", "description": "Login y registro (si están habilitados)" },
     { "name": "catalog", "description": "Catálogo de actividades y workflows" },
     { "name": "workflows", "description": "Ejecución e inspección de runs" },
-    { "name": "designer", "description": "Workflows almacenados para el diseñador" }
+    { "name": "designer", "description": "Workflows almacenados para el diseñador" },
+    { "name": "integrations", "description": "Estado de integraciones y conectores" },
+    { "name": "credentials", "description": "Credenciales por proveedor (config/secrets)" },
+    { "name": "audit", "description": "Registro de auditoría (Postgres)" }
   ],
   "paths": {
     "/health": {
@@ -39,7 +42,24 @@
       "get": {
         "tags": ["auth"],
         "summary": "Estado de autenticación del servidor",
-        "responses": { "200": { "description": "JSON con loginConfigured, authRequired, registrationEnabled" } }
+        "responses": {
+          "200": {
+            "description": "Flags de login y registro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["loginConfigured", "authRequired", "registrationEnabled"],
+                  "properties": {
+                    "loginConfigured": { "type": "boolean" },
+                    "authRequired": { "type": "boolean" },
+                    "registrationEnabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/auth/login": {
@@ -198,6 +218,306 @@
           }
         },
         "responses": { "200": { "description": "{ ok: true }" }, "404": { "description": "Run no encontrado" } }
+      }
+    },
+    "/workflows/{workflowId}/{runId}/steps": {
+      "get": {
+        "tags": ["workflows"],
+        "summary": "Pasos del run (estado materializado)",
+        "parameters": [
+          { "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Mapa o lista de pasos según runtime" }, "404": { "description": "Run no encontrado" } }
+      }
+    },
+    "/docs": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Swagger UI (documentación interactiva)",
+        "responses": { "200": { "description": "HTML Swagger UI" } }
+      }
+    },
+    "/swagger": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Redirección a /docs",
+        "responses": { "302": { "description": "Location: /docs" } }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Métricas Prometheus (texto)",
+        "responses": { "200": { "description": "text/plain métricas" } }
+      }
+    },
+    "/activities": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "Listar definiciones de actividades",
+        "parameters": [
+          { "name": "tag", "in": "query", "schema": { "type": "string" } },
+          { "name": "module", "in": "query", "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Array de resúmenes de actividad" } }
+      }
+    },
+    "/activities/{name}": {
+      "get": {
+        "tags": ["catalog"],
+        "summary": "Detalle de una actividad por nombre",
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Definición" }, "404": { "description": "No encontrada" } }
+      }
+    },
+    "/integrations/status": {
+      "get": {
+        "tags": ["integrations"],
+        "summary": "Estado de integraciones para el sujeto autenticado",
+        "responses": {
+          "200": {
+            "description": "{ items: [...] }",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/credentials": {
+      "get": {
+        "tags": ["credentials"],
+        "summary": "Listar credenciales (sin secretos en claro)",
+        "responses": { "200": { "description": "Array de credenciales" } }
+      }
+    },
+    "/credentials/{provider}": {
+      "get": {
+        "tags": ["credentials"],
+        "summary": "Obtener credencial por proveedor",
+        "parameters": [{ "name": "provider", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Credencial" }, "404": { "description": "No encontrada" } }
+      },
+      "put": {
+        "tags": ["credentials"],
+        "summary": "Crear o actualizar credencial",
+        "parameters": [{ "name": "provider", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "config": { "type": "object", "additionalProperties": true },
+                  "secrets": { "type": "object", "additionalProperties": true }
+                },
+                "description": "Al menos uno de config o secrets"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Credencial guardada" }, "400": { "description": "Payload inválido" } }
+      }
+    },
+    "/designer/kinds": {
+      "get": {
+        "tags": ["designer"],
+        "summary": "Tipos de paso disponibles en el diseñador",
+        "responses": { "200": { "description": "Lista de kind descriptors" } }
+      }
+    },
+    "/designer/workflows": {
+      "get": {
+        "tags": ["designer"],
+        "summary": "Listar workflows guardados en el diseñador",
+        "responses": { "200": { "description": "StoredWorkflow[]" } }
+      },
+      "post": {
+        "tags": ["designer"],
+        "summary": "Crear workflow almacenado",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "version", "displayName", "steps", "entryStepId"],
+                "description": "StoredWorkflow completo",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creado; puede incluir instantRunError si schedule instant falla al encolar",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "400": { "description": "JSON o grafo inválido" },
+          "409": { "description": "id ya existe" }
+        }
+      }
+    },
+    "/designer/workflows/{id}": {
+      "get": {
+        "tags": ["designer"],
+        "summary": "Obtener workflow por id",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "StoredWorkflow" }, "404": { "description": "No encontrado" } }
+      },
+      "put": {
+        "tags": ["designer"],
+        "summary": "Actualizar workflow (id en ruta)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["version", "displayName", "steps", "entryStepId"],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "{ ok, id, version }" }, "400": { "description": "Payload o grafo inválido" } }
+      }
+    },
+    "/designer/workflows/{id}/test-run": {
+      "post": {
+        "tags": ["designer"],
+        "summary": "Ejecutar una prueba del workflow del diseñador (arranca run con nombre runtime derivado)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": { "description": "Entrada del run; si se omite, se usa scheduledInput del workflow" }
+                },
+                "description": "También se acepta un objeto JSON como input directo (sin envolver en input)."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run iniciado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["workflowId", "runId", "version"],
+                  "properties": {
+                    "workflowId": { "type": "string" },
+                    "runId": { "type": "string" },
+                    "version": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "JSON inválido o error al encolar" },
+          "404": { "description": "Workflow no encontrado" }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Registro de usuario (si está habilitado)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": { "username": { "type": "string" }, "password": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Usuario creado + tokens (mismo esquema que login)" },
+          "400": { "description": "Validación fallida" },
+          "409": { "description": "Usuario ya existe" },
+          "503": { "description": "Registro no disponible" }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Renovar access token con refresh token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh_token"],
+                "properties": { "refresh_token": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Nuevo access_token y refresh_token" },
+          "400": { "description": "Falta refresh_token" },
+          "401": { "description": "Refresh inválido" },
+          "503": { "description": "Refresh no disponible" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revocar JWT actual (jti) y borrar refresh del usuario",
+        "responses": {
+          "200": { "description": "{ ok: true }" },
+          "400": { "description": "Token sin jti" },
+          "401": { "description": "No autorizado" }
+        }
+      }
+    },
+    "/audit/logs": {
+      "get": {
+        "tags": ["audit"],
+        "summary": "Últimas entradas de auditoría",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 500 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items: filas }",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "503": { "description": "Sin Postgres" }
+        }
+      }
+    },
+    "/pay/checkout": {
+      "post": {
+        "tags": ["workflows"],
+        "summary": "Crear sesión Stripe Checkout (requiere STRIPE_SECRET_KEY)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "additionalProperties": true, "description": "successUrl, cancelUrl, lineItems, etc." }
+            }
+          }
+        },
+        "responses": { "200": { "description": "{ sessionId, url }" }, "500": { "description": "Error Stripe o config" } }
+      }
+    },
+    "/stripe/webhook": {
+      "post": {
+        "tags": ["workflows"],
+        "summary": "Webhook Stripe (firma stripe-signature)",
+        "responses": { "200": { "description": "Procesado" }, "400": { "description": "Firma o payload inválido" } }
       }
     }
   },
