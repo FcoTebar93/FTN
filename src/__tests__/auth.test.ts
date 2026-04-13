@@ -64,6 +64,7 @@ test("requiredScopesForRoute asigna scopes esperados", () => {
   assert.deepEqual(requiredScopesForRoute("GET", "/catalog/workflows"), [FTN_SCOPES.catalogRead]);
   assert.deepEqual(requiredScopesForRoute("GET", "/designer/kinds"), [FTN_SCOPES.designerRead]);
   assert.deepEqual(requiredScopesForRoute("POST", "/designer/workflows"), [FTN_SCOPES.designerWrite]);
+  assert.deepEqual(requiredScopesForRoute("POST", "/designer/workflows/my-wf/test-run"), [FTN_SCOPES.designerWrite]);
   assert.deepEqual(requiredScopesForRoute("GET", "/credentials"), [FTN_SCOPES.credentialsRead]);
   assert.deepEqual(requiredScopesForRoute("PUT", "/credentials/stripe"), [FTN_SCOPES.credentialsWrite]);
   assert.deepEqual(requiredScopesForRoute("GET", "/workflows"), [FTN_SCOPES.workflowsRead]);

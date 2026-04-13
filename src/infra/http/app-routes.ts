@@ -643,6 +643,56 @@ export async function handleAppRoutes(
       return;
     }
 
+    if (req.method === "POST" && rawPath.startsWith("/designer/workflows/") && rawPath.endsWith("/test-run")) {
+      const parts = rawPath.split("/").filter(Boolean);
+      if (parts.length !== 4 || parts[0] !== "designer" || parts[1] !== "workflows" || parts[3] !== "test-run") {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "Expected POST /designer/workflows/:id/test-run" }));
+        return;
+      }
+      const id = decodeURIComponent(parts[2]);
+      const wf = await getStoredWorkflow(ctx.requestSubject, id);
+      if (wf === undefined) {
+        res.statusCode = 404;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "Designer workflow not found" }));
+        return;
+      }
+      const bodyTr = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
+      if (bodyTr === null) return;
+      let input: unknown = wf.scheduledInput ?? {};
+      try {
+        if (bodyTr.trim()) {
+          const parsedBody = JSON.parse(bodyTr) as { input?: unknown };
+          if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody) && "input" in parsedBody) {
+            input = parsedBody.input;
+          } else {
+            input = parsedBody;
+          }
+        }
+      } catch {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "Invalid JSON body" }));
+        return;
+      }
+      try {
+        const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(
+          getDesignerRuntimeName(ctx.requestSubject, id),
+          input
+        );
+        res.statusCode = 201;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ workflowId, runId, version }));
+      } catch (e) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: (e as Error).message }));
+      }
+      return;
+    }
+
     if (req.method === "POST" && rawPath === "/workflows") {
       const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
       if (body === null) return;

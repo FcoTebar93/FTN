@@ -27,10 +27,10 @@ import { InMemoryActivityQueueWorker } from "./inmemory-activity-queue-worker";
 import { handleCatalogRoutes } from "./http/catalog";
 import { handleAppRoutes } from "./http/app-routes";
 import { applyCorsHeaders, createRateLimiter, loadApiSecurityConfigFromEnv, getClientIp } from "./http/security";
-import { authenticatePrincipal, checkProtectedAccess, isAuthConfigured } from "./http/auth";
+import { authenticatePrincipal, checkProtectedAccess } from "./http/auth";
 import { getUserPasswordHash, insertUser, isAccessTokenJtiRevoked } from "./users";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
-import { hashPassword, verifyPassword } from "./passwords";
+import { hashPassword } from "./passwords";
 import { incHttpForbidden, incHttpRateLimited, incHttpRequest, incHttpUnauthorized, renderPrometheusText } from "./metrics";
 
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
@@ -67,6 +67,7 @@ function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.
 
 async function main(): Promise<void> {
   const log = createLogger();
+  initFtnTelemetry();
   const engine = new DefaultWorkflowEngine();
 
   const engineDsUrl = (process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL)?.trim();
