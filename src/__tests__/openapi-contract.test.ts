@@ -15,7 +15,18 @@ test("OpenAPI spec es JSON 3.x con paths mínimos", () => {
   assert.ok(typeof info.version === "string" && info.version.trim(), "info.version");
   const paths = spec.paths as Record<string, unknown>;
   assert.ok(paths && typeof paths === "object", "paths");
-  for (const p of ["/health", "/ready", "/workflows", "/auth/login", "/openapi.json"]) {
+  for (const p of [
+    "/health",
+    "/ready",
+    "/workflows",
+    "/auth/login",
+    "/openapi.json",
+    "/designer/workflows/{id}/test-run",
+    "/activities",
+    "/credentials",
+  ]) {
     assert.ok(p in paths, `missing path ${p}`);
   }
+  const testRun = paths["/designer/workflows/{id}/test-run"] as { post?: unknown };
+  assert.ok(testRun?.post, "test-run debe documentar POST");
 });
