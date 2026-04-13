@@ -42,7 +42,7 @@ Implementaciones en el repo a día de hoy:
   - Redis queue (`redis-task-queue`) con recuperación de leases huérfanos.
 - Integraciones modulares (`src/modules/integrations`): `payments`, `notifications`, `identity`, `http`, `storage`, `messaging`, `documents`, `logistics`, `crm`.
 - API HTTP en `src/infra/main.ts` con:
-  - Auth (`/auth/login`, `/auth/register`, `/auth/status`, `/auth/refresh`, `/auth/logout`, `POST /auth/forgot-password` stub 501)
+  - Auth (`/auth/login`, `/auth/register`, `/auth/status`, `/auth/refresh`, `/auth/logout`)
   - Métricas Prometheus texto en `GET /metrics`
   - Auditoría (`GET /audit/logs?limit=`) y tabla `ftn_audit_log` (Postgres)
   - Workflows/runs (`/workflows`, detalle, eventos, señales)
@@ -99,6 +99,7 @@ Frontend (`frontend/package.json`):
 - `npm run dev`
 - `npm run build`
 - `npm run preview`
+- `npm run test` (Vitest, helpers del designer)
 
 ## Deploy reproducible (Docker Compose)
 
@@ -308,6 +309,5 @@ Guion demo 7-10 minutos:
 1. **Documentación funcional**: ampliar `docs/integrations/INTEGRATIONS.md` con payloads alineados al catálogo OpenAPI por actividad.
 2. **Cobertura de tests**: E2E API + frontend; más escenarios multi-worker; propiedades de cola bajo carga.
 3. **Observabilidad**: trazas distribuidas (OpenTelemetry) además de `GET /metrics` y el logger.
-4. **Recuperación de contraseña**: sustituir el stub `501` en `POST /auth/forgot-password` por flujo con email seguro.
-5. **OpenAPI**: regenerar o sincronizar automáticamente `docs/api/openapi.json` con los endpoints nuevos (`/metrics`, `/auth/*`, `/audit/logs`).
+4. **OpenAPI**: regenerar o sincronizar automáticamente `docs/api/openapi.json` con los endpoints nuevos (`/metrics`, `/auth/*`, `/audit/logs`).
 
