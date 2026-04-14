@@ -304,4 +304,49 @@ describe("InMemoryWorkflowWorker", () => {
     const next = await taskQueue.leaseNextTask("workflow-worker-race-max-2", "workflows", 1000);
     assert.equal(next, null);
   });
+
+  it("envía tarea a dead-letter cuando runWorkflowTick falla con error no concurrencia", async () => {
+    const { taskQueue } = inMemoryStack();
+    const workflowId = "wf-dead";
+    const runId = "run-dead";
+    await taskQueue.enqueue(makeWorkflowTask(workflowId, runId));
+
+    const runtime: WorkflowRuntime = {
+      async runWorkflowTick() {
+        throw new Error("boom");
+      },
+      async loadCurrentState() {
+        return null;
+      },
+      async startWorkflow() {
+        throw new Error("not implemented");
+      },
+    } as WorkflowRuntime;
+
+    const deadLetters: Array<{ taskId: string; reason: string; error: string }> = [];
+    const worker = new InMemoryWorkflowWorker({
+      workerId: "workflow-worker-dead",
+      taskQueue,
+      runtime,
+      log: silentLogger,
+      onDeadLetter: (entry) => {
+        deadLetters.push({
+          taskId: entry.taskId,
+          reason: entry.reason,
+          error: entry.error,
+        });
+      },
+      config: {
+        queueName: "workflows",
+        leaseTimeoutMs: 10_000,
+        pollIntervalMs: 10,
+      },
+    });
+
+    await worker.runOnce();
+    assert.equal(deadLetters.length, 1);
+    assert.equal(deadLetters[0]!.taskId, `wf-task-${workflowId}-${runId}`);
+    assert.equal(deadLetters[0]!.reason, "run_workflow_tick_error");
+    assert.equal(deadLetters[0]!.error.includes("boom"), true);
+  });
 });

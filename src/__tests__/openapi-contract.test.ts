@@ -24,6 +24,7 @@ test("OpenAPI spec es JSON 3.x con paths mínimos", () => {
     "/activities",
     "/credentials",
     "/workflows/{workflowId}/{runId}/cancel",
+    "/dead-letters",
   ]) {
     assert.ok(p in paths, `missing path ${p}`);
   }
