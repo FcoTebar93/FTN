@@ -63,6 +63,21 @@ export interface PaymentSignupResult {
   sessionId: string;
 }
 
+export interface ApprovalFlowInput {
+  requestId: string;
+  requesterEmail: string;
+  approverEmail: string;
+  subject: string;
+  amount: number;
+}
+
+export interface ApprovalFlowResult {
+  requestId: string;
+  approved: boolean;
+  reviewer?: string;
+  comment?: string;
+}
+
 export const orderProcessingWorkflow: WorkflowDefinition<OrderInput, OrderResult> = async (ftn, input) => {
   await ftn.retry(
     { maxAttempts: 3, backOffMs: 500 },
@@ -126,6 +141,60 @@ export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, Payme
   await ftn.join([emailHandle, dbHandle]);
 
     return { email: input.email, sessionId: payment.sessionId };
+};
+
+export const approvalFlowWorkflow: WorkflowDefinition<ApprovalFlowInput, ApprovalFlowResult> = async (ftn, input) => {
+  const requestUrl = new URL("/workflows", FRONTEND_BASE_URL);
+  requestUrl.searchParams.set("requestId", input.requestId);
+
+  const requestEmail = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+    to: input.approverEmail,
+    subject: `[Aprobación requerida] ${input.subject}`,
+    htmlBody: `
+      <p>Se requiere tu aprobación para la solicitud <strong>${input.requestId}</strong>.</p>
+      <p>Importe: <strong>${input.amount}</strong></p>
+      <p>Referencia: <a href="${requestUrl.toString()}">${requestUrl.toString()}</a></p>
+      <p>Envía la señal <code>approval-decision</code> con { approved, reviewer, comment }.</p>
+    `,
+  });
+  await ftn.join([requestEmail]);
+
+  const decision = await ftn.signal<{ approved: boolean; reviewer?: string; comment?: string }>("approval-decision");
+
+  const auditHandle = ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
+    sql: `
+      insert into approvals(request_id, approved, reviewer, comment, requester_email, approver_email, amount, created_at)
+      values ($1, $2, $3, $4, $5, $6, $7, now())
+    `,
+    params: [
+      input.requestId,
+      decision.approved,
+      decision.reviewer ?? null,
+      decision.comment ?? null,
+      input.requesterEmail,
+      input.approverEmail,
+      input.amount,
+    ],
+  });
+
+  const notifyRequester = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+    to: input.requesterEmail,
+    subject: decision.approved
+      ? `[Aprobada] ${input.subject}`
+      : `[Rechazada] ${input.subject}`,
+    htmlBody: decision.approved
+      ? `<p>Tu solicitud <strong>${input.requestId}</strong> ha sido aprobada.</p>`
+      : `<p>Tu solicitud <strong>${input.requestId}</strong> ha sido rechazada. Comentario: ${decision.comment ?? "sin comentario"}.</p>`,
+  });
+
+  await ftn.join([auditHandle, notifyRequester]);
+
+  return {
+    requestId: input.requestId,
+    approved: decision.approved,
+    reviewer: decision.reviewer,
+    comment: decision.comment,
+  };
 };
 
 export interface WorkflowDescriptor<TInput = unknown, TResult = unknown> {
@@ -207,4 +276,49 @@ registerWorkflow<OrderInput, OrderResult>({
     additionalProperties: false,
   },
   definition: orderProcessingWorkflow,
+});
+
+registerWorkflow<ApprovalFlowInput, ApprovalFlowResult>({
+  name: "approval-flow",
+  version: "v1",
+  displayName: "Approval Flow",
+  description:
+    "Solicita aprobación por email, espera señal de decisión y persiste auditoría del resultado.",
+  tags: ["approvals", "backoffice", "notifications"],
+  examples: [
+    {
+      input: {
+        requestId: "apr-2026-0001",
+        requesterEmail: "requester@acme.com",
+        approverEmail: "manager@acme.com",
+        subject: "Compra extraordinaria",
+        amount: 1250,
+      },
+      note: "Enviar señal approval-decision para completar el run.",
+    },
+  ],
+  inputSchema: {
+    type: "object",
+    required: ["requestId", "requesterEmail", "approverEmail", "subject", "amount"],
+    properties: {
+      requestId: { type: "string" },
+      requesterEmail: { type: "string", format: "email" },
+      approverEmail: { type: "string", format: "email" },
+      subject: { type: "string" },
+      amount: { type: "number", minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+  resultSchema: {
+    type: "object",
+    required: ["requestId", "approved"],
+    properties: {
+      requestId: { type: "string" },
+      approved: { type: "boolean" },
+      reviewer: { type: "string" },
+      comment: { type: "string" },
+    },
+    additionalProperties: false,
+  },
+  definition: approvalFlowWorkflow,
 });
