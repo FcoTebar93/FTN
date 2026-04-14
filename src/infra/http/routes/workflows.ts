@@ -13,6 +13,13 @@ export async function tryWorkflowsRoutes(
   _rawPath: string
 ): Promise<boolean> {
   const url = req.url ?? "";
+  const hashInput = (value: unknown): string => {
+    try {
+      return JSON.stringify(value ?? null);
+    } catch {
+      return String(value);
+    }
+  };
 
   if (req.method === "POST" && url.split("?")[0] === "/workflows") {
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
@@ -27,10 +34,56 @@ export async function tryWorkflowsRoutes(
         return true;
       }
       const input = parsed.input;
+      const idempotencyKeyRaw = req.headers["idempotency-key"];
+      const idempotencyKey =
+        typeof idempotencyKeyRaw === "string" && idempotencyKeyRaw.trim()
+          ? idempotencyKeyRaw.trim().slice(0, 200)
+          : undefined;
+      const inputHash = hashInput(input);
+      if (idempotencyKey) {
+        const previous = ctx.getIdempotentWorkflowStart(idempotencyKey);
+        if (previous) {
+          if (
+            previous.name !== name ||
+            previous.inputHash !== inputHash ||
+            (previous.tenantId ?? "") !== (ctx.tenantId ?? "")
+          ) {
+            res.statusCode = 409;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                error: "Idempotency key already used with a different payload",
+              })
+            );
+            return true;
+          }
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Idempotency-Replayed", "true");
+          res.end(
+            JSON.stringify({
+              workflowId: previous.workflowId,
+              runId: previous.runId,
+              version: previous.version,
+            })
+          );
+          return true;
+        }
+      }
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(name, input, {
         correlationId: ctx.correlationId,
         tenantId: ctx.tenantId,
       });
+      if (idempotencyKey) {
+        ctx.saveIdempotentWorkflowStart(idempotencyKey, {
+          workflowId,
+          runId,
+          version,
+          name,
+          inputHash,
+          tenantId: ctx.tenantId,
+        });
+      }
 
       res.statusCode = 201;
       res.setHeader("Content-Type", "application/json");
