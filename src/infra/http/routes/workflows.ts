@@ -62,6 +62,13 @@ export async function tryWorkflowsRoutes(
       completedAt: string | undefined;
       failedAt: string | undefined;
       failureReason: string | undefined;
+      cancelledAt: string | undefined;
+      cancellationReason: string | undefined;
+      pendingActivities: number;
+      pendingTimers: number;
+      pendingSignalWaits: number;
+      retryAttempts: number;
+      lastEventType: string | undefined;
     }> = [];
 
     for (const { workflowId, runId } of slice) {
@@ -72,6 +79,8 @@ export async function tryWorkflowsRoutes(
       const startEvent = events.find((e) => e.type === "WorkflowStarted");
       const name =
         startEvent && startEvent.type === "WorkflowStarted" ? startEvent.payload.name : "unknown";
+      const retryAttempts = events.filter((e) => e.type === "RetryAttemptStarted").length;
+      const lastEventType = events.length > 0 ? events[events.length - 1]!.type : undefined;
 
       if (statusFilter && state.status !== statusFilter) continue;
 
@@ -84,6 +93,13 @@ export async function tryWorkflowsRoutes(
         completedAt: state.completedAt,
         failedAt: state.failedAt,
         failureReason: state.failureReason,
+        cancelledAt: state.cancelledAt,
+        cancellationReason: state.cancellationReason,
+        pendingActivities: state.pendingActivities.length,
+        pendingTimers: state.pendingTimers.length,
+        pendingSignalWaits: state.pendingSignalWaits.length,
+        retryAttempts,
+        lastEventType,
       });
     }
 
