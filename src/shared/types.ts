@@ -10,7 +10,7 @@ export type StepStatus = "idle" | "running" | "waiting" | "completed" | "failed"
 
 export interface BaseStep {
     id: StepId;
-    kind: "activity" | "sleep" | "parallel" | "conditional" | "retry";
+    kind: "activity" | "sleep" | "parallel" | "conditional" | "retry" | "child_workflow";
     status: StepStatus;
 }
 
@@ -35,6 +35,13 @@ export interface RetryStep extends BaseStep {
     kind: "retry";
     attempts: number;
     maxAttempts: number;
+}
+
+export interface ChildWorkflowStep extends BaseStep {
+    kind: "child_workflow";
+    workflowName: string;
+    childWorkflowId?: WorkflowId;
+    childRunId?: RunId;
 }
 
 export type CancellationSignal = {
@@ -66,4 +73,5 @@ export type StepRecord =
     | ActivityStep
     | SleepStep
     | ConditionalStep
-    | RetryStep;
+    | RetryStep
+    | ChildWorkflowStep;
