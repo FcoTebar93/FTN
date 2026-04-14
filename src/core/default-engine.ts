@@ -17,7 +17,11 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             startedAt: event.startedAt,
             completedAt: undefined,
             failedAt: undefined,
+            cancelledAt: undefined,
             failureReason: undefined,
+            cancellationRequestedAt: undefined,
+            cancellationReason: undefined,
+            cancellationRequestedBy: undefined,
             pendingActivities: [],
             completedActivities: [],
             pendingTimers: [],
@@ -133,6 +137,26 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     failedAt: event.startedAt,
                     failureReason: reason,
                 }
+            }
+            case "WorkflowCancelRequested": {
+                return {
+                    ...nextState,
+                    cancellationRequestedAt: event.startedAt,
+                    cancellationReason: event.payload.reason,
+                    cancellationRequestedBy: event.payload.requestedBy,
+                };
+            }
+            case "WorkflowCancelled": {
+                return {
+                    ...nextState,
+                    status: "cancelled",
+                    cancelledAt: event.startedAt,
+                    cancellationReason: event.payload.reason ?? nextState.cancellationReason,
+                    cancellationRequestedBy: event.payload.requestedBy ?? nextState.cancellationRequestedBy,
+                    pendingActivities: [],
+                    pendingTimers: [],
+                    pendingSignalWaits: [],
+                };
             }
             case "SnapshotCreated": {
                 const { snapshotVersion } = event.payload;

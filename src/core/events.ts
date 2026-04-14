@@ -17,7 +17,9 @@ export type WorkflowEventType =
     | "RetryAttemptStarted"
     | "RetryGivenUp"
     | "ConditionalBranchChosen"
-    | "RetryCompleted";
+    | "RetryCompleted"
+    | "WorkflowCancelRequested"
+    | "WorkflowCancelled";
 
 export interface BaseWorkflowEvent {
     id: EventId;
@@ -160,6 +162,22 @@ export interface RetryCompletedEvent extends BaseWorkflowEvent {
     };
 }
 
+export interface WorkflowCancelRequestedEvent extends BaseWorkflowEvent {
+    type: "WorkflowCancelRequested";
+    payload: {
+        reason?: string;
+        requestedBy?: string;
+    };
+}
+
+export interface WorkflowCancelledEvent extends BaseWorkflowEvent {
+    type: "WorkflowCancelled";
+    payload: {
+        reason?: string;
+        requestedBy?: string;
+    };
+}
+
 export interface ConditionalBranchChosen extends BaseWorkflowEvent {
     type: "ConditionalBranchChosen";
     payload: {
@@ -184,4 +202,6 @@ export type WorkflowEvent =
     | ConditionalBranchChosenEvent
     | RetryAttemptStartedEvent
     | RetryGivenUpEvent
-    | RetryCompletedEvent;
+    | RetryCompletedEvent
+    | WorkflowCancelRequestedEvent
+    | WorkflowCancelledEvent;

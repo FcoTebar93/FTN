@@ -3,7 +3,8 @@ import type { WorkflowId, RunId, ActivityId, Version, StepRecord } from "../shar
 export type WorkflowStatus =
     | "running"
     | "completed"
-    | "failed";
+    | "failed"
+    | "cancelled";
 
 export interface PendingActivity {
     id: ActivityId;
@@ -50,7 +51,11 @@ export interface WorkflowState {
     startedAt?: string;
     completedAt?: string;
     failedAt?: string;
+    cancelledAt?: string;
     failureReason?: string;
+    cancellationRequestedAt?: string;
+    cancellationReason?: string;
+    cancellationRequestedBy?: string;
 
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];
