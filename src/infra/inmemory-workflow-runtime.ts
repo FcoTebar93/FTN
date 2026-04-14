@@ -187,6 +187,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       let nextRetryOrdinal = 0;
       let nextConditionalOrdinal = 0;
       let nextChildOrdinal = 0;
+      let nextLoopOrdinal = 0;
       const signalOrdinalByName = new Map<string, number>();
 
       const hasRetryAttemptRecorded = (stepId: StepId, attempt: number): boolean => {
@@ -462,6 +463,53 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             payload: { signalName: name, ordinal },
           });
           throw new WorkflowSuspendedError();
+        },
+        forEach: async <TItem, TResult = void>(
+          items: TItem[],
+          iteratee: (item: TItem, index: number) => Promise<TResult>,
+          options?: { maxIterations?: number }
+        ): Promise<TResult[]> => {
+          const stepId: StepId = `loop-${nextLoopOrdinal++}`;
+          const maxIterations = Math.max(1, options?.maxIterations ?? 1000);
+          if (items.length > maxIterations) {
+            throw new Error(`Loop iteration limit exceeded: ${items.length} > ${maxIterations}`);
+          }
+
+          const done = fullHistory.find(
+            (e): e is Extract<WorkflowEvent, { type: "LoopCompleted" }> =>
+              e.type === "LoopCompleted" && e.payload.stepId === stepId
+          );
+          if (done) {
+            return [];
+          }
+
+          const results: TResult[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const startedInHistory = fullHistory.some(
+              (e) => e.type === "LoopIterationStarted" && e.payload.stepId === stepId && e.payload.index === i
+            );
+            const startedInPending = newDomainEvents.some((raw) => {
+              const e = raw as WorkflowEvent;
+              return e.type === "LoopIterationStarted" && e.payload.stepId === stepId && e.payload.index === i;
+            });
+            if (!startedInHistory && !startedInPending) {
+              newDomainEvents.push({
+                type: "LoopIterationStarted",
+                workflowId,
+                runId,
+                payload: { stepId, index: i },
+              });
+            }
+            results.push(await iteratee(items[i], i));
+          }
+
+          newDomainEvents.push({
+            type: "LoopCompleted",
+            workflowId,
+            runId,
+            payload: { stepId, iterations: items.length },
+          });
+          return results;
         },
         child: async <TInput, TResult>(workflowName: string, input: TInput): Promise<TResult> => {
           const stepId = `child-${nextChildOrdinal++}`;
