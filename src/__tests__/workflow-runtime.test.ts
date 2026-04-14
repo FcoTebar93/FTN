@@ -72,6 +72,22 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(events[0].payload.workflowVersion, "v2");
   });
 
+  it("persiste tenantId en WorkflowStarted cuando se aporta en startWorkflow", async () => {
+    const { runtime, eventStore } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "example-tenant",
+      workflowVersion: "v1",
+      tenantId: "tenant-acme",
+      input: {},
+      definition: async () => ({ ok: true }),
+    });
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.equal(events[0].type, "WorkflowStarted");
+    assert.equal(events[0].payload.tenantId, "tenant-acme");
+  });
+
   it("programa una ActivityScheduled usando ftn.activity y la deja en pendingActivities", async () => {
     const { runtime } = inMemoryStack();
 

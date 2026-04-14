@@ -136,6 +136,15 @@
       "post": {
         "tags": ["workflows"],
         "summary": "Iniciar un workflow por nombre de catálogo",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Obligatorio si FTN_MULTI_TENANT_ENABLED=1|true"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -168,7 +177,7 @@
               }
             }
           },
-          "400": { "description": "Input inválido" },
+          "400": { "description": "Input inválido o falta X-Tenant-Id en modo multi-tenant" },
           "404": { "description": "Workflow no registrado" }
         }
       }

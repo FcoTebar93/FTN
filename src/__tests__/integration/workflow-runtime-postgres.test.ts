@@ -147,6 +147,33 @@ describePg("InMemoryWorkflowRuntime con stores Postgres", () => {
     assert.equal(state2!.pendingSignalWaits.length, 0);
   });
 
+  it("persiste tenantId en WorkflowStarted (Postgres)", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new PostgresEventStore(pool);
+    const snapshotStore = new PostgresSnapshotStore(pool);
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "pg-tenant",
+      tenantId: "tenant-ci",
+      input: {},
+      definition: async () => ({ ok: true }),
+    });
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const started = stream.find((e) => e.type === "WorkflowStarted");
+    assert.ok(started && started.type === "WorkflowStarted");
+    assert.equal(started.payload.tenantId, "tenant-ci");
+  });
+
   it("dos runWorkflowTick concurrentes: un append gana y el otro lanza ConcurrencyError (Postgres)", async () => {
     const engine = new DefaultWorkflowEngine();
     const eventStore = new PostgresEventStore(pool);
