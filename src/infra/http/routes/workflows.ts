@@ -27,7 +27,9 @@ export async function tryWorkflowsRoutes(
         return true;
       }
       const input = parsed.input;
-      const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(name, input);
+      const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(name, input, {
+        correlationId: ctx.correlationId,
+      });
 
       res.statusCode = 201;
       res.setHeader("Content-Type", "application/json");
@@ -133,6 +135,7 @@ export async function tryWorkflowsRoutes(
         scheduledAt: new Date().toISOString(),
         workerType: "workflow",
         targetQueue: "workflows",
+        correlationId: ctx.correlationId,
       };
 
       await ctx.taskQueue.enqueue(task);
@@ -248,6 +251,7 @@ export async function tryWorkflowsRoutes(
         scheduledAt: new Date().toISOString(),
         workerType: "workflow",
         targetQueue: "workflows",
+        correlationId: ctx.correlationId,
       };
 
       await ctx.taskQueue.enqueue(task);

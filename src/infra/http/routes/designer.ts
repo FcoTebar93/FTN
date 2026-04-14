@@ -12,7 +12,6 @@ import { validateDesignerWorkflow } from "../../../app/designer-validate";
 import { DESIGNER_KINDS } from "../../../app/designer-kinds";
 import type { FtnAppRouteContext } from "../route-context";
 
-/** Rutas de lectura: kinds, integraciones, listado y detalle (antes de /credentials en el orden histórico). */
 export async function tryDesignerReadRoutes(
   ctx: FtnAppRouteContext,
   req: http.IncomingMessage,
@@ -64,7 +63,6 @@ export async function tryDesignerReadRoutes(
   return false;
 }
 
-/** POST/PUT designer y test-run (después de /credentials). */
 export async function tryDesignerWriteRoutes(
   ctx: FtnAppRouteContext,
   req: http.IncomingMessage,
@@ -112,7 +110,8 @@ export async function tryDesignerWriteRoutes(
         try {
           await ctx.enqueueWorkflowStart(
             getDesignerRuntimeName(ctx.requestSubject, normalized.id),
-            normalized.scheduledInput ?? {}
+            normalized.scheduledInput ?? {},
+            { correlationId: ctx.correlationId }
           );
         } catch (e) {
           res.statusCode = 201;
@@ -228,7 +227,8 @@ export async function tryDesignerWriteRoutes(
     try {
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(
         getDesignerRuntimeName(ctx.requestSubject, id),
-        input
+        input,
+        { correlationId: ctx.correlationId }
       );
       res.statusCode = 201;
       res.setHeader("Content-Type", "application/json");

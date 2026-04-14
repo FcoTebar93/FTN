@@ -104,6 +104,7 @@ export async function tryPaymentsRoutes(
               scheduledAt: new Date().toISOString(),
               workerType: "workflow",
               targetQueue: "workflows",
+              correlationId: ctx.correlationId,
             };
 
             await ctx.taskQueue.enqueue(task);
