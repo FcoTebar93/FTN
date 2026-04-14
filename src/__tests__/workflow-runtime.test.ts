@@ -9,7 +9,15 @@ import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
-import type { ActivityTask } from "../shared/tasks";
+import type { ActivityTask, TimerTask } from "../shared/tasks";
+import type { Logger } from "../infra/logger";
+
+const silentLogger: Logger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
 
 function inMemoryStack() {
   const engine = new DefaultWorkflowEngine();
@@ -83,6 +91,48 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(tick.newEvents[0].type, "ActivityScheduled");
     assert.equal(state!.pendingActivities.length, 1);
     assert.equal(state!.pendingActivities[0].name, "send-welcome-email");
+  });
+
+  it("propaga correlationId del tick a ActivityTask encolado", async () => {
+    const { runtime, taskQueue } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "corr-act-only",
+      input: {},
+      definition: async (ftn) => {
+        ftn.activity("noop-corr", {});
+        return {};
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId, { correlationId: "corr-act-1" });
+
+    const actLease = await taskQueue.leaseNextTask("w", "activities", 1);
+    assert.ok(actLease);
+    const aq = actLease.task as ActivityTask;
+    assert.equal(aq.correlationId, "corr-act-1");
+    assert.equal(aq.payload.correlationId, "corr-act-1");
+    await taskQueue.completeTask(actLease.leaseId);
+  });
+
+  it("propaga correlationId del tick a TimerTask encolado", async () => {
+    const { runtime, taskQueue } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "corr-timer-only",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.sleep(1000);
+        return {};
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId, { correlationId: "corr-timer-1" });
+
+    const timerLease = await taskQueue.leaseNextTask("w", "timers", 1);
+    assert.ok(timerLease);
+    assert.equal((timerLease.task as TimerTask).correlationId, "corr-timer-1");
+    await taskQueue.completeTask(timerLease.leaseId);
   });
 
   it("integra ActivityWorker para ejecutar una actividad y moverla a completed", async () => {
@@ -296,6 +346,7 @@ describe("InMemoryWorkflowRuntime", () => {
       queueName: "timers",
       workflowQueueName: "workflows",
       pollIntervalMs: 5,
+      log: silentLogger,
     });
 
     let advanced = false;

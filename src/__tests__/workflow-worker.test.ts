@@ -13,6 +13,14 @@ import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import type { WorkflowRuntime } from "../modules/workflow-runtime";
 import type { ActivityTask } from "../shared/tasks";
 import { ConcurrencyError } from "../modules/event-store";
+import type { Logger } from "../infra/logger";
+
+const silentLogger: Logger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
 
 function inMemoryStack() {
   const engine = new DefaultWorkflowEngine();
@@ -69,6 +77,7 @@ describe("InMemoryWorkflowWorker", () => {
       workerId: "workflow-worker-1",
       taskQueue,
       runtime,
+      log: silentLogger,
       config: {
         queueName: "workflows",
         leaseTimeoutMs: 10_000,
@@ -126,6 +135,7 @@ describe("InMemoryWorkflowWorker", () => {
       workerId: "workflow-worker-1",
       taskQueue,
       runtime,
+      log: silentLogger,
       config: {
         queueName: "workflows",
         leaseTimeoutMs: 10_000,
@@ -178,6 +188,7 @@ describe("InMemoryWorkflowWorker", () => {
       queueName: "timers",
       workflowQueueName: "workflows",
       pollIntervalMs: 10,
+      log: silentLogger,
     });
 
     let wfLease = null;
@@ -223,6 +234,7 @@ describe("InMemoryWorkflowWorker", () => {
       workerId: "workflow-worker-race",
       taskQueue,
       runtime,
+      log: silentLogger,
       config: {
         queueName: "workflows",
         leaseTimeoutMs: 10_000,
@@ -276,6 +288,7 @@ describe("InMemoryWorkflowWorker", () => {
       workerId: "workflow-worker-race-max",
       taskQueue,
       runtime,
+      log: silentLogger,
       config: {
         queueName: "workflows",
         leaseTimeoutMs: 10_000,
