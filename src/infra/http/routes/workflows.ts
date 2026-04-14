@@ -45,7 +45,7 @@ export async function tryWorkflowsRoutes(
   if (req.method === "GET" && (url === "/workflows" || url.startsWith("/workflows?"))) {
     const [, queryString] = url.split("?");
     const params = new URLSearchParams(queryString ?? "");
-    const statusFilter = params.get("status") as "running" | "completed" | "failed" | null;
+    const statusFilter = params.get("status") as "running" | "completed" | "failed" | "cancelled" | null;
     const limit = Math.min(100, Math.max(1, parseInt(params.get("limit") ?? "50", 10)));
     const offset = Math.max(0, parseInt(params.get("offset") ?? "0", 10));
 
@@ -262,6 +262,77 @@ export async function tryWorkflowsRoutes(
       res.statusCode = 500;
       res.end(`Error sending signal: ${(e as Error).message}`);
     }
+    return true;
+  }
+
+  if (req.method === "POST" && url.startsWith("/workflows/") && url.endsWith("/cancel")) {
+    const parts = url.split("?");
+    const pathOnly = parts[0] ?? "";
+    const pathParts = pathOnly.split("/");
+    if (pathParts.length !== 5) {
+      res.statusCode = 400;
+      res.end("Expected /workflows/:workflowId/:runId/cancel");
+      return true;
+    }
+
+    const workflowId = pathParts[2];
+    const runId = pathParts[3];
+    const state = await ctx.runtime.loadCurrentState(workflowId, runId);
+    if (!state) {
+      res.statusCode = 404;
+      res.end("Workflow not found");
+      return true;
+    }
+    if (state.status !== "running") {
+      res.statusCode = 409;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: `Workflow is already ${state.status}` }));
+      return true;
+    }
+
+    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
+    if (body === null) return true;
+    let reason: string | undefined;
+    try {
+      if (body.trim()) {
+        const parsed = JSON.parse(body) as { reason?: unknown };
+        reason = typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : undefined;
+      }
+    } catch {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      return true;
+    }
+
+    await ctx.eventStore.appendEvents(workflowId, runId, state.version, [
+      {
+        type: "WorkflowCancelRequested",
+        workflowId,
+        runId,
+        payload: {
+          ...(reason ? { reason } : {}),
+          requestedBy: ctx.requestSubject,
+        },
+      },
+    ]);
+
+    const task: WorkflowTask = {
+      id: `wf-task-cancel-${workflowId}-${runId}-${Date.now()}`,
+      type: "workflow",
+      workflowId,
+      runId,
+      createdAt: new Date().toISOString(),
+      scheduledAt: new Date().toISOString(),
+      workerType: "workflow",
+      targetQueue: "workflows",
+      correlationId: ctx.correlationId,
+    };
+    await ctx.taskQueue.enqueue(task);
+
+    res.statusCode = 202;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: true, requested: true }));
     return true;
   }
 
