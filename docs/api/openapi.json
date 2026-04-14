@@ -143,6 +143,13 @@
             "required": false,
             "schema": { "type": "string" },
             "description": "Obligatorio si FTN_MULTI_TENANT_ENABLED=1|true"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Reutiliza la misma respuesta de creación para reintentos seguros del cliente."
           }
         ],
         "requestBody": {
@@ -178,7 +185,8 @@
             }
           },
           "400": { "description": "Input inválido o falta X-Tenant-Id en modo multi-tenant" },
-          "404": { "description": "Workflow no registrado" }
+          "404": { "description": "Workflow no registrado" },
+          "409": { "description": "Idempotency-Key reutilizada con payload distinto" }
         }
       }
     },
