@@ -29,6 +29,7 @@ export async function tryWorkflowsRoutes(
       const input = parsed.input;
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(name, input, {
         correlationId: ctx.correlationId,
+        tenantId: ctx.tenantId,
       });
 
       res.statusCode = 201;
@@ -122,6 +123,7 @@ export async function tryWorkflowsRoutes(
       const { workflowId, runId } = await ctx.runtime.startWorkflow({
         workflowName: trigger.workflowName,
         workflowVersion: descriptor?.version,
+        tenantId: ctx.tenantId,
         input,
         definition: wfDef,
       });

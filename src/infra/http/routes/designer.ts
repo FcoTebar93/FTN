@@ -111,7 +111,7 @@ export async function tryDesignerWriteRoutes(
           await ctx.enqueueWorkflowStart(
             getDesignerRuntimeName(ctx.requestSubject, normalized.id),
             normalized.scheduledInput ?? {},
-            { correlationId: ctx.correlationId }
+            { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
           );
         } catch (e) {
           res.statusCode = 201;
@@ -228,7 +228,7 @@ export async function tryDesignerWriteRoutes(
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(
         getDesignerRuntimeName(ctx.requestSubject, id),
         input,
-        { correlationId: ctx.correlationId }
+        { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
       );
       res.statusCode = 201;
       res.setHeader("Content-Type", "application/json");
