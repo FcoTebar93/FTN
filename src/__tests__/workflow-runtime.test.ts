@@ -266,6 +266,47 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state2!.pendingSignalWaits.length, 0);
   });
 
+  it("cancelación explícita: WorkflowCancelRequested termina el run en cancelled y limpia pendientes", async () => {
+    const { runtime, eventStore } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "cancel-me",
+      input: {},
+      definition: async (ftn) => {
+        ftn.activity("some-activity", {});
+        await ftn.sleep(60_000);
+        return { done: true };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const beforeCancel = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(beforeCancel);
+    assert.ok((beforeCancel!.pendingActivities.length + beforeCancel!.pendingTimers.length) > 0);
+
+    const eventsBefore = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = eventsBefore[eventsBefore.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "WorkflowCancelRequested",
+        workflowId,
+        runId,
+        payload: { reason: "user-request", requestedBy: "tester" },
+      },
+    ]);
+
+    const tick = await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(tick.newEvents.some((e) => e.type === "WorkflowCancelled"), true);
+    assert.equal(state!.status, "cancelled");
+    assert.equal(state!.cancellationReason, "user-request");
+    assert.equal(state!.cancellationRequestedBy, "tester");
+    assert.equal(state!.pendingActivities.length, 0);
+    assert.equal(state!.pendingTimers.length, 0);
+    assert.equal(state!.pendingSignalWaits.length, 0);
+  });
+
   it("ftn.retry registra RetryAttemptStarted y reintenta hasta tener éxito", async () => {
     const { runtime, eventStore } = inMemoryStack();
 

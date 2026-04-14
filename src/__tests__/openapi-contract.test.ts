@@ -3,7 +3,6 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-/** Mismas comprobaciones estructurales que scripts/check-openapi.mjs, en forma de test CI. */
 test("OpenAPI spec es JSON 3.x con paths mínimos", () => {
   const specPath = join(process.cwd(), "docs", "api", "openapi.json");
   assert.ok(existsSync(specPath), `Missing ${specPath}`);
@@ -24,6 +23,7 @@ test("OpenAPI spec es JSON 3.x con paths mínimos", () => {
     "/designer/workflows/{id}/test-run",
     "/activities",
     "/credentials",
+    "/workflows/{workflowId}/{runId}/cancel",
   ]) {
     assert.ok(p in paths, `missing path ${p}`);
   }

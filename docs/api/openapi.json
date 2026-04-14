@@ -127,7 +127,7 @@
         "tags": ["workflows"],
         "summary": "Listar runs conocidos (paginado)",
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["running", "completed", "failed"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["running", "completed", "failed", "cancelled"] } },
           { "name": "limit", "in": "query", "schema": { "type": "integer" } },
           { "name": "offset", "in": "query", "schema": { "type": "integer" } }
         ],
@@ -218,6 +218,33 @@
           }
         },
         "responses": { "200": { "description": "{ ok: true }" }, "404": { "description": "Run no encontrado" } }
+      }
+    },
+    "/workflows/{workflowId}/{runId}/cancel": {
+      "post": {
+        "tags": ["workflows"],
+        "summary": "Solicitar cancelación explícita del run",
+        "parameters": [
+          { "name": "workflowId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string", "description": "Motivo de cancelación (opcional)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "{ ok: true, requested: true }" },
+          "404": { "description": "Run no encontrado" },
+          "409": { "description": "Run ya finalizado" }
+        }
       }
     },
     "/workflows/{workflowId}/{runId}/steps": {
