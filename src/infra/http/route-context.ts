@@ -19,7 +19,8 @@ export interface FtnAppRouteContext {
   redis: Redis | undefined;
   enqueueWorkflowStart: (
     name: string,
-    input: unknown
+    input: unknown,
+    opts?: { correlationId?: string }
   ) => Promise<{ workflowId: string; runId: string; version: number }>;
   getIntegrationsStatusForSubject: (subject: string) => Promise<
     Array<{
@@ -31,4 +32,5 @@ export interface FtnAppRouteContext {
     }>
   >;
   requestId: string;
+  correlationId: string;
 }
