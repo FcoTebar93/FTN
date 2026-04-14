@@ -3,6 +3,7 @@ import type { WorkflowRuntime } from "../modules/workflow-runtime";
 import type { TaskQueue } from "../modules/task-queue";
 import type { CancellationSignal } from "../shared/types";
 import type { Logger } from "../infra/logger";
+import type { DeadLetterInput } from "../shared/dead-letter";
 
 export interface WorkflowWorkerConfig {
     queueName: string;
@@ -20,6 +21,7 @@ export interface WorkflowWorkerDeps {
     runtime: WorkflowRuntime;
     config: WorkflowWorkerConfig;
     log: Logger;
+    onDeadLetter?: (entry: DeadLetterInput) => void;
 }
 
 export interface WorkflowWorker {
