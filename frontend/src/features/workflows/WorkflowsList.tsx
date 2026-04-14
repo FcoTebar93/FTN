@@ -27,6 +27,7 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
     { value: "running", label: "Running" },
     { value: "completed", label: "Completed" },
     { value: "failed", label: "Failed" },
+    { value: "cancelled", label: "Cancelled" },
     { value: "pending", label: "Pending" },
   ];
 
@@ -88,6 +89,12 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
                 <div class={`workflow-status status-${w.status}`}>{w.status}</div>
                 <div class="workflow-meta">
                   <span>{w.startedAt ?? "sin fecha"}</span>
+                  {typeof w.pendingSignalWaits === "number" && w.pendingSignalWaits > 0 ? (
+                    <span> · señales: {w.pendingSignalWaits}</span>
+                  ) : null}
+                  {typeof w.retryAttempts === "number" && w.retryAttempts > 0 ? (
+                    <span> · retries: {w.retryAttempts}</span>
+                  ) : null}
                 </div>
               </li>
             );

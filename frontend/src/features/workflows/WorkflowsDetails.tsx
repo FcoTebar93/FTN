@@ -10,6 +10,8 @@ interface Props {
   steps: StepRecord[] | null;
   loading: boolean;
   error: Error | null;
+  onRefresh?: () => void;
+  onCancel?: (reason?: string) => Promise<void>;
 }
 
 function payloadSummary(payload: unknown): string {
@@ -22,10 +24,11 @@ function payloadSummary(payload: unknown): string {
   }
 }
 
-export function WorkflowDetail({ selected, state, events, steps, loading, error }: Props) {
+export function WorkflowDetail({ selected, state, events, steps, loading, error, onRefresh, onCancel }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("estado");
   const [showStateJson, setShowStateJson] = useState(false);
   const [expandedPayloadIds, setExpandedPayloadIds] = useState<Record<string, boolean>>({});
+  const [isCancelling, setIsCancelling] = useState(false);
 
   if (!selected) {
     return <div class="panel">Selecciona un workflow para ver el detalle.</div>;
@@ -56,6 +59,28 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
         {state.id} / {state.runId}
       </h2>
       <div class="workflow-detail-header">
+        <button type="button" class="workflow-filter-btn" style={{ marginRight: "8px" }} onClick={onRefresh}>
+          Refrescar
+        </button>
+        {state.status === "running" && onCancel && (
+          <button
+            type="button"
+            class="workflow-filter-btn"
+            style={{ marginRight: "8px" }}
+            disabled={isCancelling}
+            onClick={async () => {
+              const reason = window.prompt("Motivo de cancelación (opcional):", "");
+              setIsCancelling(true);
+              try {
+                await onCancel(reason ?? undefined);
+              } finally {
+                setIsCancelling(false);
+              }
+            }}
+          >
+            {isCancelling ? "Cancelando…" : "Cancelar run"}
+          </button>
+        )}
         <button
           type="button"
           class="workflow-filter-btn"
@@ -83,6 +108,9 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
         {state.completedAt && <span>Completado: {state.completedAt}</span>}
         {state.failedAt && <span>Falló: {state.failedAt}</span>}
         {state.failureReason && <span>Razón: {state.failureReason}</span>}
+        {state.cancelledAt && <span>Cancelado: {state.cancelledAt}</span>}
+        {state.cancellationReason && <span>Motivo cancelación: {state.cancellationReason}</span>}
+        {state.cancellationRequestedBy && <span>Solicitado por: {state.cancellationRequestedBy}</span>}
         {state.status === "running" && (
           <span class="workflow-live-pill">
             <span class="workflow-live-dot" />
@@ -110,6 +138,14 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error 
             <h3>Resumen</h3>
             <ul class="detail-list">
               <li>Versión: {state.version}</li>
+              <li>
+                Diagnóstico: pendientes={state.pendingActivities.length + state.pendingTimers.length + (state.pendingSignalWaits?.length ?? 0)}
+                {" · "}
+                retries={(events ?? []).filter((e) => e.type === "RetryAttemptStarted").length}
+              </li>
+              {events && events.length > 0 && (
+                <li>Último evento: {events[events.length - 1]!.type}</li>
+              )}
               {state.result !== undefined && (
                 <li>Resultado: <code class="inline-code">{payloadSummary(state.result)}</code></li>
               )}

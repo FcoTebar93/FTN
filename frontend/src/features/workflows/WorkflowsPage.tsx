@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "preact/hooks";
-import { getWorkflows, getWorkflowState, getWorkflowEvents, getWorkflowSteps } from "../../api/workflows";
+import { getWorkflows, getWorkflowState, getWorkflowEvents, getWorkflowSteps, cancelWorkflow } from "../../api/workflows";
 import type { WorkflowSummary, WorkflowState, WorkflowEvent, StepRecord, WorkflowStatus } from "../../api/types";
 import { WorkflowsList } from "./WorkflowsList";
 import { WorkflowDetail } from "./WorkflowsDetails";
@@ -56,6 +56,22 @@ export function WorkflowsPage() {
   const [errorDetail, setErrorDetail] = useState<Error | null>(null);
 
   const [page, setPage] = useState(0);
+
+  const refreshSelected = async (): Promise<void> => {
+    if (!selected) return;
+    setLoadingDetail(true);
+    try {
+      const [st, evs, s] = await fetchDetail(selected.workflowId, selected.runId);
+      setState(st);
+      setEvents(evs);
+      setSteps(s);
+      setErrorDetail(null);
+    } catch (err) {
+      setErrorDetail(err as Error);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   useEffect(() => {
     setLoadingList(true);
@@ -133,6 +149,18 @@ export function WorkflowsPage() {
           steps={steps}
           loading={loadingDetail}
           error={errorDetail}
+          onRefresh={() => {
+            void refreshSelected();
+          }}
+          onCancel={async (reason?: string) => {
+            if (!selected) return;
+            await cancelWorkflow(selected.workflowId, selected.runId, reason);
+            await refreshSelected();
+            const ws = await getWorkflows(
+              statusFilter ? { status: statusFilter, limit: PAGE_SIZE, offset: page * PAGE_SIZE } : { limit: PAGE_SIZE, offset: page * PAGE_SIZE }
+            );
+            setWorkflows(ws);
+          }}
         />
       </div>
     </div>
