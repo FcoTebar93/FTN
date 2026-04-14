@@ -34,4 +34,27 @@ export interface FtnAppRouteContext {
   requestId: string;
   correlationId: string;
   tenantId?: string;
+  getIdempotentWorkflowStart: (
+    key: string
+  ) =>
+    | {
+        workflowId: string;
+        runId: string;
+        version: number;
+        name: string;
+        inputHash: string;
+        tenantId?: string;
+      }
+    | undefined;
+  saveIdempotentWorkflowStart: (
+    key: string,
+    value: {
+      workflowId: string;
+      runId: string;
+      version: number;
+      name: string;
+      inputHash: string;
+      tenantId?: string;
+    }
+  ) => void;
 }
