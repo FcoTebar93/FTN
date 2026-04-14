@@ -1,4 +1,4 @@
-export type WorkflowStatus = "pending" | "running" | "completed" | "failed";
+export type WorkflowStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export interface WorkflowSummary {
     workflowId: string;
@@ -9,6 +9,13 @@ export interface WorkflowSummary {
     completedAt?: string | null;
     failedAt?: string | null;
     failureReason?: string | null;
+    cancelledAt?: string | null;
+    cancellationReason?: string | null;
+    pendingActivities?: number;
+    pendingTimers?: number;
+    pendingSignalWaits?: number;
+    retryAttempts?: number;
+    lastEventType?: string;
 }
 
 export interface PendingActivity {
@@ -51,6 +58,10 @@ export interface WorkflowState {
     completedAt?: string | null;
     failedAt?: string | null;
     failureReason?: string | null;
+    cancelledAt?: string | null;
+    cancellationRequestedAt?: string | null;
+    cancellationReason?: string | null;
+    cancellationRequestedBy?: string | null;
 
     pendingActivities: PendingActivity[];
     completedActivities: CompletedActivity[];

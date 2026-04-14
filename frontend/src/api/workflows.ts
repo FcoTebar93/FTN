@@ -40,3 +40,14 @@ export async function startWorkflow(name: string, input: unknown) {
 export async function sendWorkflowSignal(workflowId: string, runId: string, signalName: string, data?: unknown): Promise<{ ok: boolean }> {
   return postJson<{ ok: boolean }>(`/workflows/${workflowId}/${runId}/signals`, { signalName, data });
 }
+
+export async function cancelWorkflow(
+  workflowId: string,
+  runId: string,
+  reason?: string
+): Promise<{ ok: boolean; requested: boolean }> {
+  return postJson<{ ok: boolean; requested: boolean }>(
+    `/workflows/${workflowId}/${runId}/cancel`,
+    reason && reason.trim() ? { reason: reason.trim() } : {}
+  );
+}
