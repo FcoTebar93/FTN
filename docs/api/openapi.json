@@ -296,6 +296,18 @@
         "responses": { "200": { "description": "text/plain métricas" } }
       }
     },
+    "/dead-letters": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Inspección de tareas enviadas a dead-letter",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } },
+          { "name": "queue", "in": "query", "schema": { "type": "string" } },
+          { "name": "taskType", "in": "query", "schema": { "type": "string", "enum": ["workflow", "activity", "timer"] } }
+        ],
+        "responses": { "200": { "description": "{ items, total }" } }
+      }
+    },
     "/activities": {
       "get": {
         "tags": ["catalog"],
