@@ -148,6 +148,37 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       let lastEventVersion = rehydrated.lastEventVersion;
 
       const fullHistory = await this.eventStore.loadEvents(workflowId, runId, 0);
+
+      if (currentState.status !== "running") {
+        return {
+          state: currentState,
+          newEvents: [],
+          snapshotCreated: false,
+        };
+      }
+
+      const cancellationRequestedEvent = [...fullHistory]
+        .reverse()
+        .find((e) => e.type === "WorkflowCancelRequested");
+      const alreadyCancelled = fullHistory.some((e) => e.type === "WorkflowCancelled");
+      if (cancellationRequestedEvent && !alreadyCancelled) {
+        const cancelledRaw: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
+          type: "WorkflowCancelled",
+          workflowId,
+          runId,
+          payload: {
+            reason: cancellationRequestedEvent.payload.reason,
+            requestedBy: cancellationRequestedEvent.payload.requestedBy,
+          },
+        };
+        const [cancelled] = await this.eventStore.appendEvents(workflowId, runId, lastEventVersion, [cancelledRaw]);
+        currentState = this.engine.applyEvent(currentState, cancelled);
+        return {
+          state: currentState,
+          newEvents: [cancelled],
+          snapshotCreated: false,
+        };
+      }
     
       const newDomainEvents: Omit<WorkflowEvent, "id" | "version" | "startedAt">[] = [];
       let definitionResult: unknown;
