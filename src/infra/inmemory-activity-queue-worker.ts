@@ -3,6 +3,7 @@ import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask } from "../shared/tasks";
 import type { ActivityWorker } from "../workers/activity-worker";
 import type { Logger } from "./logger";
+import type { DeadLetterInput } from "../shared/dead-letter";
 
 interface InMemoryActivityQueueWorkerDeps {
   taskQueue: TaskQueue;
@@ -12,6 +13,7 @@ interface InMemoryActivityQueueWorkerDeps {
   leaseTimeoutMs: number;
   pollIntervalMs: number;
   log: Logger;
+  onDeadLetter?: (entry: DeadLetterInput) => void;
 }
 
 export class InMemoryActivityQueueWorker {
@@ -34,9 +36,23 @@ export class InMemoryActivityQueueWorker {
     const activityTask = task as ActivityTask;
     const payload: ActivityPayload = activityTask.payload;
 
-    await this.deps.worker.handleTask(payload);
-
-    await this.deps.taskQueue.completeTask(lease.leaseId);
+    try {
+      await this.deps.worker.handleTask(payload);
+      await this.deps.taskQueue.completeTask(lease.leaseId);
+    } catch (err) {
+      this.deps.onDeadLetter?.({
+        queueName: this.deps.queueName,
+        taskId: task.id,
+        taskType: task.type,
+        workflowId: task.workflowId,
+        runId: task.runId,
+        reason: "activity_worker_error",
+        error: String(err),
+        correlationId: task.correlationId,
+      });
+      await this.deps.taskQueue.completeTask(lease.leaseId);
+      throw err;
+    }
   }
 
   async runForever(cancellation: { aborted: boolean }): Promise<void> {

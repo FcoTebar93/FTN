@@ -5,6 +5,7 @@ import type { InMemoryActivityRegistry } from "../../modules/activity-registry/i
 import type { InMemoryWorkflowRuntime } from "../inmemory-workflow-runtime";
 import type { EventStore } from "../../modules/event-store";
 import type { TaskQueue } from "../../modules/task-queue";
+import type { DeadLetterEntry } from "../../shared/dead-letter";
 
 export interface FtnAppRouteContext {
   pool: Pool | undefined;
@@ -57,4 +58,5 @@ export interface FtnAppRouteContext {
       tenantId?: string;
     }
   ) => void;
+  listDeadLetters: (query?: { limit?: number; queueName?: string; taskType?: string }) => DeadLetterEntry[];
 }

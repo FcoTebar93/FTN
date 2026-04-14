@@ -69,5 +69,16 @@ export async function trySystemRoutes(
     return true;
   }
 
+  if (req.method === "GET" && (rawPath === "/dead-letters" || rawPath.startsWith("/dead-letters?"))) {
+    const parsed = new URL(req.url ?? "/dead-letters", "http://127.0.0.1");
+    const limit = Math.max(1, Math.min(500, parseInt(parsed.searchParams.get("limit") ?? "100", 10) || 100));
+    const queueName = parsed.searchParams.get("queue") ?? undefined;
+    const taskType = parsed.searchParams.get("taskType") ?? undefined;
+    const items = ctx.listDeadLetters({ limit, queueName, taskType });
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ items, total: items.length }));
+    return true;
+  }
+
   return false;
 }
