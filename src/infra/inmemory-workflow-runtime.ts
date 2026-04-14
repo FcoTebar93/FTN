@@ -6,6 +6,7 @@ import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from ".
 import type { ActivityId } from "../shared/types";
 import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
+import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
 
 type WorkflowKey = string;
 
@@ -185,6 +186,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
       let nextRetryOrdinal = 0;
       let nextConditionalOrdinal = 0;
+      let nextChildOrdinal = 0;
       const signalOrdinalByName = new Map<string, number>();
 
       const hasRetryAttemptRecorded = (stepId: StepId, attempt: number): boolean => {
@@ -199,6 +201,61 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         });
         return inFull || inPending;
       };
+
+      const hasChildTerminalRecorded = (stepId: StepId): boolean =>
+        fullHistory.some(
+          (e) =>
+            (e.type === "ChildWorkflowCompleted" || e.type === "ChildWorkflowFailed") &&
+            e.payload.stepId === stepId
+        ) ||
+        newDomainEvents.some((raw) => {
+          const e = raw as WorkflowEvent;
+          return (
+            (e.type === "ChildWorkflowCompleted" || e.type === "ChildWorkflowFailed") &&
+            e.payload.stepId === stepId
+          );
+        });
+
+      const childStarts = fullHistory.filter(
+        (e): e is Extract<WorkflowEvent, { type: "ChildWorkflowStarted" }> => e.type === "ChildWorkflowStarted"
+      );
+      for (const startEv of childStarts) {
+        if (hasChildTerminalRecorded(startEv.payload.stepId)) {
+          continue;
+        }
+        const childState = await this.loadCurrentState(startEv.payload.childWorkflowId, startEv.payload.childRunId);
+        if (!childState) {
+          continue;
+        }
+        if (childState.status === "completed") {
+          newDomainEvents.push({
+            type: "ChildWorkflowCompleted",
+            workflowId,
+            runId,
+            payload: {
+              stepId: startEv.payload.stepId,
+              childWorkflowId: startEv.payload.childWorkflowId,
+              childRunId: startEv.payload.childRunId,
+              result: childState.result,
+            },
+          });
+        } else if (childState.status === "failed" || childState.status === "cancelled") {
+          newDomainEvents.push({
+            type: "ChildWorkflowFailed",
+            workflowId,
+            runId,
+            payload: {
+              stepId: startEv.payload.stepId,
+              childWorkflowId: startEv.payload.childWorkflowId,
+              childRunId: startEv.payload.childRunId,
+              reason:
+                childState.status === "cancelled"
+                  ? `Child workflow cancelled: ${childState.cancellationReason ?? "cancelled"}`
+                  : childState.failureReason ?? "Child workflow failed",
+            },
+          });
+        }
+      }
     
       const ftn: FTNApi = {
         activity<TInput, TResult>(name: string, input: TInput, attempt?: number): ActivityHandle<TResult> {
@@ -406,6 +463,76 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           });
           throw new WorkflowSuspendedError();
         },
+        child: async <TInput, TResult>(workflowName: string, input: TInput): Promise<TResult> => {
+          const stepId = `child-${nextChildOrdinal++}`;
+
+          const completed = fullHistory.find(
+            (e): e is Extract<WorkflowEvent, { type: "ChildWorkflowCompleted" }> =>
+              e.type === "ChildWorkflowCompleted" && e.payload.stepId === stepId
+          );
+          if (completed) {
+            return completed.payload.result as TResult;
+          }
+
+          const failed = fullHistory.find(
+            (e): e is Extract<WorkflowEvent, { type: "ChildWorkflowFailed" }> =>
+              e.type === "ChildWorkflowFailed" && e.payload.stepId === stepId
+          );
+          if (failed) {
+            throw new Error(failed.payload.reason);
+          }
+
+          const started = fullHistory.find(
+            (e): e is Extract<WorkflowEvent, { type: "ChildWorkflowStarted" }> =>
+              e.type === "ChildWorkflowStarted" && e.payload.stepId === stepId
+          );
+
+          if (!started) {
+            const childDef = getWorkflow(workflowName);
+            if (!childDef) {
+              throw new Error(`Child workflow not found: ${workflowName}`);
+            }
+            const childDescriptor = getWorkflowDescriptor(workflowName);
+            const childStarted = await this.startWorkflow({
+              workflowName,
+              workflowVersion: childDescriptor?.version,
+              input,
+              definition: childDef,
+            });
+            const childTask: Task = {
+              id: `wf-task-${childStarted.workflowId}-${childStarted.runId}`,
+              type: "workflow",
+              workflowId: childStarted.workflowId,
+              runId: childStarted.runId,
+              createdAt: new Date().toISOString(),
+              scheduledAt: new Date().toISOString(),
+              workerType: "workflow",
+              targetQueue: "workflows",
+              ...(correlationId ? { correlationId } : {}),
+            };
+            await this.taskQueue.enqueue(childTask);
+            newDomainEvents.push({
+              type: "ChildWorkflowStarted",
+              workflowId,
+              runId,
+              payload: {
+                stepId,
+                workflowName,
+                input,
+                childWorkflowId: childStarted.workflowId,
+                childRunId: childStarted.runId,
+              },
+            });
+          }
+
+          newDomainEvents.push({
+            type: "TimerScheduled",
+            workflowId,
+            runId,
+            payload: { wakeAt: new Date().toISOString(), retryBackoff: { stepId, afterAttempt: 0 } },
+          });
+          throw new WorkflowSuspendedError();
+        },
         workflowId: function (): WorkflowId {
           return workflowId;
         },
@@ -426,6 +553,15 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         } catch (e) {
           if (e instanceof WorkflowSuspendedError) {
             suspended = true;
+          } else {
+            newDomainEvents.push({
+              type: "WorkflowFailed",
+              workflowId,
+              runId,
+              payload: {
+                reason: e instanceof Error ? e.message : String(e),
+              },
+            });
           }
           definitionResult = undefined;
         }
