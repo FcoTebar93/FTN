@@ -32,6 +32,8 @@ export interface FTNApi {
 
     signal<TData = unknown>(name: string): Promise<TData>;
 
+    child<TInput, TResult>(workflowName: string, input: TInput): Promise<TResult>;
+
     workflowId(): WorkflowId;
     runId(): RunId;
 }

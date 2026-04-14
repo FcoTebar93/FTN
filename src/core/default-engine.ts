@@ -158,6 +158,11 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
                     pendingSignalWaits: [],
                 };
             }
+            case "ChildWorkflowStarted":
+            case "ChildWorkflowCompleted":
+            case "ChildWorkflowFailed": {
+                return nextState;
+            }
             case "SnapshotCreated": {
                 const { snapshotVersion } = event.payload;
                 return {
