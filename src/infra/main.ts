@@ -15,6 +15,7 @@ import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 import type { WorkflowTask } from "../shared/tasks";
+import type { WorkflowEvent } from "../core/events";
 import { validateJson } from "../shared/json-schema-validate";
 import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workflows";
 
@@ -250,10 +251,36 @@ async function main(): Promise<void> {
     log,
   });
 
+  const multiTenantEnabled =
+    process.env.FTN_MULTI_TENANT_ENABLED === "1" || process.env.FTN_MULTI_TENANT_ENABLED === "true";
+  const tenantMaxConcurrentRuns = Math.max(
+    1,
+    Number.parseInt(process.env.FTN_TENANT_MAX_CONCURRENT_RUNS ?? "100", 10) || 100
+  );
+
+  async function countRunningRunsForTenant(tenantId: string): Promise<number> {
+    const keys = await eventStore.listRunKeys();
+    let running = 0;
+    for (const { workflowId, runId } of keys) {
+      const state = await runtime.loadCurrentState(workflowId, runId);
+      if (!state || state.status !== "running") {
+        continue;
+      }
+      const stream = await eventStore.loadEvents(workflowId, runId, 0);
+      const started = stream.find(
+        (e): e is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => e.type === "WorkflowStarted"
+      );
+      if (started?.payload.tenantId === tenantId) {
+        running += 1;
+      }
+    }
+    return running;
+  }
+
   async function enqueueWorkflowStart(
     name: string,
     input: unknown,
-    opts?: { correlationId?: string }
+    opts?: { correlationId?: string; tenantId?: string }
   ): Promise<{ workflowId: string; runId: string; version: number }> {
     const wfDef = getWorkflow(name);
     if (!wfDef) {
@@ -266,9 +293,18 @@ async function main(): Promise<void> {
         throw new Error(`Invalid input: ${JSON.stringify(result.errors)}`);
       }
     }
+    if (opts?.tenantId) {
+      const running = await countRunningRunsForTenant(opts.tenantId);
+      if (running >= tenantMaxConcurrentRuns) {
+        throw new Error(
+          `Tenant run quota exceeded (${running}/${tenantMaxConcurrentRuns}) for tenant "${opts.tenantId}"`
+        );
+      }
+    }
     const { workflowId, runId, version } = await runtime.startWorkflow({
       workflowName: name,
       workflowVersion: descriptor?.version,
+      tenantId: opts?.tenantId,
       input,
       definition: wfDef,
     });
@@ -395,6 +431,18 @@ async function main(): Promise<void> {
     const requestSubject =
       principal?.subject ??
       (principal?.kind === "api_key" ? "api_key" : systemSubject);
+    const tenantIdHeader =
+      typeof req.headers["x-tenant-id"] === "string" && req.headers["x-tenant-id"].trim()
+        ? req.headers["x-tenant-id"].trim().slice(0, 128)
+        : undefined;
+    if (multiTenantEnabled && !tenantIdHeader) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Missing X-Tenant-Id header" }));
+      return;
+    }
+    const tenantId = tenantIdHeader;
+    const scopedSubject = tenantId ? `${tenantId}:${requestSubject}` : requestSubject;
 
     if (!rateLimiter(getClientIp(req, apiSecurity.trustProxy))) {
       incHttpRateLimited();
@@ -448,7 +496,7 @@ async function main(): Promise<void> {
               apiSecurity,
               hasDbLogin,
               refreshTtlSeconds,
-              requestSubject,
+              requestSubject: scopedSubject,
               activities,
               runtime,
               eventStore,
@@ -458,6 +506,7 @@ async function main(): Promise<void> {
               getIntegrationsStatusForSubject,
               requestId,
               correlationId,
+              tenantId,
             },
             req,
             res

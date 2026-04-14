@@ -86,7 +86,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const workflowId = generateWorkflowId();
         const runId = generateRunId();
 
-        const { workflowName, workflowVersion, input } = options;
+        const { workflowName, workflowVersion, tenantId, input } = options;
 
         const key = makeWorkflowKey(workflowId, runId);
         this.definitions.set(key, {
@@ -102,6 +102,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             payload: {
                 name: workflowName,
                 workflowVersion,
+                ...(tenantId ? { tenantId } : {}),
                 input,
             },
         };
@@ -540,10 +541,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             if (!childDef) {
               throw new Error(`Child workflow not found: ${workflowName}`);
             }
+            const parentStarted = fullHistory.find(
+              (e): e is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => e.type === "WorkflowStarted"
+            );
             const childDescriptor = getWorkflowDescriptor(workflowName);
             const childStarted = await this.startWorkflow({
               workflowName,
               workflowVersion: childDescriptor?.version,
+              tenantId: parentStarted?.payload.tenantId,
               input,
               definition: childDef,
             });
