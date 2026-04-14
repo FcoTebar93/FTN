@@ -350,6 +350,48 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.ok(parentEvents.some((e) => e.type === "ChildWorkflowCompleted"));
   });
 
+  it("ftn.forEach recorre elementos con límite y registra eventos de loop", async () => {
+    const { runtime, eventStore } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "loop-basic",
+      input: { nums: [1, 2, 3] },
+      definition: async (ftn, input: { nums: number[] }) => {
+        const doubled = await ftn.forEach(input.nums, async (n) => n * 2, { maxIterations: 10 });
+        return { doubled };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { doubled: [2, 4, 6] });
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.ok(events.some((e) => e.type === "LoopIterationStarted"));
+    assert.ok(events.some((e) => e.type === "LoopCompleted"));
+  });
+
+  it("ftn.forEach falla cuando supera maxIterations", async () => {
+    const { runtime } = inMemoryStack();
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "loop-limit",
+      input: { nums: [1, 2, 3] },
+      definition: async (ftn, input: { nums: number[] }) => {
+        await ftn.forEach(input.nums, async (n) => n, { maxIterations: 2 });
+        return { ok: true };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(state!.status, "failed");
+    assert.equal((state!.failureReason ?? "").includes("Loop iteration limit exceeded"), true);
+  });
+
   it("ftn.retry registra RetryAttemptStarted y reintenta hasta tener éxito", async () => {
     const { runtime, eventStore } = inMemoryStack();
 

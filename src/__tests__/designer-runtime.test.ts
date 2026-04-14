@@ -41,6 +41,16 @@ function createRecordingFtn(): { ftn: FTNApi; activityInputs: unknown[] } {
     signal() {
       return Promise.resolve({} as never);
     },
+    async forEach<TItem, TResult = void>(
+      items: TItem[],
+      iteratee: (item: TItem, index: number) => Promise<TResult>
+    ): Promise<TResult[]> {
+      const out: TResult[] = [];
+      for (let i = 0; i < items.length; i++) {
+        out.push(await iteratee(items[i], i));
+      }
+      return out;
+    },
     child() {
       throw new Error("unexpected child");
     },
