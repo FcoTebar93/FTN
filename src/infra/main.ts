@@ -257,6 +257,45 @@ async function main(): Promise<void> {
     1,
     Number.parseInt(process.env.FTN_TENANT_MAX_CONCURRENT_RUNS ?? "100", 10) || 100
   );
+  const idempotencyTtlMs = Math.max(
+    60_000,
+    Number.parseInt(process.env.FTN_IDEMPOTENCY_TTL_MS ?? String(24 * 60 * 60 * 1000), 10) || 24 * 60 * 60 * 1000
+  );
+  const idempotencyStore = new Map<
+    string,
+    {
+      workflowId: string;
+      runId: string;
+      version: number;
+      name: string;
+      inputHash: string;
+      tenantId?: string;
+      createdAtMs: number;
+    }
+  >();
+  const getIdempotentWorkflowStart = (key: string) => {
+    const hit = idempotencyStore.get(key);
+    if (!hit) return undefined;
+    if (Date.now() - hit.createdAtMs > idempotencyTtlMs) {
+      idempotencyStore.delete(key);
+      return undefined;
+    }
+    const { createdAtMs: _createdAtMs, ...value } = hit;
+    return value;
+  };
+  const saveIdempotentWorkflowStart = (
+    key: string,
+    value: {
+      workflowId: string;
+      runId: string;
+      version: number;
+      name: string;
+      inputHash: string;
+      tenantId?: string;
+    }
+  ) => {
+    idempotencyStore.set(key, { ...value, createdAtMs: Date.now() });
+  };
 
   async function countRunningRunsForTenant(tenantId: string): Promise<number> {
     const keys = await eventStore.listRunKeys();
@@ -507,6 +546,8 @@ async function main(): Promise<void> {
               requestId,
               correlationId,
               tenantId,
+              getIdempotentWorkflowStart,
+              saveIdempotentWorkflowStart,
             },
             req,
             res
