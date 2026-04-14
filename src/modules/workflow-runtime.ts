@@ -41,7 +41,11 @@ export interface WorkflowTickResult {
 export interface WorkflowRuntime {
     startWorkflow<TInput, TResult>(options: StartWorkflowOptions<TInput, TResult>): Promise<StartWorkflowResult>;
 
-    runWorkflowTick(workflowId: WorkflowId, runId: RunId): Promise<WorkflowTickResult>;
+    runWorkflowTick(
+        workflowId: WorkflowId,
+        runId: RunId,
+        options?: { correlationId?: string }
+    ): Promise<WorkflowTickResult>;
 
     loadCurrentState(workflowId: WorkflowId, runId: RunId): Promise<WorkflowState | null>;
 }
