@@ -31,7 +31,6 @@ function generateActivityId(): ActivityId {
     return `activity-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-/** Thrown when the workflow must pause until a timer fires or external history arrives (replay-safe). */
 export class WorkflowSuspendedError extends Error {
   constructor() {
     super("Workflow suspended until timer or external event");
@@ -117,7 +116,12 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         };
     }
 
-    async runWorkflowTick(workflowId: WorkflowId, runId: RunId): Promise<WorkflowTickResult> {
+    async runWorkflowTick(
+      workflowId: WorkflowId,
+      runId: RunId,
+      options?: { correlationId?: string }
+    ): Promise<WorkflowTickResult> {
+      const correlationId = options?.correlationId;
       const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
       const fromVersion: Version | undefined = snapshot?.version;
     
@@ -423,6 +427,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               input,
               attempt: 1,
               scheduledAt: ev.startedAt,
+              ...(correlationId ? { correlationId } : {}),
             };
 
             const task: ActivityTask = {
@@ -437,6 +442,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               workerType: "activity",
               targetQueue: "activities",
               payload,
+              ...(correlationId ? { correlationId } : {}),
             };
             activityTasks.push(task);
           }
@@ -453,6 +459,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               scheduledAt: ev.startedAt,
               workerType: "workflow",
               targetQueue: "timers",
+              ...(correlationId ? { correlationId } : {}),
             });
           }
         }

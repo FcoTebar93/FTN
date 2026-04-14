@@ -35,7 +35,7 @@ export class InMemoryActivityWorker {
         return;
       }
   
-      const { workflowId, runId, activityId, activityName } = task;
+      const { workflowId, runId, activityId, activityName, correlationId } = task;
 
       const snapshot = await this.deps.snapshotStore.loadLatestSnapshot(workflowId, runId);
 

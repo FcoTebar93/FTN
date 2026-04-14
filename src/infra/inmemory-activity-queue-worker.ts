@@ -2,6 +2,7 @@ import type { TaskQueue } from "../modules/task-queue";
 import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask } from "../shared/tasks";
 import type { ActivityWorker } from "../workers/activity-worker";
+import type { Logger } from "./logger";
 
 interface InMemoryActivityQueueWorkerDeps {
   taskQueue: TaskQueue;
@@ -10,6 +11,7 @@ interface InMemoryActivityQueueWorkerDeps {
   workerId: string;
   leaseTimeoutMs: number;
   pollIntervalMs: number;
+  log: Logger;
 }
 
 export class InMemoryActivityQueueWorker {
@@ -42,7 +44,7 @@ export class InMemoryActivityQueueWorker {
       try {
         await this.runOnce();
       } catch (err) {
-        console.error("[activity-queue-worker] runOnce error:", err);
+        this.deps.log.error("activity-queue-worker.runOnce", { err: String(err) });
       }
       await new Promise((r) => setTimeout(r, this.deps.pollIntervalMs));
     }

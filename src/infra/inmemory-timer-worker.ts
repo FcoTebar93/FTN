@@ -1,11 +1,13 @@
 import type { TaskQueue } from "../modules/task-queue";
 import type { TaskLease, TimerTask, WorkflowTask } from "../shared/tasks";
+import type { Logger } from "./logger";
 
 interface InMemoryTimerWorkerDeps {
     taskQueue: TaskQueue;
     queueName: string;
     workflowQueueName: string;
     pollIntervalMs: number;
+    log: Logger;
 }
 
 export class InMemoryTimerWorker {
@@ -51,7 +53,8 @@ export class InMemoryTimerWorker {
             createdAt: new Date().toISOString(),
             scheduledAt: new Date().toISOString(),
             workerType: "workflow",
-            targetQueue: this.deps.workflowQueueName
+            targetQueue: this.deps.workflowQueueName,
+            ...(timerTask.correlationId ? { correlationId: timerTask.correlationId } : {}),
         };
 
         await this.deps.taskQueue.enqueue(wfTask);
@@ -63,7 +66,7 @@ export class InMemoryTimerWorker {
             try {
                 await this.runOnce();
             } catch (error) {
-                console.error("[timer-worker] runOnce error:", error);
+                this.deps.log.error("timer-worker.runOnce", { err: String(error) });
             }
             await new Promise(resolve => setTimeout(resolve, this.deps.pollIntervalMs));
         }

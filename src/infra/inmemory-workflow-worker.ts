@@ -12,12 +12,14 @@ export class InMemoryWorkflowWorker {
     private readonly taskQueue;
     private readonly runtime;
     private readonly config;
+    private readonly log;
 
     constructor(deps: WorkflowWorkerDeps) {
         this.workerId = deps.workerId;
         this.taskQueue = deps.taskQueue;
         this.runtime = deps.runtime;
         this.config = deps.config;
+        this.log = deps.log;
     }
 
     private async sleep(ms: number): Promise<void> {
@@ -56,30 +58,34 @@ export class InMemoryWorkflowWorker {
 
         let tickResult;
         try {
-            tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId);
+            tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId, {
+                correlationId: task.correlationId,
+            });
         } catch (error) {
             if (error instanceof ConcurrencyError) {
                 const maxAttempts = this.config.concurrencyRetryMaxAttempts ?? DEFAULT_CONCURRENCY_RETRY_MAX_ATTEMPTS;
                 const attempt = (task.retryCount ?? 0) + 1;
 
                 if (attempt > maxAttempts) {
-                    console.error("[workflow-worker] concurrent tick retry budget exhausted, dropping task", {
+                    this.log.error("workflow-worker.concurrencyRetryExhausted", {
                         workflowId: task.workflowId,
                         runId: task.runId,
                         attempt,
                         maxAttempts,
+                        correlationId: task.correlationId,
                     });
                     await this.taskQueue.completeTask(lease.leaseId);
                     return;
                 }
 
                 const delayMs = this.getRetryDelayMs(attempt);
-                console.warn("[workflow-worker] concurrent tick detected, scheduling retry", {
+                this.log.warn("workflow-worker.concurrencyRetry", {
                     workflowId: task.workflowId,
                     runId: task.runId,
                     attempt,
                     maxAttempts,
                     delayMs,
+                    correlationId: task.correlationId,
                 });
 
                 await this.sleep(delayMs);
@@ -90,10 +96,16 @@ export class InMemoryWorkflowWorker {
                     createdAt: new Date().toISOString(),
                     scheduledAt: new Date().toISOString(),
                 };
+                await this.taskQueue.completeTask(lease.leaseId);
                 await this.taskQueue.enqueue(retryTask);
-            } else {
-                console.error("[workflow-worker] runWorkflowTick error:", error);
+                return;
             }
+            this.log.error("workflow-worker.runWorkflowTick", {
+                err: String(error),
+                workflowId: task.workflowId,
+                runId: task.runId,
+                correlationId: task.correlationId,
+            });
             await this.taskQueue.completeTask(lease.leaseId);
             return;
         }
@@ -111,6 +123,7 @@ export class InMemoryWorkflowWorker {
                 scheduledAt: new Date().toISOString(),
                 workerType: "workflow",
                 targetQueue: this.config.queueName,
+                ...(task.correlationId ? { correlationId: task.correlationId } : {}),
             };
             await this.taskQueue.enqueue(nextTask);
         }
@@ -123,7 +136,7 @@ export class InMemoryWorkflowWorker {
                 await new Promise(resolve => setTimeout(resolve, this.config.pollIntervalMs));
             }           
         } catch (error) {
-            console.error("[workflow-worker] runForever error:", error);
+            this.log.error("workflow-worker.runForever", { err: String(error) });
         }
         await new Promise(resolve => setTimeout(resolve, 100));
     }
