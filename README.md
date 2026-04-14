@@ -52,7 +52,7 @@ Implementaciones en el repo a día de hoy:
   - Salud y docs (`/health`, `/ready`, `/openapi.json`, `/docs`)
 - Frontend con páginas de login, workflows, catálogo, designer y credenciales.
 - OpenAPI disponible en `docs/api/openapi.json` (validación rápida: `npm run check:openapi`).
-- Anexos extendidos (opcional): `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`, `docs/ARCHITECTURE.md`, `docs/INTERVIEW_PACK.md`, `docs/GO_TO_MARKET_TEMPLATES.md`.
+- Anexos extendidos (opcional): `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`, `docs/ARCHITECTURE.md`, `docs/INTERVIEW_PACK.md`, `docs/GO_TO_MARKET_TEMPLATES.md`, `docs/DEMO_DAY_RUNBOOK.md`.
 - Suite de tests unitarios + integración en `src/__tests__`.
 
 ## Requisitos
