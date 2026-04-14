@@ -41,6 +41,9 @@ function createRecordingFtn(): { ftn: FTNApi; activityInputs: unknown[] } {
     signal() {
       return Promise.resolve({} as never);
     },
+    child() {
+      throw new Error("unexpected child");
+    },
     workflowId() {
       return "wf-mock";
     },

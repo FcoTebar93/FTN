@@ -11,6 +11,7 @@ import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import type { ActivityTask, TimerTask } from "../shared/tasks";
 import type { Logger } from "../infra/logger";
+import { registerWorkflow } from "../app/workflows";
 
 const silentLogger: Logger = {
   debug() {},
@@ -305,6 +306,48 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state!.pendingActivities.length, 0);
     assert.equal(state!.pendingTimers.length, 0);
     assert.equal(state!.pendingSignalWaits.length, 0);
+  });
+
+  it("ftn.child inicia workflow hijo y propaga su resultado al padre", async () => {
+    const { runtime, taskQueue, eventStore } = inMemoryStack();
+
+    registerWorkflow<{ value: number }, { doubled: number }>({
+      name: "child-inline-test",
+      version: "v1",
+      displayName: "Child inline test",
+      definition: async (_ftn, input) => ({ doubled: input.value * 2 }),
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "parent-inline-test",
+      input: {},
+      definition: async (ftn) => {
+        const childResult = await ftn.child<{ value: number }, { doubled: number }>("child-inline-test", { value: 21 });
+        return { ok: true, child: childResult };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId, { correlationId: "corr-child-test" });
+
+    const childLease = await taskQueue.leaseNextTask("workflow-worker-child", "workflows", 1000);
+    assert.ok(childLease);
+    assert.equal(childLease.task.type, "workflow");
+    const childWorkflowId = childLease.task.workflowId;
+    const childRunId = childLease.task.runId;
+    await runtime.runWorkflowTick(childWorkflowId, childRunId);
+    await taskQueue.completeTask(childLease.leaseId);
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const parentState = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(parentState);
+    assert.equal(parentState!.status, "completed");
+    assert.deepEqual(parentState!.result, { ok: true, child: { doubled: 42 } });
+
+    const parentEvents = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.ok(parentEvents.some((e) => e.type === "ChildWorkflowStarted"));
+    assert.ok(parentEvents.some((e) => e.type === "ChildWorkflowCompleted"));
   });
 
   it("ftn.retry registra RetryAttemptStarted y reintenta hasta tener éxito", async () => {
