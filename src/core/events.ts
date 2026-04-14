@@ -22,7 +22,9 @@ export type WorkflowEventType =
     | "WorkflowCancelled"
     | "ChildWorkflowStarted"
     | "ChildWorkflowCompleted"
-    | "ChildWorkflowFailed";
+    | "ChildWorkflowFailed"
+    | "LoopIterationStarted"
+    | "LoopCompleted";
 
 export interface BaseWorkflowEvent {
     id: EventId;
@@ -213,6 +215,22 @@ export interface ChildWorkflowFailedEvent extends BaseWorkflowEvent {
     };
 }
 
+export interface LoopIterationStartedEvent extends BaseWorkflowEvent {
+    type: "LoopIterationStarted";
+    payload: {
+        stepId: StepId;
+        index: number;
+    };
+}
+
+export interface LoopCompletedEvent extends BaseWorkflowEvent {
+    type: "LoopCompleted";
+    payload: {
+        stepId: StepId;
+        iterations: number;
+    };
+}
+
 export interface ConditionalBranchChosen extends BaseWorkflowEvent {
     type: "ConditionalBranchChosen";
     payload: {
@@ -242,4 +260,6 @@ export type WorkflowEvent =
     | WorkflowCancelledEvent
     | ChildWorkflowStartedEvent
     | ChildWorkflowCompletedEvent
-    | ChildWorkflowFailedEvent;
+    | ChildWorkflowFailedEvent
+    | LoopIterationStartedEvent
+    | LoopCompletedEvent;

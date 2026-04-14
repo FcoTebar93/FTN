@@ -160,7 +160,9 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
             }
             case "ChildWorkflowStarted":
             case "ChildWorkflowCompleted":
-            case "ChildWorkflowFailed": {
+            case "ChildWorkflowFailed":
+            case "LoopIterationStarted":
+            case "LoopCompleted": {
                 return nextState;
             }
             case "SnapshotCreated": {
