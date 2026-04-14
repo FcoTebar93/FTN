@@ -215,6 +215,7 @@ async function main(): Promise<void> {
     workerId: "activity-worker-1",
     leaseTimeoutMs: 10_000,
     pollIntervalMs: 100,
+    log,
   });
 
   const runtime = new InMemoryWorkflowRuntime({
@@ -229,6 +230,7 @@ async function main(): Promise<void> {
     workerId: "workflow-worker-1",
     taskQueue,
     runtime,
+    log,
     config: {
       queueName: "workflows",
       leaseTimeoutMs: 10_000,
@@ -245,11 +247,13 @@ async function main(): Promise<void> {
     queueName: "timers",
     workflowQueueName: "workflows",
     pollIntervalMs: 500,
+    log,
   });
 
   async function enqueueWorkflowStart(
     name: string,
-    input: unknown
+    input: unknown,
+    opts?: { correlationId?: string }
   ): Promise<{ workflowId: string; runId: string; version: number }> {
     const wfDef = getWorkflow(name);
     if (!wfDef) {
@@ -277,6 +281,7 @@ async function main(): Promise<void> {
       scheduledAt: new Date().toISOString(),
       workerType: "workflow",
       targetQueue: "workflows",
+      ...(opts?.correlationId ? { correlationId: opts.correlationId } : {}),
     };
     await taskQueue.enqueue(task);
     return { workflowId, runId, version };
@@ -344,6 +349,11 @@ async function main(): Promise<void> {
         ? req.headers["x-request-id"].trim().slice(0, 128)
         : randomUUID();
     res.setHeader("X-Request-Id", requestId);
+    const correlationId =
+      typeof req.headers["x-correlation-id"] === "string" && req.headers["x-correlation-id"].trim()
+        ? req.headers["x-correlation-id"].trim().slice(0, 128)
+        : requestId;
+    res.setHeader("X-Correlation-Id", correlationId);
 
     const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
     const methodEarly = req.method ?? "GET";
@@ -429,29 +439,34 @@ async function main(): Promise<void> {
     }
 
     try {
-      await runWithHttpSpan(req, async () => {
-        await handleAppRoutes(
-          {
-            pool,
-            apiSecurity,
-            hasDbLogin,
-            refreshTtlSeconds,
-            requestSubject,
-            activities,
-            runtime,
-            eventStore,
-            taskQueue,
-            redis,
-            enqueueWorkflowStart,
-            getIntegrationsStatusForSubject,
-            requestId,
-          },
-          req,
-          res
-        );
-      });
+      await runWithHttpSpan(
+        req,
+        async () => {
+          await handleAppRoutes(
+            {
+              pool,
+              apiSecurity,
+              hasDbLogin,
+              refreshTtlSeconds,
+              requestSubject,
+              activities,
+              runtime,
+              eventStore,
+              taskQueue,
+              redis,
+              enqueueWorkflowStart,
+              getIntegrationsStatusForSubject,
+              requestId,
+              correlationId,
+            },
+            req,
+            res
+          );
+        },
+        { correlationId, requestId }
+      );
     } catch (err) {
-      log.error("http.handler", { err: String(err), requestId });
+      log.error("http.handler", { err: String(err), requestId, correlationId });
       res.statusCode = 500;
       res.end(`Internal error: ${(err as Error).message}`);
     }
@@ -494,8 +509,8 @@ async function main(): Promise<void> {
       listSchedulerRows,
       recordScheduledRun,
       recordScheduledFailure,
-      startWorkflow: async (name, input) => {
-        await enqueueWorkflowStart(name, input);
+      startWorkflow: async (name, input, opts) => {
+        await enqueueWorkflowStart(name, input, opts);
       },
       log,
     });

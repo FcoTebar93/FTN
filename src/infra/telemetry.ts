@@ -18,7 +18,11 @@ export function initFtnTelemetry(): void {
 }
 
 /** Ejecuta el manejador HTTP dentro de un span raíz (no-op si OTEL desactivado). */
-export async function runWithHttpSpan(req: { method?: string; url?: string }, fn: () => Promise<void>): Promise<void> {
+export async function runWithHttpSpan(
+  req: { method?: string; url?: string },
+  fn: () => Promise<void>,
+  opts?: { correlationId?: string; requestId?: string }
+): Promise<void> {
   if (process.env.FTN_OTEL_DISABLED === "1" || process.env.FTN_OTEL_DISABLED === "true") {
     await fn();
     return;
@@ -29,6 +33,8 @@ export async function runWithHttpSpan(req: { method?: string; url?: string }, fn
     attributes: {
       "http.request.method": req.method ?? "GET",
       "url.path": pathOnly,
+      ...(opts?.correlationId ? { "ftn.correlation_id": opts.correlationId } : {}),
+      ...(opts?.requestId ? { "ftn.request_id": opts.requestId } : {}),
     },
   });
   try {
