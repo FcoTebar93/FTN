@@ -13,6 +13,7 @@ export class InMemoryWorkflowWorker {
     private readonly runtime;
     private readonly config;
     private readonly log;
+    private readonly onDeadLetter;
 
     constructor(deps: WorkflowWorkerDeps) {
         this.workerId = deps.workerId;
@@ -20,6 +21,7 @@ export class InMemoryWorkflowWorker {
         this.runtime = deps.runtime;
         this.config = deps.config;
         this.log = deps.log;
+        this.onDeadLetter = deps.onDeadLetter;
     }
 
     private async sleep(ms: number): Promise<void> {
@@ -74,6 +76,16 @@ export class InMemoryWorkflowWorker {
                         maxAttempts,
                         correlationId: task.correlationId,
                     });
+                    this.onDeadLetter?.({
+                        queueName: this.config.queueName,
+                        taskId: task.id,
+                        taskType: task.type,
+                        workflowId: task.workflowId,
+                        runId: task.runId,
+                        reason: "concurrency_retry_exhausted",
+                        error: `Concurrency retry exhausted after ${maxAttempts} attempts`,
+                        correlationId: task.correlationId,
+                    });
                     await this.taskQueue.completeTask(lease.leaseId);
                     return;
                 }
@@ -104,6 +116,16 @@ export class InMemoryWorkflowWorker {
                 err: String(error),
                 workflowId: task.workflowId,
                 runId: task.runId,
+                correlationId: task.correlationId,
+            });
+            this.onDeadLetter?.({
+                queueName: this.config.queueName,
+                taskId: task.id,
+                taskType: task.type,
+                workflowId: task.workflowId,
+                runId: task.runId,
+                reason: "run_workflow_tick_error",
+                error: String(error),
                 correlationId: task.correlationId,
             });
             await this.taskQueue.completeTask(lease.leaseId);

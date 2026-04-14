@@ -1,6 +1,7 @@
 import type { TaskQueue } from "../modules/task-queue";
 import type { TaskLease, TimerTask, WorkflowTask } from "../shared/tasks";
 import type { Logger } from "./logger";
+import type { DeadLetterInput } from "../shared/dead-letter";
 
 interface InMemoryTimerWorkerDeps {
     taskQueue: TaskQueue;
@@ -8,6 +9,7 @@ interface InMemoryTimerWorkerDeps {
     workflowQueueName: string;
     pollIntervalMs: number;
     log: Logger;
+    onDeadLetter?: (entry: DeadLetterInput) => void;
 }
 
 export class InMemoryTimerWorker {
@@ -66,6 +68,13 @@ export class InMemoryTimerWorker {
             try {
                 await this.runOnce();
             } catch (error) {
+                this.deps.onDeadLetter?.({
+                    queueName: this.deps.queueName,
+                    taskId: "unknown",
+                    taskType: "timer",
+                    reason: "timer_worker_error",
+                    error: String(error),
+                });
                 this.deps.log.error("timer-worker.runOnce", { err: String(error) });
             }
             await new Promise(resolve => setTimeout(resolve, this.deps.pollIntervalMs));

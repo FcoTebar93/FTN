@@ -16,6 +16,7 @@ import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 import type { WorkflowTask } from "../shared/tasks";
 import type { WorkflowEvent } from "../core/events";
+import type { DeadLetterEntry, DeadLetterInput } from "../shared/dead-letter";
 import { validateJson } from "../shared/json-schema-validate";
 import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workflows";
 
@@ -208,6 +209,29 @@ async function main(): Promise<void> {
 
   const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
   const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
+  const deadLetterMaxItems = Math.max(
+    100,
+    Number.parseInt(process.env.FTN_DEAD_LETTER_MAX_ITEMS ?? "1000", 10) || 1000
+  );
+  const deadLetters: DeadLetterEntry[] = [];
+  const addDeadLetter = (input: DeadLetterInput): void => {
+    const entry: DeadLetterEntry = {
+      id: `dlq-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+      occurredAt: new Date().toISOString(),
+      ...input,
+    };
+    deadLetters.unshift(entry);
+    if (deadLetters.length > deadLetterMaxItems) {
+      deadLetters.length = deadLetterMaxItems;
+    }
+  };
+  const listDeadLetters = (query?: { limit?: number; queueName?: string; taskType?: string }): DeadLetterEntry[] => {
+    const limit = Math.max(1, Math.min(500, query?.limit ?? 100));
+    return deadLetters
+      .filter((d) => (query?.queueName ? d.queueName === query.queueName : true))
+      .filter((d) => (query?.taskType ? d.taskType === query.taskType : true))
+      .slice(0, limit);
+  };
 
   const activityQueueWorker = new InMemoryActivityQueueWorker({
     taskQueue,
@@ -217,6 +241,7 @@ async function main(): Promise<void> {
     leaseTimeoutMs: 10_000,
     pollIntervalMs: 100,
     log,
+    onDeadLetter: addDeadLetter,
   });
 
   const runtime = new InMemoryWorkflowRuntime({
@@ -232,6 +257,7 @@ async function main(): Promise<void> {
     taskQueue,
     runtime,
     log,
+    onDeadLetter: addDeadLetter,
     config: {
       queueName: "workflows",
       leaseTimeoutMs: 10_000,
@@ -249,6 +275,7 @@ async function main(): Promise<void> {
     workflowQueueName: "workflows",
     pollIntervalMs: 500,
     log,
+    onDeadLetter: addDeadLetter,
   });
 
   const multiTenantEnabled =
@@ -296,7 +323,6 @@ async function main(): Promise<void> {
   ) => {
     idempotencyStore.set(key, { ...value, createdAtMs: Date.now() });
   };
-
   async function countRunningRunsForTenant(tenantId: string): Promise<number> {
     const keys = await eventStore.listRunKeys();
     let running = 0;
@@ -548,6 +574,7 @@ async function main(): Promise<void> {
               tenantId,
               getIdempotentWorkflowStart,
               saveIdempotentWorkflowStart,
+              listDeadLetters,
             },
             req,
             res
