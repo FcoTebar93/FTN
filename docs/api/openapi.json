@@ -322,6 +322,20 @@
         }
       }
     },
+    "/dead-letters/{id}/ack": {
+      "post": {
+        "tags": ["meta"],
+        "summary": "Marca una entrada de dead-letter como gestionada",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "202": { "description": "Acknowledge aceptado" },
+          "404": { "description": "Dead letter no encontrado" },
+          "409": { "description": "Entrada ya acknowledged" }
+        }
+      }
+    },
     "/activities": {
       "get": {
         "tags": ["catalog"],
