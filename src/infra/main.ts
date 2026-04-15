@@ -16,7 +16,7 @@ import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
 import type { WorkflowTask } from "../shared/tasks";
 import type { WorkflowEvent } from "../core/events";
-import type { DeadLetterEntry, DeadLetterInput } from "../shared/dead-letter";
+import type { DeadLetterEntry, DeadLetterInput, DeadLetterStatus } from "../shared/dead-letter";
 import { validateJson } from "../shared/json-schema-validate";
 import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workflows";
 
@@ -225,11 +225,22 @@ async function main(): Promise<void> {
       deadLetters.length = deadLetterMaxItems;
     }
   };
-  const listDeadLetters = (query?: { limit?: number; queueName?: string; taskType?: string }): DeadLetterEntry[] => {
+  const listDeadLetterStatus = (item: DeadLetterEntry): DeadLetterStatus => {
+    if (item.acknowledgedAt) return "acknowledged";
+    if (item.requeuedAt) return "requeued";
+    return "pending";
+  };
+  const listDeadLetters = (query?: {
+    limit?: number;
+    queueName?: string;
+    taskType?: string;
+    status?: DeadLetterStatus;
+  }): DeadLetterEntry[] => {
     const limit = Math.max(1, Math.min(500, query?.limit ?? 100));
     return deadLetters
       .filter((d) => (query?.queueName ? d.queueName === query.queueName : true))
       .filter((d) => (query?.taskType ? d.taskType === query.taskType : true))
+      .filter((d) => (query?.status ? listDeadLetterStatus(d) === query.status : true))
       .slice(0, limit);
   };
   const requeueDeadLetter = async (id: string): Promise<{ ok: true } | { ok: false; error: string }> => {
