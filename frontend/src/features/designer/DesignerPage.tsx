@@ -261,7 +261,7 @@ export function DesignerPage() {
   }
 
   return (
-    <div class="app-layout">
+    <div class="app-layout designer-page">
       <div class="sidebar">
         <div class="panel">
           <h2 class="panel-title">Designer · Workflows JSON</h2>
@@ -675,7 +675,7 @@ export function DesignerPage() {
                           ))}
                         </select>
                       </div>
-                      <ul class="detail-list">
+                      <ul class="workflow-steps-list">
                         {current.steps.map((step) => {
                           const selectedActivity = activities.find(
                             (a) => a.name === (step as any).activityName
