@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { SWAGGER_UI_HTML } from "../../swagger-ui";
 import type { FtnAppRouteContext } from "../route-context";
+import type { DeadLetterStatus } from "../../../shared/dead-letter";
 
 export async function trySystemRoutes(
   ctx: FtnAppRouteContext,
@@ -74,7 +75,18 @@ export async function trySystemRoutes(
     const limit = Math.max(1, Math.min(500, parseInt(parsed.searchParams.get("limit") ?? "100", 10) || 100));
     const queueName = parsed.searchParams.get("queue") ?? undefined;
     const taskType = parsed.searchParams.get("taskType") ?? undefined;
-    const items = ctx.listDeadLetters({ limit, queueName, taskType });
+    const statusRaw = parsed.searchParams.get("status");
+    const allowedStatus: DeadLetterStatus[] = ["pending", "requeued", "acknowledged"];
+    if (statusRaw && !allowedStatus.includes(statusRaw as DeadLetterStatus)) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Invalid status filter. Allowed: pending, requeued, acknowledged" }));
+      return true;
+    }
+    const status = statusRaw && allowedStatus.includes(statusRaw as DeadLetterStatus)
+      ? (statusRaw as DeadLetterStatus)
+      : undefined;
+    const items = ctx.listDeadLetters({ limit, queueName, taskType, status });
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ items, total: items.length }));
     return true;
