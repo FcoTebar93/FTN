@@ -303,9 +303,13 @@
         "parameters": [
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } },
           { "name": "queue", "in": "query", "schema": { "type": "string" } },
-          { "name": "taskType", "in": "query", "schema": { "type": "string", "enum": ["workflow", "activity", "timer"] } }
+          { "name": "taskType", "in": "query", "schema": { "type": "string", "enum": ["workflow", "activity", "timer"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "requeued", "acknowledged"] } }
         ],
-        "responses": { "200": { "description": "{ items, total }" } }
+        "responses": {
+          "200": { "description": "{ items, total }" },
+          "400": { "description": "status inválido" }
+        }
       }
     },
     "/dead-letters/{id}/requeue": {

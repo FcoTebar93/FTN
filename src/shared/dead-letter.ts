@@ -1,6 +1,8 @@
 import type { TaskType } from "./tasks";
 import type { Task } from "./tasks";
 
+export type DeadLetterStatus = "pending" | "requeued" | "acknowledged";
+
 export interface DeadLetterEntry {
   id: string;
   occurredAt: string;
