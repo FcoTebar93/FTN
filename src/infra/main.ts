@@ -232,6 +232,21 @@ async function main(): Promise<void> {
       .filter((d) => (query?.taskType ? d.taskType === query.taskType : true))
       .slice(0, limit);
   };
+  const requeueDeadLetter = async (id: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const item = deadLetters.find((d) => d.id === id);
+    if (!item) {
+      return { ok: false, error: "Dead letter not found" };
+    }
+    if (item.requeuedAt) {
+      return { ok: false, error: "Dead letter already requeued" };
+    }
+    if (!item.task) {
+      return { ok: false, error: "Dead letter has no task payload to requeue" };
+    }
+    await taskQueue.enqueue(item.task);
+    item.requeuedAt = new Date().toISOString();
+    return { ok: true };
+  };
 
   const activityQueueWorker = new InMemoryActivityQueueWorker({
     taskQueue,
@@ -575,6 +590,7 @@ async function main(): Promise<void> {
               getIdempotentWorkflowStart,
               saveIdempotentWorkflowStart,
               listDeadLetters,
+              requeueDeadLetter,
             },
             req,
             res
