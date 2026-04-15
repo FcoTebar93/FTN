@@ -1,4 +1,5 @@
 import type { TaskType } from "./tasks";
+import type { Task } from "./tasks";
 
 export interface DeadLetterEntry {
   id: string;
@@ -11,6 +12,8 @@ export interface DeadLetterEntry {
   reason: string;
   error: string;
   correlationId?: string;
+  task?: Task;
+  requeuedAt?: string;
 }
 
 export interface DeadLetterInput {
@@ -22,4 +25,5 @@ export interface DeadLetterInput {
   reason: string;
   error: string;
   correlationId?: string;
+  task?: Task;
 }

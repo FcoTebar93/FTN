@@ -49,6 +49,7 @@ export class InMemoryActivityQueueWorker {
         reason: "activity_worker_error",
         error: String(err),
         correlationId: task.correlationId,
+        task,
       });
       await this.deps.taskQueue.completeTask(lease.leaseId);
       throw err;

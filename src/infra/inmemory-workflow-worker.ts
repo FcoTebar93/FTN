@@ -85,6 +85,7 @@ export class InMemoryWorkflowWorker {
                         reason: "concurrency_retry_exhausted",
                         error: `Concurrency retry exhausted after ${maxAttempts} attempts`,
                         correlationId: task.correlationId,
+                        task,
                     });
                     await this.taskQueue.completeTask(lease.leaseId);
                     return;
@@ -127,6 +128,7 @@ export class InMemoryWorkflowWorker {
                 reason: "run_workflow_tick_error",
                 error: String(error),
                 correlationId: task.correlationId,
+                task,
             });
             await this.taskQueue.completeTask(lease.leaseId);
             return;
