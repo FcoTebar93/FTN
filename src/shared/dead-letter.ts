@@ -14,6 +14,7 @@ export interface DeadLetterEntry {
   correlationId?: string;
   task?: Task;
   requeuedAt?: string;
+  acknowledgedAt?: string;
 }
 
 export interface DeadLetterInput {
