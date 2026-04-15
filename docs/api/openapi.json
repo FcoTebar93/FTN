@@ -308,6 +308,20 @@
         "responses": { "200": { "description": "{ items, total }" } }
       }
     },
+    "/dead-letters/{id}/requeue": {
+      "post": {
+        "tags": ["meta"],
+        "summary": "Reencola manualmente una tarea del dead-letter",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "202": { "description": "Re-encolado aceptado" },
+          "404": { "description": "Dead letter no encontrado" },
+          "409": { "description": "Ya reencolado o sin payload de tarea" }
+        }
+      }
+    },
     "/activities": {
       "get": {
         "tags": ["catalog"],
