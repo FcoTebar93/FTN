@@ -101,6 +101,15 @@
       0 0 0 1px rgba(249, 115, 22, 0.35),
       0 18px 50px rgba(15, 23, 42, 0.15);
   }
+  .workflow-list-empty {
+    margin: 10px 0 0 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-subtle);
+    color: var(--text-muted);
+    background: rgba(248, 250, 252, 0.8);
+    font-size: 12px;
+  }
   
   .workflow-name {
     font-size: 14px;
@@ -453,6 +462,15 @@
     background: var(--accent-soft);
     color: var(--accent-strong);
     border-color: rgba(249, 115, 22, 0.4);
+  }
+  .panel-error {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(220, 38, 38, 0.28);
+    background: rgba(220, 38, 38, 0.06);
+    color: var(--danger);
+    font-size: 12px;
   }
   .workflow-search-wrap {
     position: relative;
@@ -830,6 +848,29 @@
     border-color: var(--accent);
     color: var(--accent-strong);
     background: rgba(249, 115, 22, 0.04);
+  }
+  .weekday-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .weekday-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(248, 250, 252, 0.95);
+  }
+  .weekday-chip input[type="checkbox"] {
+    margin: 0;
+  }
+  .dynamic-fields {
+    display: grid;
+    gap: 8px;
   }
 
   .login-screen {
