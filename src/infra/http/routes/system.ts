@@ -102,5 +102,27 @@ export async function trySystemRoutes(
     return true;
   }
 
+  if (req.method === "POST" && rawPath.startsWith("/dead-letters/") && rawPath.endsWith("/ack")) {
+    const match = rawPath.match(/^\/dead-letters\/([^/]+)\/ack$/);
+    if (!match) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Invalid dead-letter route" }));
+      return true;
+    }
+    const id = decodeURIComponent(match[1]);
+    const result = ctx.acknowledgeDeadLetter(id);
+    if (!result.ok) {
+      res.statusCode = result.error === "Dead letter not found" ? 404 : 409;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: result.error }));
+      return true;
+    }
+    res.statusCode = 202;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: true, id }));
+    return true;
+  }
+
   return false;
 }
