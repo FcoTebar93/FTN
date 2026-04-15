@@ -247,6 +247,17 @@ async function main(): Promise<void> {
     item.requeuedAt = new Date().toISOString();
     return { ok: true };
   };
+  const acknowledgeDeadLetter = (id: string): { ok: true } | { ok: false; error: string } => {
+    const item = deadLetters.find((d) => d.id === id);
+    if (!item) {
+      return { ok: false, error: "Dead letter not found" };
+    }
+    if (item.acknowledgedAt) {
+      return { ok: false, error: "Dead letter already acknowledged" };
+    }
+    item.acknowledgedAt = new Date().toISOString();
+    return { ok: true };
+  };
 
   const activityQueueWorker = new InMemoryActivityQueueWorker({
     taskQueue,
@@ -591,6 +602,7 @@ async function main(): Promise<void> {
               saveIdempotentWorkflowStart,
               listDeadLetters,
               requeueDeadLetter,
+              acknowledgeDeadLetter,
             },
             req,
             res

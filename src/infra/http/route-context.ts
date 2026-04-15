@@ -60,4 +60,5 @@ export interface FtnAppRouteContext {
   ) => void;
   listDeadLetters: (query?: { limit?: number; queueName?: string; taskType?: string }) => DeadLetterEntry[];
   requeueDeadLetter: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  acknowledgeDeadLetter: (id: string) => { ok: true } | { ok: false; error: string };
 }
