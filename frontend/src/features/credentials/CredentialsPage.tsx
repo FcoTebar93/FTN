@@ -10,6 +10,8 @@ import {
 } from "./providerSchemas";
 
 type FieldValues = Record<string, string>;
+type DraftValidation = { configured: boolean; details: string };
+type FieldChecklistItem = { key: string; label: string; status: "ok" | "error" | "pending"; message: string };
 
 export function CredentialsPage() {
   const [items, setItems] = useState<CredentialSummary[]>([]);
@@ -24,6 +26,7 @@ export function CredentialsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, IntegrationStatusItem>>({});
+  const [draftValidation, setDraftValidation] = useState<DraftValidation | null>(null);
 
   const current = useMemo(() => items.find((x) => x.provider === provider), [items, provider]);
   const schema = PROVIDER_SCHEMAS[provider];
@@ -31,6 +34,74 @@ export function CredentialsPage() {
   const fieldErrors = useMemo(() => getFieldErrors(schema, fieldValues), [fieldValues, schema]);
   const missingRequiredCount = useMemo(() => countMissingRequiredFields(schema, fieldValues), [fieldValues, schema]);
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const fieldChecklist = useMemo<FieldChecklistItem[]>(() => {
+    return schema.fields.map((field) => {
+      const raw = fieldValues[field.key] ?? "";
+      const value = raw.trim();
+      const err = fieldErrors[field.key];
+      if (!value) {
+        if (field.required) {
+          return {
+            key: field.key,
+            label: field.label,
+            status: "pending",
+            message: "Pendiente (obligatorio)",
+          };
+        }
+        return {
+          key: field.key,
+          label: field.label,
+          status: "pending",
+          message: "Opcional",
+        };
+      }
+      if (err) {
+        return {
+          key: field.key,
+          label: field.label,
+          status: "error",
+          message: err,
+        };
+      }
+      return {
+        key: field.key,
+        label: field.label,
+        status: "ok",
+        message: "Correcto",
+      };
+    });
+  }, [fieldErrors, fieldValues, schema.fields]);
+  const draftExpectedSource = useMemo(() => {
+    if (advancedMode) return "none";
+    const hasAnyValue = schema.fields.some((field) => (fieldValues[field.key] ?? "").trim() !== "");
+    return hasAnyValue ? "credentials" : "none";
+  }, [advancedMode, fieldValues, schema.fields]);
+
+  useEffect(() => {
+    if (advancedMode) {
+      setDraftValidation(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (schema.fields.length === 0) {
+        setDraftValidation({
+          configured: true,
+          details: "Sin validación guiada para este provider. Usa modo avanzado si necesitas JSON libre.",
+        });
+        return;
+      }
+      if (hasFieldErrors) {
+        const firstError = Object.values(fieldErrors)[0] ?? "Configuración incompleta.";
+        setDraftValidation({ configured: false, details: firstError });
+        return;
+      }
+      setDraftValidation({
+        configured: true,
+        details: "Borrador válido según reglas locales. Guarda para validar integración final.",
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [advancedMode, fieldErrors, hasFieldErrors, schema.fields.length]);
 
   async function refresh() {
     setLoading(true);
@@ -189,6 +260,27 @@ export function CredentialsPage() {
             <p className="credentials-error">
               Validación: {statusMap[provider].details ?? "Configuración incompleta"}
             </p>
+          ) : null}
+          {!advancedMode && draftValidation ? (
+            <p className={`credentials-draft-status ${draftValidation.configured ? "ok" : "error"}`}>
+              Estado estimado (borrador): {draftValidation.details}
+            </p>
+          ) : null}
+          {!advancedMode ? (
+            <p className="credentials-draft-source">Source esperado (borrador): {draftExpectedSource}</p>
+          ) : null}
+          {!advancedMode && fieldChecklist.length > 0 ? (
+            <ul className="credentials-checklist">
+              {fieldChecklist.map((item) => (
+                <li key={item.key} className={`credentials-checklist-item ${item.status}`}>
+                  <span className="credentials-checklist-mark">
+                    {item.status === "ok" ? "✓" : item.status === "error" ? "✖" : "•"}
+                  </span>
+                  <span className="credentials-checklist-label">{item.label}</span>
+                  <span className="credentials-checklist-msg">{item.message}</span>
+                </li>
+              ))}
+            </ul>
           ) : null}
           {!advancedMode && schema.fields.length > 0 ? (
             <div className="credentials-form-grid">
