@@ -261,15 +261,15 @@ export function CredentialsPage() {
               Validación: {statusMap[provider].details ?? "Configuración incompleta"}
             </p>
           ) : null}
-          {!advancedMode && draftValidation ? (
+          {!advancedMode && missingRequiredCount === 0 && draftValidation ? (
             <p className={`credentials-draft-status ${draftValidation.configured ? "ok" : "error"}`}>
               Estado estimado (borrador): {draftValidation.details}
             </p>
           ) : null}
-          {!advancedMode ? (
+          {!advancedMode && missingRequiredCount === 0 ? (
             <p className="credentials-draft-source">Source esperado (borrador): {draftExpectedSource}</p>
           ) : null}
-          {!advancedMode && fieldChecklist.length > 0 ? (
+          {!advancedMode && missingRequiredCount === 0 && fieldChecklist.length > 0 ? (
             <ul className="credentials-checklist">
               {fieldChecklist.map((item) => (
                 <li key={item.key} className={`credentials-checklist-item ${item.status}`}>
