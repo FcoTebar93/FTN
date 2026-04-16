@@ -20,7 +20,7 @@ const silentLogger: Logger = {
   error() {},
 };
 
-function inMemoryStack() {
+function inMemoryStack(snapshotInterval = 50) {
   const engine = new DefaultWorkflowEngine();
   const eventStore = new InMemoryEventStore();
   const snapshotStore = new InMemorySnapshotStore();
@@ -30,7 +30,7 @@ function inMemoryStack() {
     eventStore,
     snapshotStore,
     taskQueue,
-    config: { snapshotInterval: 50 },
+    config: { snapshotInterval },
   });
   return { engine, eventStore, snapshotStore, taskQueue, runtime };
 }
@@ -281,6 +281,116 @@ describe("InMemoryWorkflowRuntime", () => {
     assert.equal(state2!.status, "completed");
     assert.deepEqual(state2!.result, { ok: true, value: 42 });
     assert.equal(state2!.pendingSignalWaits.length, 0);
+  });
+
+  it("recupera la definición desde el catálogo al reanudar con otra instancia runtime", async () => {
+    const { engine, eventStore, snapshotStore, taskQueue, runtime } = inMemoryStack();
+    const workflowName = `signal-catalog-recovery-${Date.now()}`;
+
+    registerWorkflow<{ expected: number }, { resumed: number }>({
+      name: workflowName,
+      version: "v1",
+      displayName: "Signal catalog recovery",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ value: number }>("resume");
+        return { resumed: data.value + input.expected };
+      },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName,
+      workflowVersion: "v1",
+      input: { expected: 8 },
+      definition: async (ftn, input: { expected: number }) => {
+        const data = await ftn.signal<{ value: number }>("resume");
+        return { resumed: data.value + input.expected };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "resume", data: { value: 34 } },
+      },
+    ]);
+
+    const runtimeAfterRestart = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    await runtimeAfterRestart.runWorkflowTick(workflowId, runId);
+    const state = await runtimeAfterRestart.loadCurrentState(workflowId, runId);
+
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { resumed: 42 });
+  });
+
+  it("reanuda correctamente desde snapshot con otra instancia runtime", async () => {
+    const { engine, eventStore, snapshotStore, taskQueue, runtime } = inMemoryStack(1);
+    const workflowName = `snapshot-recovery-${Date.now()}`;
+
+    registerWorkflow<{ offset: number }, { total: number }>({
+      name: workflowName,
+      version: "v1",
+      displayName: "Snapshot recovery workflow",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ base: number }>("resume-from-snapshot");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName,
+      workflowVersion: "v1",
+      input: { offset: 2 },
+      definition: async (ftn, input: { offset: number }) => {
+        const data = await ftn.signal<{ base: number }>("resume-from-snapshot");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const firstTick = await runtime.runWorkflowTick(workflowId, runId);
+    assert.equal(firstTick.snapshotCreated, true);
+
+    const snapshot = await snapshotStore.loadLatestSnapshot(workflowId, runId);
+    assert.ok(snapshot);
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "resume-from-snapshot", data: { base: 40 } },
+      },
+    ]);
+
+    const runtimeAfterRestart = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 1 },
+    });
+
+    await runtimeAfterRestart.runWorkflowTick(workflowId, runId);
+    const state = await runtimeAfterRestart.loadCurrentState(workflowId, runId);
+
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { total: 42 });
   });
 
   it("cancelación explícita: WorkflowCancelRequested termina el run en cancelled y limpia pendientes", async () => {

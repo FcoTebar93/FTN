@@ -9,6 +9,7 @@ import { runPostgresMigrations } from "../../infra/postgres-migrations";
 import { PostgresEventStore } from "../../infra/postgres-event-store";
 import { PostgresSnapshotStore } from "../../infra/postgres-snapshot-store";
 import { ConcurrencyError } from "../../modules/event-store";
+import { registerWorkflow } from "../../app/workflows";
 
 const engineUrl = process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL;
 const describePg = engineUrl ? describe : describe.skip;
@@ -208,5 +209,70 @@ describePg("InMemoryWorkflowRuntime con stores Postgres", () => {
 
     const events = await eventStore.loadEvents(workflowId, runId, 0);
     assert.equal(events.filter((e) => e.type === "WorkflowCompleted").length, 1);
+  });
+
+  it("reanuda con nueva instancia y snapshot usando la definición registrada en catálogo (Postgres)", async () => {
+    const workflowName = `pg-snapshot-recovery-${Date.now()}`;
+    registerWorkflow<{ offset: number }, { total: number }>({
+      name: workflowName,
+      version: "v1",
+      displayName: "Postgres snapshot recovery",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new PostgresEventStore(pool);
+    const snapshotStore = new PostgresSnapshotStore(pool);
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 1 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName,
+      workflowVersion: "v1",
+      input: { offset: 2 },
+      definition: async (ftn, input: { offset: number }) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const firstTick = await runtime.runWorkflowTick(workflowId, runId);
+    assert.equal(firstTick.snapshotCreated, true);
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "resume", data: { base: 40 } },
+      },
+    ]);
+
+    const runtimeAfterRestart = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore: new PostgresEventStore(pool),
+      snapshotStore: new PostgresSnapshotStore(pool),
+      taskQueue: new InMemoryTaskQueue(),
+      config: { snapshotInterval: 1 },
+    });
+
+    await runtimeAfterRestart.runWorkflowTick(workflowId, runId);
+    const state = await runtimeAfterRestart.loadCurrentState(workflowId, runId);
+
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { total: 42 });
   });
 });
