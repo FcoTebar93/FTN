@@ -5,6 +5,8 @@ import type { WorkflowEngine } from "../core/engine";
 import type { WorkflowEvent } from "../core/events";
 import type { WorkflowState } from "../core/workflow-state";
 import type { Version } from "../shared/types";
+import type { Logger } from "../infra/logger";
+import { addEventAppends, incActivityFailure, incSnapshotLoaded } from "../infra/metrics";
 
 export interface ActivityRuntime {
   deserializeTask(raw: unknown): ActivityTask;
@@ -15,6 +17,7 @@ export interface ActivityRuntimeDeps {
   eventStore: EventStore;
   snapshotStore: SnapshotStore;
   engine: WorkflowEngine;
+  log?: Logger;
 }
 
 export class DefaultActivityRuntime implements ActivityRuntime {
@@ -30,6 +33,16 @@ export class DefaultActivityRuntime implements ActivityRuntime {
 
     const snapshot = await snapshotStore.loadLatestSnapshot(workflowId, runId);
     const fromVersion: Version = snapshot?.version ?? 0;
+
+    if (snapshot) {
+      incSnapshotLoaded();
+      this.deps.log?.debug("activity-runtime.snapshotLoaded", {
+        workflowId,
+        runId,
+        snapshotVersion: snapshot.version,
+        activityId,
+      });
+    }
 
     const events: WorkflowEvent[] = await eventStore.loadEvents(
       workflowId,
@@ -85,6 +98,24 @@ export class DefaultActivityRuntime implements ActivityRuntime {
       lastEventVersion,
       [domainEvent]
     )) as WorkflowEvent[];
+    addEventAppends(1);
+
+    if (result.kind === "failure") {
+      incActivityFailure();
+      this.deps.log?.warn("activity-runtime.activityFailed", {
+        workflowId,
+        runId,
+        activityId,
+        errorType: result.errorType,
+        retryable: result.retryable,
+      });
+    } else {
+      this.deps.log?.debug("activity-runtime.activityCompleted", {
+        workflowId,
+        runId,
+        activityId,
+      });
+    }
 
     engine.applyEvent(state, persisted);
   }

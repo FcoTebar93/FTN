@@ -6,6 +6,7 @@ import type { WorkflowDefinition } from "../core/ftn";
 import type { SnapshotStore } from "./snapshot-store";
 import type { EventStore } from "./event-store";
 import type { TaskQueue } from "./task-queue";
+import type { Logger } from "../infra/logger";
 
 export interface WorkflowRuntimeConfig {
     snapshotInterval: number;
@@ -17,6 +18,7 @@ export interface WorkflowRuntimeDeps {
     snapshotStore: SnapshotStore;
     taskQueue: TaskQueue;
     config: WorkflowRuntimeConfig;
+    log?: Logger;
 }
 
 export interface StartWorkflowOptions<TInput, TResult> {
