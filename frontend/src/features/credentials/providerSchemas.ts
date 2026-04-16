@@ -19,6 +19,7 @@ export interface CredentialProviderSchema {
   provider: CredentialProvider;
   title: string;
   description: string;
+  requirements?: string[];
   fields: CredentialFieldSchema[];
   advancedJsonEnabled?: boolean;
 }
@@ -39,6 +40,7 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
     provider: "stripe",
     title: "Stripe",
     description: "Configura la clave secreta para pagos y checkout.",
+    requirements: ["`stripeSecretKey` obligatoria", "Debe empezar por sk_test_ o sk_live_"],
     fields: [
       {
         key: "stripeSecretKey",
@@ -59,6 +61,7 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
     provider: "twilio",
     title: "Twilio SMS",
     description: "Credenciales para envío de SMS reales.",
+    requirements: ["`accountSid`, `authToken` y `fromNumber`", "SID debe empezar por AC..."],
     fields: [
       {
         key: "accountSid",
@@ -99,6 +102,7 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
     provider: "kyc",
     title: "KYC Provider",
     description: "Proveedor externo de verificación de identidad.",
+    requirements: ["`providerUrl` y `providerToken` obligatorios", "URL debe ser http(s) válida"],
     fields: [
       {
         key: "providerUrl",
@@ -124,6 +128,7 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
     provider: "notifications",
     title: "Email / Slack",
     description: "Puedes configurar SendGrid, Slack o ambos.",
+    requirements: ["SendGrid: `sendgridApiKey` + `emailFrom`", "O Slack: `slackWebhookUrl`"],
     fields: [
       {
         key: "sendgridApiKey",
@@ -176,3 +181,25 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
 };
 
 export const PROVIDERS_ORDER: CredentialProvider[] = ["stripe", "notifications", "crm", "twilio", "kyc"];
+
+export function getFieldErrors(schema: CredentialProviderSchema, values: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const field of schema.fields) {
+    const value = (values[field.key] ?? "").trim();
+    if (field.required && !value) {
+      result[field.key] = "Campo obligatorio.";
+      continue;
+    }
+    if (field.validate) {
+      const err = field.validate(value, values);
+      if (err) {
+        result[field.key] = err;
+      }
+    }
+  }
+  return result;
+}
+
+export function countMissingRequiredFields(schema: CredentialProviderSchema, values: Record<string, string>): number {
+  return schema.fields.filter((field) => field.required && !(values[field.key] ?? "").trim()).length;
+}
