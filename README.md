@@ -1,232 +1,104 @@
 # FTN Workflow Engine
 
-Motor de workflows determinista en TypeScript orientado a casos reales de backend platform engineering. FTN permite orquestar procesos con event sourcing, snapshots y workers, con persistencia opcional en Postgres/Redis y una UI para operar workflows.
+FTN es un motor de workflows determinista en TypeScript orientado a backend platform engineering. Combina event sourcing, snapshots, workers desacoplados y un DSL explícito para ejecutar procesos largos, auditables y recuperables, con persistencia opcional en Postgres y colas en Redis.
 
-## Elevator pitch (30s)
+## Elevator pitch
 
-FTN resuelve un problema típico en sistemas distribuidos: ejecutar procesos largos y recuperables sin perder trazabilidad. En vez de depender de estado efímero, cada transición del workflow se persiste como evento; eso permite replay, auditoría y recuperación tras fallos de workers. El objetivo es priorizar determinismo, observabilidad y mantenibilidad.
+FTN aborda un problema clásico en sistemas distribuidos: cómo ejecutar procesos largos sin depender de memoria efímera ni perder trazabilidad. En lugar de guardar solo el estado final, cada transición relevante del workflow se persiste como evento. Eso permite:
 
-## Qué problema resuelve
+- replay reproducible
+- recuperación tras caída de workers o reinicios
+- auditoría de runs y debugging más fino
+- separación clara entre core determinista e infraestructura
 
-- Orquestación de workflows con pasos asíncronos y dependencias externas.
-- Reanudación segura tras fallos de proceso o infraestructura.
-- Trazabilidad por run para debugging y auditoría.
-- Separación entre core determinista e integraciones de infraestructura.
+## Qué incluye hoy
 
-## Decisiones técnicas y trade-offs
+El proyecto ya no es solo una idea o skeleton. A día de hoy incluye:
 
-- **Event sourcing + snapshots**: trazabilidad y replay reproducible a cambio de mayor complejidad operativa y de modelado.
-- **Workers + cola desacoplada**: mejora de escalabilidad horizontal, con coste en coordinación y manejo de leases/concurrencia.
-- **Persistencia dual (memory/Postgres, queue memory/Redis)**: acelera desarrollo local y habilita despliegues más robustos, pero incrementa superficie de pruebas.
-- **DSL FTN explícita**: acota side effects para mantener determinismo; reduce libertad de implementación ad hoc dentro del workflow.
+- motor determinista en `src/core`
+- runtime y workers para workflows, activities y timers
+- persistencia dual:
+  - in-memory para desarrollo rápido
+  - Postgres para event store y snapshot store
+- cola dual:
+  - in-memory
+  - Redis con recuperación de leases huérfanos
+- API HTTP con auth, catálogo, runs, señales, credenciales, métricas y docs
+- frontend con pantallas de login, workflows, catálogo, designer y credenciales
+- suite de tests unitarios e integración
+- documentación de arquitectura, producción, benchmarks e integraciones
 
-## Why this is production-minded
+## Mejoras implementadas recientemente
 
-- Concurrencia defensiva en event store con optimistic locking y tests de carrera.
-- Readiness/health checks, rate limiting, autenticación y auditoría HTTP.
-- CI con lint, build, tests unitarios e integración (Postgres + Redis).
-- Deploy reproducible con Docker Compose.
-- Diseño modular preparado para crecimiento de integraciones y separación futura de servicios.
+### Hardening del motor
 
-## Estado actual del proyecto
+Durante los últimos sprints se reforzaron varias garantías operativas:
 
-Implementaciones en el repo a día de hoy:
+- snapshots + replay validados con tests de regresión
+- observabilidad mínima en runtime y workers
+- conflictos de concurrencia visibles mediante `ConcurrencyError`
+- cancelación explícita con limpieza de pendientes
+- tenancy base con `tenantId` y cuota de runs concurrentes
+- extracción parcial del arranque HTTP para reducir acoplamiento
 
-- Core determinista (`src/core`): eventos, estado, replay, DSL `ftn` (`activity`, `join`, `parallel`, `retry`, `sleep`, `signal`, `workflowId`, `runId`).
-- Runtime + workers (`src/infra`, `src/workers`): worker de workflows, worker de activities, worker de timers.
-- Persistencia dual:
-  - In-memory (`inmemory-*`) para desarrollo rápido.
-  - Postgres (`postgres-event-store`, `postgres-snapshot-store`) + migraciones.
-- Cola dual:
-  - In-memory queue.
-  - Redis queue (`redis-task-queue`) con recuperación de leases huérfanos.
-- Integraciones modulares (`src/modules/integrations`): `payments`, `notifications`, `identity`, `http`, `storage`, `messaging`, `documents`, `logistics`, `crm`.
-- API HTTP en `src/infra/main.ts` con:
-  - Auth (`/auth/login`, `/auth/register`, `/auth/status`, `/auth/refresh`, `/auth/logout`)
-  - Métricas Prometheus texto en `GET /metrics`
-  - Auditoría (`GET /audit/logs?limit=`) y tabla `ftn_audit_log` (Postgres)
-  - Workflows/runs (`/workflows`, detalle, eventos, señales)
-  - Designer (`/designer/workflows`, `/designer/kinds`)
-  - Credenciales por usuario (`/credentials/*`)
-  - Catálogo (`/activities`, endpoints de catálogo)
-  - Salud y docs (`/health`, `/ready`, `/openapi.json`, `/docs`)
-- Frontend con páginas de login, workflows, catálogo, designer y credenciales.
-- OpenAPI disponible en `docs/api/openapi.json` (validación rápida: `npm run check:openapi`).
-- Anexos extendidos (opcional): `docs/integrations/INTEGRATIONS.md`, `docs/WORKFLOW_VERSIONING.md`, `docs/PRODUCTION.md`, `docs/ARCHITECTURE.md`, `docs/INTERVIEW_PACK.md`, `docs/GO_TO_MARKET_TEMPLATES.md`, `docs/DEMO_DAY_RUNBOOK.md`.
-- Suite de tests unitarios + integración en `src/__tests__`.
+### Nuevas capacidades del DSL/runtime
 
-## Requisitos
+Actualmente FTN soporta:
 
-- Node.js `>= 20`
-- npm `>= 9`
+- `ftn.activity()`
+- `ftn.parallel()`
+- `ftn.join()`
+- `ftn.retry()`
+- `ftn.sleep()`
+- `ftn.signal()`
+- `ftn.child()`
+- `ftn.forEach()`
+- `ftn.workflowId()`
+- `ftn.runId()`
 
-## Configuración rápida
+### Versionado real de workflows
 
-1. Instala dependencias del backend:
+Se incorporó soporte real para versiones de workflow:
 
-```bash
-npm install
-```
+- el catálogo ya soporta múltiples versiones del mismo workflow
+- cada run persiste `workflowVersion` en `WorkflowStarted`
+- el runtime reanuda usando `name + version`, no solo `name`
+- runs antiguos pueden seguir funcionando aunque se publique una versión nueva
+- si una versión requerida no existe, el runtime falla de forma explícita y observable
 
-1. (Opcional) configura entorno copiando `deploy/.env.example` a `.env` y ajustando variables.
-2. Compila y ejecuta backend:
+Esto reduce un riesgo importante: reanudar un run histórico con una definición distinta a la original.
 
-```bash
-npm run build
-npm start
-```
+## Principios de diseño
 
-1. Frontend (opcional, en otra terminal):
+- **Event sourcing como fuente de verdad**: el historial de eventos manda
+- **Snapshots periódicos**: aceleran rehidratación sin perder replay completo
+- **Workers desacoplados**: mejor escalado horizontal y operación distribuida
+- **DSL explícita**: los side effects pasan por FTN para mantener determinismo
+- **Persistencia/cola intercambiables**: buena DX local sin renunciar a despliegue más robusto
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Invariantes operativas importantes
 
-## Scripts útiles
+El motor intenta preservar estas reglas:
 
-Backend (`package.json` raíz):
+- un run no debe depender de memoria local para poder reconstruirse
+- `snapshot + eventos posteriores` debe producir el mismo estado que el replay completo
+- un conflicto de append concurrente debe ser explícito, no silencioso
+- un run terminal no debe volver a `running`
+- cancelación debe limpiar pendientes
+- la observabilidad debe seguir el flujo real del run
 
-- `npm run build`: compila TypeScript a `dist`.
-- `npm test`: tests principales.
-- `npm run test:integration`: batería de integración (Postgres/Redis).
-- `npm run lint`: lint sobre `src`.
-- `npm start`: arranca API + workers desde `dist/infra/main.js`.
+Más detalle en `docs/ENGINE_INVARIANTS.md`.
 
-Frontend (`frontend/package.json`):
-
-- `npm run dev`
-- `npm run build`
-- `npm run preview`
-- `npm run test` (Vitest, helpers del designer)
-
-## Deploy reproducible (Docker Compose)
-
-`docker-compose.yml` levanta stack completo en local:
-
-- Backend FTN (`http://localhost:8000` por defecto)
-- Frontend (`http://localhost:5173` por defecto)
-- Postgres (`localhost:55432` por defecto)
-- Redis (`localhost:56379` por defecto)
-
-### Arranque
-
-```bash
-docker compose up --build
-```
-
-### Validación rápida
-
-1. Abre `http://localhost:8000/health`.
-2. Abre `http://localhost:8000/ready` y verifica `status: "ready"`.
-3. Abre frontend en `http://localhost:5173`.
-4. Swagger UI en `http://localhost:8000/docs`.
-5. Login demo:
-   - usuario: `demo`
-   - contraseña: `demo-password-123`
-
-### Operación
-
-```bash
-docker compose ps
-docker compose logs -f
-docker compose logs -f backend
-docker compose restart backend
-docker compose down
-docker compose down -v
-```
-
-### Troubleshooting rápido
-
-- Si aparece `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`, inicia Docker Desktop (engine Linux) y reintenta.
-- Si aparece `500 Internal Server Error` hacia `dockerDesktopLinuxEngine` o `unable to get image ... json`, el motor de Docker va mal: reinicia Docker Desktop, comprueba `docker version`, y en caso extremo actualiza Docker Desktop o ejecuta `wsl --shutdown` (si usas WSL2) y reinicia.
-- **`EADDRINUSE` ... `port: 4000` dentro del contenedor**: el backend ya está en marcha (`CMD` del `Dockerfile.backend`). No ejecutes otra vez `node dist/infra/main.js` con `docker exec` salvo que uses otro `PORT` o detengas el proceso que escucha. Para ver logs usa `docker logs ftn-backend`; para una shell sin arrancar el servidor: `docker exec -it ftn-backend sh`.
-- **`docker compose up --build frontend` recompila también el backend**: es normal si Compose considera que debe reconstruir dependencias. Para **solo** la imagen del frontend: `docker compose build frontend` y luego `docker compose up -d frontend`.
-- **Build del frontend muy lento o `rpc error ... EOF`**: suele ser contexto Docker enorme (p. ej. sin `frontend/.dockerignore`) o Docker Desktop saturado. Cierra otras cargas, aumenta recursos en Docker Desktop, y reintenta; el repo incluye `frontend/.dockerignore` para excluir `node_modules` y `dist` del contexto.
-- Valida que Docker esté operativo:
-
-```bash
-docker version
-docker compose ps
-```
-
-### Puertos configurables
-
-Puedes sobreescribir sin tocar el compose:
-
-- `FTN_BACKEND_PORT` (por defecto `8000`, mapea a `container:4000`)
-- `FTN_FRONTEND_PORT` (por defecto `5173`, mapea a `container:80`)
-- `FTN_POSTGRES_PORT` (por defecto `55432`, mapea a `container:5432`)
-- `FTN_REDIS_PORT` (por defecto `56379`, mapea a `container:6379`)
-
-Ejemplo:
-
-```bash
-FTN_BACKEND_PORT=8010 FTN_FRONTEND_PORT=5174 FTN_POSTGRES_PORT=55433 FTN_REDIS_PORT=56380 docker compose up --build
-```
-
-## Estructura principal
-
-```text
-src/
-  core/                # Engine, eventos, estado, DSL FTN
-  modules/             # Contratos + activity runtime + integraciones
-  infra/               # HTTP server, stores/queues concretos, workers infra
-  workers/             # Worker de activities (core)
-  app/                 # Catálogo de workflows, designer store/runtime, triggers
-  shared/              # Tipos y utilidades compartidas
-  __tests__/           # Tests unitarios e integración
-frontend/              # UI en Preact (designer, catálogo, runs, auth, credentials)
-docs/api/openapi.json  # Especificación OpenAPI
-deploy/.env.example    # Variables de entorno de referencia
-```
-
-## Endpoints destacados
-
-- `GET /health`
-- `GET /ready`
-- `GET /docs`
-- `GET /openapi.json`
-- `POST /auth/login`
-- `POST /auth/register`
-- `GET /workflows`
-- `POST /workflows`
-- `POST /workflows/:workflowId/:runId/signals`
-- `GET|POST|PUT /designer/workflows...`
-- `GET|PUT /credentials/:provider`
-
-## Benchmarks y evidencia técnica
-
-Plan y metodología:
-
-- `docs/benchmarks/BENCHMARK_PLAN.md`
-- `docs/benchmarks/RESULTS.md`
-
-Resumen de referencia (muestra inicial):
-
-| Escenario | Lote | Concurrencia | Throughput (runs/s) | p50 | p95 | p99 | Success % |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| In-memory | 500 | 25 | 120 | 80ms | 150ms | 210ms | 100 |
-| Postgres + Redis | 500 | 25 | 42 | 210ms | 490ms | 740ms | 99.8 |
-| Postgres + Redis + recovery | 500 | 25 | 38 | 240ms | 620ms | 900ms | 99.6 |
-
-Cómo reproducir:
-
-1. Levanta infraestructura: `docker compose up --build -d`.
-2. Compila backend: `npm run build`.
-3. Arranca API/workers: `npm start`.
-4. Ejecuta pruebas/cargas y registra resultados en `docs/benchmarks/RESULTS.md`.
-
-## Arquitectura (resumen en README)
+## Arquitectura
 
 Capas principales:
 
-- `src/core`: motor determinista, eventos, replay, DSL `ftn`.
-- `src/modules`: contratos del runtime/event store/task queue + integraciones.
-- `src/infra`: implementaciones concretas (HTTP, Postgres, Redis, logger).
-- `src/workers`: ejecución de colas de workflow/activity/timer.
-- `src/app`: catálogo de workflows, designer, scheduler y triggers.
+- `src/core`: engine, eventos, estado, replay y DSL `ftn`
+- `src/modules`: contratos del runtime/event store/task queue + activity runtime + integraciones
+- `src/infra`: implementaciones concretas de HTTP, Postgres, Redis, logger, metrics y bootstrap
+- `src/workers`: workers de ejecución
+- `src/app`: catálogo de workflows, designer, scheduler y triggers
+- `src/shared`: tipos y utilidades comunes
 
 Flujo de ejecución de un run:
 
@@ -240,74 +112,271 @@ flowchart TD
   Runtime --> Replay[LoadSnapshotAndReplayEvents]
   Runtime --> Dsl[ExecuteFTNDsl]
   Dsl --> NewEvents[AppendNewEvents]
+  NewEvents --> EventStore
   Dsl --> ActQueue[EnqueueActivityTask]
   ActQueue --> ActWorker[ActivityWorker]
+  Dsl --> TimerQueue[EnqueueTimerTask]
+  TimerQueue --> TimerWorker[TimerWorker]
 ```
 
-Trade-offs principales:
+Resumen más corto en `docs/ARCHITECTURE.md`.
 
-- Event sourcing + snapshots: más complejidad, pero mucha trazabilidad y recuperación fiable.
-- Workers desacoplados: mejor escalado horizontal, mayor coste de coordinación y observabilidad.
-- Persistencia dual: muy útil para DX y demo, exige más disciplina de pruebas.
+## Estado actual del backend
 
-## Producción y seguridad (checklist rápido)
+### Core
 
-- Secretos: usar `FTN_JWT_SECRET` y/o `FTN_API_KEY` por entorno, nunca en git.
-- CORS: definir `FTN_CORS_ORIGINS` explícito (evitar `*` con credenciales).
-- Límites HTTP: `FTN_HTTP_MAX_BODY_BYTES` y `FTN_HTTP_RATE_LIMIT_PER_MINUTE`.
-- Auth/RBAC: activar `FTN_ENABLE_RBAC` y scopes por usuario cuando aplique.
-- Observabilidad: monitorizar `/metrics`, tasas `429`/`5xx`, latencia de workers y errores por integración.
-- Runtime warnings: en `NODE_ENV=production`, el proceso avisa si faltan variables críticas.
+- eventos y estado serializable
+- replay determinista
+- snapshots
+- manejo de retries, señales, timers y child workflows
 
-## Versionado de workflows (reglas operativas)
+### Workers
 
-- Cada descriptor de workflow debe publicar `version` explícita.
-- Cada run guarda `workflowVersion` en `WorkflowStarted` para trazabilidad.
-- Cambio compatible: incrementos menores/parche.
-- Cambio breaking (input obligatorio, rename de actividades): versión mayor o `workflowName` nuevo (`orders.v2`).
-- No hay migrador automático de streams: mantener workflows históricos para no romper replay.
+- workflow worker
+- activity worker
+- timer worker
+- reintentos por conflicto de concurrencia
 
-## Integraciones (resumen práctico)
+### Persistencia
 
-Módulos actualmente registrados: `payments`, `notifications`, `identity`, `http`, `storage`, `messaging`, `documents`, `logistics`, `crm`.
+- `inmemory-*` para local/dev
+- `postgres-event-store`
+- `postgres-snapshot-store`
+- migraciones de tablas del motor
 
-Ejemplos típicos:
+### Queueing
 
-- HTTP (`http.request:v1`): request a APIs externas con política de URL segura y timeouts.
-- Payments (Stripe): checkout/session/status con credenciales `stripe`.
-- Notifications: email (SendGrid), SMS (Twilio), webhook (Slack u otros).
-- Storage: `db.execute`, `kv.put`, `kv.get`.
-- CRM: `crm.upsertUser:v1`.
+- cola in-memory
+- `redis-task-queue`
+- recuperación de leases estancados
 
-Flujo mínimo para probar una integración:
+### Observabilidad
 
-1. Verificar `GET /health` y `GET /ready`.
-2. Consultar catálogo con `GET /activities`.
-3. Arrancar run con `POST /workflows` usando `workflowName` + `input`.
-4. Seguir estado/eventos con `GET /workflows/:workflowId/:runId` y `/events`.
+- logger estructurado
+- endpoint `GET /metrics`
+- métricas de HTTP y del motor
+- contadores de snapshots, appends, conflictos, dequeues y rehidratación
+- base lista para seguir creciendo con OpenTelemetry
 
-## Pack de entrevista (incluido en README)
+## API HTTP destacada
 
-Narrativa sugerida en 5 minutos:
+FTN ya expone endpoints útiles para operar el sistema:
 
-1. Problema: orquestación distribuida con poca trazabilidad.
-2. Decisión: event sourcing + snapshots + workers desacoplados.
-3. Garantías: concurrencia defensiva (`ConcurrencyError` + retries), API segura y CI sólida.
-4. Resultado: replay reproducible, recuperación tras fallos y operación con métricas.
-5. Roadmap: E2E, trazas distribuidas, modularización adicional de routing.
+- `GET /health`
+- `GET /ready`
+- `GET /metrics`
+- `GET /docs`
+- `GET /openapi.json`
+- `POST /auth/login`
+- `POST /auth/register`
+- `GET /auth/status`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /workflows`
+- `POST /workflows`
+- `GET /workflows/:workflowId/:runId`
+- `GET /workflows/:workflowId/:runId/events`
+- `GET /workflows/:workflowId/:runId/steps`
+- `POST /workflows/:workflowId/:runId/signals`
+- `POST /workflows/:workflowId/:runId/cancel`
+- `GET /activities`
+- `GET /catalog/workflows`
+- `GET|POST|PUT /designer/workflows...`
+- `GET|PUT /credentials/:provider`
 
-Guion demo 7-10 minutos:
+## Catálogo y versionado de workflows
 
-1. `docker compose up --build`.
-2. Mostrar `/health`, `/ready`, `/metrics`.
-3. Ejecutar un workflow y consultar eventos.
-4. Simular fallo de worker y enseñar recuperación.
-5. Cerrar con decisiones + trade-offs + siguientes mejoras.
+Reglas actuales:
 
-## Roadmap / mejoras siguientes
+- cada workflow publica `version` explícita
+- el catálogo soporta varias versiones del mismo `name`
+- iniciar sin versión explícita usa la última versión registrada
+- cada run congela `workflowVersion` en `WorkflowStarted`
+- reanudar un run resuelve por `name + version`
+- si falta la versión requerida, el run falla de forma explícita
 
-1. **Documentación funcional**: ampliar `docs/integrations/INTEGRATIONS.md` con payloads alineados al catálogo OpenAPI por actividad.
-2. **Cobertura de tests**: E2E API + frontend; más escenarios multi-worker; propiedades de cola bajo carga.
-3. **Observabilidad**: trazas distribuidas (OpenTelemetry) además de `GET /metrics` y el logger.
-4. **OpenAPI**: regenerar o sincronizar automáticamente `docs/api/openapi.json` con los endpoints nuevos (`/metrics`, `/auth/*`, `/audit/logs`).
+Recomendaciones:
+
+- cambios compatibles: misma familia con incremento menor/parche
+- cambios breaking: versión nueva clara, y mantener versiones históricas si hay runs vivos o replays que dependen de ellas
+
+## Integraciones disponibles
+
+Módulos registrados actualmente:
+
+- `payments`
+- `notifications`
+- `identity`
+- `http`
+- `storage`
+- `messaging`
+- `documents`
+- `logistics`
+- `crm`
+
+Ejemplos frecuentes:
+
+- HTTP seguro con políticas de URL y timeouts
+- Stripe para pagos
+- SendGrid / Twilio / webhooks para notificaciones
+- almacenamiento SQL/KV
+- módulos de identidad, logística y CRM
+
+Más detalle en `docs/integrations/INTEGRATIONS.md`.
+
+## Requisitos
+
+- Node.js `>= 20`
+- npm `>= 9`
+
+## Puesta en marcha rápida
+
+### Backend
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Entorno
+
+Puedes usar `deploy/.env.example` como referencia para variables de entorno.
+
+## Scripts útiles
+
+Backend:
+
+- `npm run build`: compila TypeScript a `dist`
+- `npm test`: ejecuta build + tests backend principales
+- `npm run test:integration`: integración con Postgres/Redis
+- `npm run lint`: lint sobre `src`
+- `npm run check:openapi`: validación rápida de OpenAPI
+- `npm start`: arranca API + workers desde `dist/infra/main.js`
+
+Frontend:
+
+- `npm run dev`
+- `npm run build`
+- `npm run preview`
+- `npm run test`
+
+## Docker Compose
+
+`docker-compose.yml` permite levantar un stack local reproducible:
+
+- backend FTN
+- frontend
+- Postgres
+- Redis
+
+### Arranque
+
+```bash
+docker compose up --build
+```
+
+### Validación rápida
+
+1. Abrir `http://localhost:8000/health`
+2. Abrir `http://localhost:8000/ready`
+3. Abrir `http://localhost:8000/docs`
+4. Abrir frontend en `http://localhost:5173`
+5. Consultar `http://localhost:8000/metrics`
+
+### Operación básica
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose logs -f backend
+docker compose restart backend
+docker compose down
+docker compose down -v
+```
+
+### Puertos configurables
+
+- `FTN_BACKEND_PORT`
+- `FTN_FRONTEND_PORT`
+- `FTN_POSTGRES_PORT`
+- `FTN_REDIS_PORT`
+
+Ejemplo:
+
+```bash
+FTN_BACKEND_PORT=8010 FTN_FRONTEND_PORT=5174 FTN_POSTGRES_PORT=55433 FTN_REDIS_PORT=56380 docker compose up --build
+```
+
+## Estructura principal
+
+```text
+src/
+  core/                # Engine, eventos, estado, replay, DSL FTN
+  modules/             # Contratos, runtime e integraciones
+  infra/               # HTTP, Postgres, Redis, metrics, logger, bootstrap
+  workers/             # Workers de ejecución
+  app/                 # Catálogo de workflows, triggers, designer, scheduler
+  shared/              # Tipos y utilidades compartidas
+  __tests__/           # Tests unitarios e integración
+frontend/              # UI
+docs/                  # Arquitectura, producción, benchmarks, integraciones
+deploy/.env.example    # Referencia de configuración
+```
+
+## Tests y evidencia técnica
+
+El repo incluye:
+
+- tests unitarios del runtime, engine, workers y módulos
+- tests de integración con Postgres
+- tests de integración con Redis task queue
+- escenarios de concurrencia con optimistic locking
+- regresiones de snapshot/replay
+- regresiones de versionado `v1/v2`
+
+Plan de benchmarks en `docs/benchmarks/BENCHMARK_PLAN.md`.
+
+## Producción y seguridad
+
+Checklist rápida:
+
+- definir `FTN_JWT_SECRET` y/o `FTN_API_KEY`
+- configurar `FTN_CORS_ORIGINS`
+- revisar límites HTTP y rate limiting
+- monitorizar `/metrics`
+- usar Postgres/Redis para escenarios no triviales
+- revisar warnings del proceso en `NODE_ENV=production`
+
+Más detalle en `docs/PRODUCTION.md`.
+
+## Documentación adicional
+
+- `docs/ARCHITECTURE.md`
+- `docs/P4_DONE.md`
+- `docs/ENGINE_INVARIANTS.md`
+- `docs/WORKFLOW_VERSIONING.md`
+- `docs/PRODUCTION.md`
+- `docs/integrations/INTEGRATIONS.md`
+- `docs/benchmarks/BENCHMARK_PLAN.md`
+- `docs/INTERVIEW_PACK.md`
+- `docs/GO_TO_MARKET_TEMPLATES.md`
+
+## Roadmap cercano
+
+Lo siguiente que tiene más sentido seguir reforzando:
+
+1. integración Postgres específica para convivencia de varias versiones de workflows
+2. más separación entre bootstrap y routing HTTP
+3. más cobertura E2E de API y frontend
+4. observabilidad más profunda con trazas distribuidas
+5. evolución del versionado hacia políticas/migraciones más explícitas
 
