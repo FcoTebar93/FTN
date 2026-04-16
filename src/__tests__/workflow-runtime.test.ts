@@ -11,7 +11,7 @@ import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import type { ActivityTask, TimerTask } from "../shared/tasks";
 import type { Logger } from "../infra/logger";
-import { registerWorkflow } from "../app/workflows";
+import { getWorkflow, getWorkflowDescriptor, listWorkflowVersions, registerWorkflow } from "../app/workflows";
 
 const silentLogger: Logger = {
   debug() {},
@@ -36,6 +36,31 @@ function inMemoryStack(snapshotInterval = 50) {
 }
 
 describe("InMemoryWorkflowRuntime", () => {
+  it("catálogo versionado: resuelve versión específica y latest por nombre", async () => {
+    const baseName = `catalog-versioned-${Date.now()}`;
+    registerWorkflow({
+      name: baseName,
+      version: "v1",
+      displayName: "Catalog v1",
+      definition: async () => ({ version: "v1" }),
+    });
+    registerWorkflow({
+      name: baseName,
+      version: "v2",
+      displayName: "Catalog v2",
+      definition: async () => ({ version: "v2" }),
+    });
+
+    const latest = getWorkflowDescriptor(baseName);
+    const v1 = getWorkflowDescriptor(baseName, "v1");
+    const versions = listWorkflowVersions(baseName);
+
+    assert.equal(latest?.version, "v2");
+    assert.equal(v1?.version, "v1");
+    assert.equal(typeof getWorkflow(baseName, "v1"), "function");
+    assert.deepEqual(versions.map((item) => item.version), ["v1", "v2"]);
+  });
+
   it("completa un workflow simple y guarda el resultado", async () => {
     const { runtime } = inMemoryStack();
 
@@ -70,6 +95,120 @@ describe("InMemoryWorkflowRuntime", () => {
     const events = await eventStore.loadEvents(workflowId, runId, 0);
     assert.equal(events[0].type, "WorkflowStarted");
     assert.equal(events[0].payload.workflowVersion, "v2");
+  });
+
+  it("mantiene un run antiguo en v1 aunque ya exista v2 en el catálogo", async () => {
+    const { engine, eventStore, snapshotStore, taskQueue, runtime } = inMemoryStack();
+    const workflowName = `versioned-run-${Date.now()}`;
+
+    registerWorkflow<{ offset: number }, { total: number }>({
+      name: workflowName,
+      version: "v1",
+      displayName: "Versioned workflow v1",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName,
+      workflowVersion: "v1",
+      input: { offset: 2 },
+      definition: async (ftn, input: { offset: number }) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    registerWorkflow<{ offset: number }, { total: number }>({
+      name: workflowName,
+      version: "v2",
+      displayName: "Versioned workflow v2",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset + 1000 };
+      },
+    });
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "resume", data: { base: 40 } },
+      },
+    ]);
+
+    const runtimeAfterRestart = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    await runtimeAfterRestart.runWorkflowTick(workflowId, runId);
+    const state = await runtimeAfterRestart.loadCurrentState(workflowId, runId);
+
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { total: 42 });
+  });
+
+  it("falla de forma explícita si falta la versión requerida para reanudar un run", async () => {
+    const { engine, eventStore, snapshotStore, taskQueue, runtime } = inMemoryStack();
+    const workflowName = `missing-version-${Date.now()}`;
+
+    registerWorkflow<{ offset: number }, { total: number }>({
+      name: workflowName,
+      version: "v1",
+      displayName: "Missing version v1",
+      definition: async (ftn, input) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName,
+      workflowVersion: "v3",
+      input: { offset: 2 },
+      definition: async (ftn, input: { offset: number }) => {
+        const data = await ftn.signal<{ base: number }>("resume");
+        return { total: data.base + input.offset };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = stream[stream.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "resume", data: { base: 40 } },
+      },
+    ]);
+
+    const runtimeAfterRestart = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    await assert.rejects(
+      () => runtimeAfterRestart.runWorkflowTick(workflowId, runId),
+      /Workflow definition not available/
+    );
   });
 
   it("persiste tenantId en WorkflowStarted cuando se aporta en startWorkflow", async () => {

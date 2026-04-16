@@ -8,27 +8,56 @@ import type { JsonSchema } from "../shared/json-schema";
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
 
 type WorkflowCatalog = Map<string, WorkflowDescriptor<any, any>>;
-const workflowCatalog: WorkflowCatalog = new Map();
+type VersionedWorkflowCatalog = Map<string, WorkflowCatalog>;
+const workflowCatalog: VersionedWorkflowCatalog = new Map();
 
-export function getWorkflowDescriptor(name: string): Omit<WorkflowDescriptor, "definition"> | undefined {
-  const d = workflowCatalog.get(name);
+function getVersionBucket(name: string): WorkflowCatalog | undefined {
+  return workflowCatalog.get(name);
+}
+
+function getLatestDescriptor(name: string): WorkflowDescriptor<any, any> | undefined {
+  const bucket = getVersionBucket(name);
+  if (!bucket || bucket.size === 0) return undefined;
+  return Array.from(bucket.values()).sort((a, b) => b.version.localeCompare(a.version))[0];
+}
+
+export function getWorkflowDescriptor(
+  name: string,
+  version?: string
+): Omit<WorkflowDescriptor, "definition"> | undefined {
+  const d = version ? getVersionBucket(name)?.get(version) : getLatestDescriptor(name);
   if (!d) return undefined;
   const { definition: _definition, ...meta } = d;
   return meta;
 }
 
 export function registerWorkflow<TInput, TResult>(descriptor: WorkflowDescriptor<TInput, TResult>): void {
-  workflowCatalog.set(descriptor.name, descriptor as WorkflowDescriptor<any, any>);
+  const bucket = workflowCatalog.get(descriptor.name) ?? new Map<string, WorkflowDescriptor<any, any>>();
+  bucket.set(descriptor.version, descriptor as WorkflowDescriptor<any, any>);
+  workflowCatalog.set(descriptor.name, bucket);
 }
 
 export function listWorkflows(): Array<Omit<WorkflowDescriptor, "definition">> {
   return Array.from(workflowCatalog.values())
+    .flatMap((bucket) => Array.from(bucket.values()))
     .map(({ definition: _definition, ...meta }) => meta)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
 }
 
-export function getWorkflow(name: string): WorkflowDefinition<any, any> | undefined {
-  return workflowCatalog.get(name)?.definition;
+export function listWorkflowVersions(name: string): Array<Omit<WorkflowDescriptor, "definition">> {
+  const bucket = getVersionBucket(name);
+  if (!bucket) return [];
+  return Array.from(bucket.values())
+    .map(({ definition: _definition, ...meta }) => meta)
+    .sort((a, b) => a.version.localeCompare(b.version));
+}
+
+export function getWorkflow(name: string, version?: string): WorkflowDefinition<any, any> | undefined {
+  if (version) {
+    return getVersionBucket(name)?.get(version)?.definition;
+  }
+
+  return getLatestDescriptor(name)?.definition;
 }
 
 export interface CatalogWorkflow {
