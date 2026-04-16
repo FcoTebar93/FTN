@@ -801,6 +801,73 @@
     color: #9a3412;
     font-size: 12px;
   }
+  .credentials-draft-status {
+    margin: 6px 0 0 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    border: 1px solid transparent;
+  }
+  .credentials-draft-status.ok {
+    color: #166534;
+    border-color: rgba(22, 163, 74, 0.25);
+    background: rgba(22, 163, 74, 0.08);
+  }
+  .credentials-draft-status.error {
+    color: var(--danger);
+    border-color: rgba(220, 38, 38, 0.25);
+    background: rgba(220, 38, 38, 0.08);
+  }
+  .credentials-draft-source {
+    margin: 6px 0 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .credentials-checklist {
+    margin: 8px 0 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+  }
+  .credentials-checklist-item {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 7px 9px;
+    background: rgba(248, 250, 252, 0.7);
+    font-size: 12px;
+  }
+  .credentials-checklist-item.ok {
+    border-color: rgba(22, 163, 74, 0.25);
+    background: rgba(22, 163, 74, 0.07);
+  }
+  .credentials-checklist-item.error {
+    border-color: rgba(220, 38, 38, 0.25);
+    background: rgba(220, 38, 38, 0.07);
+  }
+  .credentials-checklist-mark {
+    font-weight: 700;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .credentials-checklist-item.ok .credentials-checklist-mark {
+    color: #15803d;
+  }
+  .credentials-checklist-item.error .credentials-checklist-mark {
+    color: var(--danger);
+  }
+  .credentials-checklist-label {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .credentials-checklist-msg {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
   .credentials-requirements {
     margin: 6px 0 0 16px;
     color: var(--text-muted);
