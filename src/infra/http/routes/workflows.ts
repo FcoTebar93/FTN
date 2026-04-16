@@ -25,8 +25,12 @@ export async function tryWorkflowsRoutes(
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
     if (body === null) return true;
     try {
-      const parsed = JSON.parse(body || "{}") as { name?: unknown; input?: unknown };
+      const parsed = JSON.parse(body || "{}") as { name?: unknown; input?: unknown; workflowVersion?: unknown };
       const name = typeof parsed.name === "string" ? parsed.name : "";
+      const workflowVersion =
+        typeof parsed.workflowVersion === "string" && parsed.workflowVersion.trim()
+          ? parsed.workflowVersion.trim()
+          : undefined;
       if (!name) {
         res.statusCode = 400;
         res.setHeader("Content-Type", "application/json");
@@ -73,6 +77,7 @@ export async function tryWorkflowsRoutes(
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(name, input, {
         correlationId: ctx.correlationId,
         tenantId: ctx.tenantId,
+        workflowVersion,
       });
       if (idempotencyKey) {
         ctx.saveIdempotentWorkflowStart(idempotencyKey, {
@@ -168,14 +173,13 @@ export async function tryWorkflowsRoutes(
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
     if (body === null) return true;
     try {
-      const wfDef = getWorkflow(trigger.workflowName);
+      const descriptor = getWorkflowDescriptor(trigger.workflowName);
+      const wfDef = getWorkflow(trigger.workflowName, descriptor?.version);
       if (!wfDef) {
         res.statusCode = 500;
         res.end(`Workflow "${trigger.workflowName}" not registered`);
         return true;
       }
-
-      const descriptor = getWorkflowDescriptor(trigger.workflowName);
       const parsedBody = body ? JSON.parse(body) : undefined;
       const input = trigger.useBodyAsInput ? parsedBody : undefined;
 
