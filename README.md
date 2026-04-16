@@ -1,6 +1,6 @@
 # FTN Workflow Engine
 
-FTN es un motor de workflows determinista en TypeScript orientado a backend platform engineering. Combina event sourcing, snapshots, workers desacoplados y un DSL explícito para ejecutar procesos largos, auditables y recuperables, con persistencia opcional en Postgres y colas en Redis.
+FTN es un motor de workflows determinista basado en TypeScript. Combina event sourcing, snapshots, workers desacoplados y un DSL explícito para ejecutar procesos largos, auditables y recuperables, con persistencia opcional en Postgres y colas en Redis.
 
 ## Elevator pitch
 
@@ -11,9 +11,7 @@ FTN aborda un problema clásico en sistemas distribuidos: cómo ejecutar proceso
 - auditoría de runs y debugging más fino
 - separación clara entre core determinista e infraestructura
 
-## Qué incluye hoy
-
-El proyecto ya no es solo una idea o skeleton. A día de hoy incluye:
+## Qué incluye
 
 - motor determinista en `src/core`
 - runtime y workers para workflows, activities y timers
@@ -58,9 +56,7 @@ Actualmente FTN soporta:
 
 ### Versionado real de workflows
 
-Se incorporó soporte real para versiones de workflow:
-
-- el catálogo ya soporta múltiples versiones del mismo workflow
+- el catálogo soporta múltiples versiones del mismo workflow
 - cada run persiste `workflowVersion` en `WorkflowStarted`
 - el runtime reanuda usando `name + version`, no solo `name`
 - runs antiguos pueden seguir funcionando aunque se publique una versión nueva
@@ -91,8 +87,6 @@ Más detalle en `docs/ENGINE_INVARIANTS.md`.
 
 ## Arquitectura
 
-Capas principales:
-
 - `src/core`: engine, eventos, estado, replay y DSL `ftn`
 - `src/modules`: contratos del runtime/event store/task queue + activity runtime + integraciones
 - `src/infra`: implementaciones concretas de HTTP, Postgres, Redis, logger, metrics y bootstrap
@@ -118,6 +112,8 @@ flowchart TD
   Dsl --> TimerQueue[EnqueueTimerTask]
   TimerQueue --> TimerWorker[TimerWorker]
 ```
+
+
 
 Resumen más corto en `docs/ARCHITECTURE.md`.
 
@@ -186,8 +182,6 @@ FTN ya expone endpoints útiles para operar el sistema:
 
 ## Catálogo y versionado de workflows
 
-Reglas actuales:
-
 - cada workflow publica `version` explícita
 - el catálogo soporta varias versiones del mismo `name`
 - iniciar sin versión explícita usa la última versión registrada
@@ -223,6 +217,145 @@ Ejemplos frecuentes:
 - módulos de identidad, logística y CRM
 
 Más detalle en `docs/integrations/INTEGRATIONS.md`.
+
+## Templates disponibles y cómo probarlas
+
+FTN incluye 3 templates de demo listas para ejecutar:
+
+- `payment-signup`
+- `order-processing`
+- `approval-flow`
+
+La guía completa está en `docs/GO_TO_MARKET_TEMPLATES.md`. Aquí tienes el flujo rápido.
+
+### 1) Arranque base
+
+```bash
+npm run build
+npm start
+```
+
+Servidor por defecto: `http://localhost:4000`.
+
+Si tienes auth activa:
+
+- API key: `X-API-Key: <FTN_API_KEY>`
+- JWT: `Authorization: Bearer <token>`
+
+Si tienes multi-tenant activo (`FTN_MULTI_TENANT_ENABLED=1|true`), añade también:
+
+- `X-Tenant-Id: demo-tenant`
+
+### 2) Ver catálogo de workflows disponibles
+
+```bash
+curl "http://localhost:4000/catalog/workflows"
+```
+
+### 3) Probar cada template
+
+#### `payment-signup`
+
+Inicia run:
+
+```bash
+curl -X POST "http://localhost:4000/workflows" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "payment-signup",
+    "input": {
+      "email": "user@acme.com",
+      "planName": "Pro",
+      "priceCents": 9900
+    }
+  }'
+```
+
+Completa con señal:
+
+```bash
+curl -X POST "http://localhost:4000/workflows/<workflowId>/<runId>/signals" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signalName": "payment-completed",
+    "data": {
+      "sessionId": "cs_demo_123",
+      "amountTotal": 9900,
+      "currency": "eur",
+      "customerEmail": "user@acme.com"
+    }
+  }'
+```
+
+#### `order-processing`
+
+Inicia run:
+
+```bash
+curl -X POST "http://localhost:4000/workflows" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "order-processing",
+    "input": {
+      "orderId": "ord-demo-1",
+      "userId": "user-42",
+      "amount": 49.99
+    }
+  }'
+```
+
+Consulta estado y eventos:
+
+```bash
+curl "http://localhost:4000/workflows/<workflowId>/<runId>"
+curl "http://localhost:4000/workflows/<workflowId>/<runId>/events"
+```
+
+#### `approval-flow`
+
+Inicia run:
+
+```bash
+curl -X POST "http://localhost:4000/workflows" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "approval-flow",
+    "input": {
+      "requestId": "apr-2026-0001",
+      "requesterEmail": "requester@acme.com",
+      "approverEmail": "manager@acme.com",
+      "subject": "Compra extraordinaria",
+      "amount": 1250
+    }
+  }'
+```
+
+Aprueba o rechaza con señal:
+
+```bash
+curl -X POST "http://localhost:4000/workflows/<workflowId>/<runId>/signals" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signalName": "approval-decision",
+    "data": {
+      "approved": true,
+      "reviewer": "manager@acme.com",
+      "comment": "OK para esta excepción"
+    }
+  }'
+```
+
+### 4) Verificación recomendada
+
+Después de cada prueba, inspecciona:
+
+```bash
+curl "http://localhost:4000/workflows/<workflowId>/<runId>"
+curl "http://localhost:4000/workflows/<workflowId>/<runId>/events"
+curl "http://localhost:4000/metrics"
+```
+
+Así validas estado final, trazabilidad por event sourcing y señales de operación.
 
 ## Requisitos
 
@@ -343,8 +476,6 @@ El repo incluye:
 - regresiones de snapshot/replay
 - regresiones de versionado `v1/v2`
 
-Plan de benchmarks en `docs/benchmarks/BENCHMARK_PLAN.md`.
-
 ## Producción y seguridad
 
 Checklist rápida:
@@ -357,26 +488,3 @@ Checklist rápida:
 - revisar warnings del proceso en `NODE_ENV=production`
 
 Más detalle en `docs/PRODUCTION.md`.
-
-## Documentación adicional
-
-- `docs/ARCHITECTURE.md`
-- `docs/P4_DONE.md`
-- `docs/ENGINE_INVARIANTS.md`
-- `docs/WORKFLOW_VERSIONING.md`
-- `docs/PRODUCTION.md`
-- `docs/integrations/INTEGRATIONS.md`
-- `docs/benchmarks/BENCHMARK_PLAN.md`
-- `docs/INTERVIEW_PACK.md`
-- `docs/GO_TO_MARKET_TEMPLATES.md`
-
-## Roadmap cercano
-
-Lo siguiente que tiene más sentido seguir reforzando:
-
-1. integración Postgres específica para convivencia de varias versiones de workflows
-2. más separación entre bootstrap y routing HTTP
-3. más cobertura E2E de API y frontend
-4. observabilidad más profunda con trazas distribuidas
-5. evolución del versionado hacia políticas/migraciones más explícitas
-
