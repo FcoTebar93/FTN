@@ -14,10 +14,7 @@ import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
 import { InMemoryTimerWorker } from "./inmemory-timer-worker";
 
-import type { WorkflowTask } from "../shared/tasks";
-import type { WorkflowEvent } from "../core/events";
 import type { DeadLetterEntry, DeadLetterInput, DeadLetterStatus } from "../shared/dead-letter";
-import { validateJson } from "../shared/json-schema-validate";
 import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workflows";
 
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
@@ -44,6 +41,7 @@ import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { initFtnTelemetry, runWithHttpSpan } from "./telemetry";
+import { createWorkflowStartService } from "./workflow-start-service";
 
 function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
   if (env.NODE_ENV !== "production") {
@@ -360,70 +358,12 @@ async function main(): Promise<void> {
   ) => {
     idempotencyStore.set(key, { ...value, createdAtMs: Date.now() });
   };
-  async function countRunningRunsForTenant(tenantId: string): Promise<number> {
-    const keys = await eventStore.listRunKeys();
-    let running = 0;
-    for (const { workflowId, runId } of keys) {
-      const state = await runtime.loadCurrentState(workflowId, runId);
-      if (!state || state.status !== "running") {
-        continue;
-      }
-      const stream = await eventStore.loadEvents(workflowId, runId, 0);
-      const started = stream.find(
-        (e): e is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => e.type === "WorkflowStarted"
-      );
-      if (started?.payload.tenantId === tenantId) {
-        running += 1;
-      }
-    }
-    return running;
-  }
-
-  async function enqueueWorkflowStart(
-    name: string,
-    input: unknown,
-    opts?: { correlationId?: string; tenantId?: string }
-  ): Promise<{ workflowId: string; runId: string; version: number }> {
-    const wfDef = getWorkflow(name);
-    if (!wfDef) {
-      throw new Error(`Workflow not found: ${name}`);
-    }
-    const descriptor = getWorkflowDescriptor(name);
-    if (descriptor?.inputSchema) {
-      const result = validateJson(descriptor.inputSchema, input);
-      if (!result.valid) {
-        throw new Error(`Invalid input: ${JSON.stringify(result.errors)}`);
-      }
-    }
-    if (opts?.tenantId) {
-      const running = await countRunningRunsForTenant(opts.tenantId);
-      if (running >= tenantMaxConcurrentRuns) {
-        throw new Error(
-          `Tenant run quota exceeded (${running}/${tenantMaxConcurrentRuns}) for tenant "${opts.tenantId}"`
-        );
-      }
-    }
-    const { workflowId, runId, version } = await runtime.startWorkflow({
-      workflowName: name,
-      workflowVersion: descriptor?.version,
-      tenantId: opts?.tenantId,
-      input,
-      definition: wfDef,
-    });
-    const task: WorkflowTask = {
-      id: `wf-task-${workflowId}-${runId}`,
-      type: "workflow",
-      workflowId,
-      runId,
-      createdAt: new Date().toISOString(),
-      scheduledAt: new Date().toISOString(),
-      workerType: "workflow",
-      targetQueue: "workflows",
-      ...(opts?.correlationId ? { correlationId: opts.correlationId } : {}),
-    };
-    await taskQueue.enqueue(task);
-    return { workflowId, runId, version };
-  }
+  const { enqueueWorkflowStart } = createWorkflowStartService({
+    eventStore,
+    runtime,
+    taskQueue,
+    tenantMaxConcurrentRuns,
+  });
 
   const cancellation = { aborted: false };
 
