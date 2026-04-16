@@ -1,21 +1,45 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { getCredential, getIntegrationsStatus, listCredentials, saveCredential } from "../../api/credentials";
 import type { CredentialSummary, IntegrationStatusItem } from "../../api/types";
+import { PROVIDERS_ORDER, PROVIDER_SCHEMAS, type CredentialProvider } from "./providerSchemas";
 
-const PROVIDERS = ["stripe", "notifications", "crm", "twilio", "kyc"] as const;
+type FieldValues = Record<string, string>;
 
 export function CredentialsPage() {
   const [items, setItems] = useState<CredentialSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [provider, setProvider] = useState<(typeof PROVIDERS)[number]>("stripe");
-  const [configDraft, setConfigDraft] = useState("{}");
-  const [secretsDraft, setSecretsDraft] = useState("{}");
+  const [provider, setProvider] = useState<CredentialProvider>("stripe");
+  const [fieldValues, setFieldValues] = useState<FieldValues>({});
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [advancedConfigDraft, setAdvancedConfigDraft] = useState("{}");
+  const [advancedSecretsDraft, setAdvancedSecretsDraft] = useState("{}");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, IntegrationStatusItem>>({});
 
   const current = useMemo(() => items.find((x) => x.provider === provider), [items, provider]);
+  const schema = PROVIDER_SCHEMAS[provider];
+
+  const fieldErrors = useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const field of schema.fields) {
+      const value = (fieldValues[field.key] ?? "").trim();
+      if (field.required && !value) {
+        result[field.key] = "Campo obligatorio.";
+        continue;
+      }
+      if (field.validate) {
+        const err = field.validate(value, fieldValues);
+        if (err) {
+          result[field.key] = err;
+        }
+      }
+    }
+    return result;
+  }, [fieldValues, schema.fields]);
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
 
   async function refresh() {
     setLoading(true);
@@ -42,33 +66,74 @@ export function CredentialsPage() {
 
   useEffect(() => {
     setSaveMsg(null);
+    setAdvancedMode(false);
+    setShowSecrets({});
     getCredential(provider)
       .then((cred) => {
-        setConfigDraft(JSON.stringify(cred.config ?? {}, null, 2));
-        setSecretsDraft(JSON.stringify(cred.secrets ?? {}, null, 2));
+        const config = (cred.config ?? {}) as Record<string, unknown>;
+        const secrets = (cred.secrets ?? {}) as Record<string, unknown>;
+        const next: FieldValues = {};
+        for (const field of schema.fields) {
+          const fromConfig = typeof config[field.key] === "string" ? (config[field.key] as string) : undefined;
+          const fromSecrets = typeof secrets[field.key] === "string" ? (secrets[field.key] as string) : undefined;
+          let fallback: string | undefined;
+          for (const alias of field.aliases ?? []) {
+            const source = field.location === "config" ? config : secrets;
+            if (typeof source[alias] === "string") {
+              fallback = source[alias] as string;
+              break;
+            }
+          }
+          next[field.key] = (field.location === "config" ? fromConfig : fromSecrets) ?? fallback ?? "";
+        }
+        setFieldValues(next);
+        setAdvancedConfigDraft(JSON.stringify(config, null, 2));
+        setAdvancedSecretsDraft(JSON.stringify(secrets, null, 2));
       })
       .catch(() => {
-        setConfigDraft("{}");
-        setSecretsDraft("{}");
+        const empty: FieldValues = {};
+        for (const field of schema.fields) {
+          empty[field.key] = "";
+        }
+        setFieldValues(empty);
+        setAdvancedConfigDraft("{}");
+        setAdvancedSecretsDraft("{}");
       });
-  }, [provider]);
+  }, [provider, schema.fields]);
 
   async function handleSave() {
     setSaveMsg(null);
-    let config: Record<string, unknown>;
-    let secrets: Record<string, unknown>;
-    try {
-      config = JSON.parse(configDraft || "{}") as Record<string, unknown>;
-      secrets = JSON.parse(secretsDraft || "{}") as Record<string, unknown>;
-      if (!config || typeof config !== "object" || Array.isArray(config)) {
-        throw new Error("config debe ser un objeto JSON");
+    let config: Record<string, unknown> = {};
+    let secrets: Record<string, unknown> = {};
+
+    if (advancedMode) {
+      try {
+        config = JSON.parse(advancedConfigDraft || "{}") as Record<string, unknown>;
+        secrets = JSON.parse(advancedSecretsDraft || "{}") as Record<string, unknown>;
+        if (!config || typeof config !== "object" || Array.isArray(config)) {
+          throw new Error("config debe ser un objeto JSON");
+        }
+        if (!secrets || typeof secrets !== "object" || Array.isArray(secrets)) {
+          throw new Error("secrets debe ser un objeto JSON");
+        }
+      } catch (e) {
+        setSaveMsg(`JSON inválido: ${(e as Error).message}`);
+        return;
       }
-      if (!secrets || typeof secrets !== "object" || Array.isArray(secrets)) {
-        throw new Error("secrets debe ser un objeto JSON");
+    } else {
+      if (hasFieldErrors) {
+        setSaveMsg("Hay errores en el formulario. Revísalos antes de guardar.");
+        return;
       }
-    } catch (e) {
-      setSaveMsg(`JSON inválido: ${(e as Error).message}`);
-      return;
+      for (const field of schema.fields) {
+        const value = (fieldValues[field.key] ?? "").trim();
+        if (!value) continue;
+        if (field.location === "config") {
+          config[field.key] = value;
+        } else {
+          secrets[field.key] = value;
+        }
+      }
     }
 
     setSaving(true);
@@ -96,7 +161,7 @@ export function CredentialsPage() {
         <aside className="credentials-list">
           <h2>Providers</h2>
           {loading ? <p>Cargando...</p> : null}
-          {PROVIDERS.map((p) => {
+          {PROVIDERS_ORDER.map((p) => {
             const item = items.find((x) => x.provider === p);
             const st = statusMap[p];
             return (
@@ -114,26 +179,87 @@ export function CredentialsPage() {
         </aside>
 
         <section className="credentials-editor">
-          <h2>{provider}</h2>
+          <h2>{schema.title}</h2>
+          <p>{schema.description}</p>
           <p>Última actualización: {current?.updatedAt ? new Date(current.updatedAt).toLocaleString() : "nunca"}</p>
           {statusMap[provider] && !statusMap[provider].configured ? (
             <p className="credentials-error">
               Validación: {statusMap[provider].details ?? "Configuración incompleta"}
             </p>
           ) : null}
-          <label>
-            Config (JSON)
-            <textarea value={configDraft} onInput={(e) => setConfigDraft((e.target as HTMLTextAreaElement).value)} rows={10} />
+          {!advancedMode && schema.fields.length > 0 ? (
+            <div className="credentials-form-grid">
+              {schema.fields.map((field) => {
+                const isSecret = field.location === "secrets";
+                const inputType =
+                  isSecret && !showSecrets[field.key] ? "password" : field.type === "password" ? "text" : field.type;
+                return (
+                  <label key={field.key} className="credentials-field">
+                    <span>{field.label}</span>
+                    <div className="credentials-field-input-wrap">
+                      <input
+                        type={inputType}
+                        value={fieldValues[field.key] ?? ""}
+                        placeholder={field.placeholder}
+                        onInput={(e) =>
+                          setFieldValues((prev) => ({
+                            ...prev,
+                            [field.key]: (e.target as HTMLInputElement).value,
+                          }))
+                        }
+                      />
+                      {isSecret ? (
+                        <button
+                          type="button"
+                          className="credentials-toggle-secret"
+                          onClick={() =>
+                            setShowSecrets((prev) => ({
+                              ...prev,
+                              [field.key]: !prev[field.key],
+                            }))
+                          }
+                        >
+                          {showSecrets[field.key] ? "Ocultar" : "Mostrar"}
+                        </button>
+                      ) : null}
+                    </div>
+                    {field.description ? <small>{field.description}</small> : null}
+                    {fieldErrors[field.key] ? <small className="credentials-error">{fieldErrors[field.key]}</small> : null}
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+          {!advancedMode && schema.fields.length === 0 ? (
+            <p className="detail-muted-box">
+              Este provider no tiene formulario guiado aún. Puedes usar modo avanzado JSON.
+            </p>
+          ) : null}
+          <label className="credentials-advanced-toggle">
+            <input
+              type="checkbox"
+              checked={advancedMode}
+              onChange={(e) => setAdvancedMode((e.target as HTMLInputElement).checked)}
+            />
+            Modo avanzado (JSON)
           </label>
-          <label>
-            Secrets (JSON cifrado en backend)
-            <textarea value={secretsDraft} onInput={(e) => setSecretsDraft((e.target as HTMLTextAreaElement).value)} rows={10} />
-          </label>
+          {advancedMode ? (
+            <>
+              <label>
+                Config (JSON)
+                <textarea value={advancedConfigDraft} onInput={(e) => setAdvancedConfigDraft((e.target as HTMLTextAreaElement).value)} rows={8} />
+              </label>
+              <label>
+                Secrets (JSON cifrado en backend)
+                <textarea value={advancedSecretsDraft} onInput={(e) => setAdvancedSecretsDraft((e.target as HTMLTextAreaElement).value)} rows={8} />
+              </label>
+            </>
+          ) : null}
           <div className="credentials-actions">
             <button type="button" onClick={() => refresh()} disabled={loading}>
               Recargar
             </button>
-            <button type="button" onClick={() => handleSave()} disabled={saving}>
+            <button type="button" onClick={() => handleSave()} disabled={saving || (!advancedMode && hasFieldErrors)}>
               {saving ? "Guardando..." : "Guardar"}
             </button>
           </div>
