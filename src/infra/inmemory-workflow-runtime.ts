@@ -107,24 +107,23 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             return undefined;
         }
 
-        const definition = getWorkflow(started.payload.name);
-        if (!definition) {
-            return undefined;
-        }
-
-        const descriptor = getWorkflowDescriptor(started.payload.name);
-        if (
-            started.payload.workflowVersion &&
-            descriptor?.version &&
-            started.payload.workflowVersion !== descriptor.version
-        ) {
-            this.log?.warn("workflow-runtime.definitionVersionMismatch", {
+        const definition = getWorkflow(started.payload.name, started.payload.workflowVersion);
+        const descriptor = getWorkflowDescriptor(started.payload.name, started.payload.workflowVersion);
+        if (!started.payload.workflowVersion) {
+            this.log?.warn("workflow-runtime.legacyDefinitionFallback", {
                 workflowId,
                 runId,
                 workflowName: started.payload.name,
-                runVersion: started.payload.workflowVersion,
-                registryVersion: descriptor.version,
             });
+        }
+        if (!definition || !descriptor) {
+            this.log?.error("workflow-runtime.definitionVersionMissing", {
+                workflowId,
+                runId,
+                workflowName: started.payload.name,
+                workflowVersion: started.payload.workflowVersion,
+            });
+            return undefined;
         }
 
         const recovered: StoredDefinition = {
@@ -666,14 +665,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           );
 
           if (!started) {
-            const childDef = getWorkflow(workflowName);
+            const childDescriptor = getWorkflowDescriptor(workflowName);
+            const childDef = getWorkflow(workflowName, childDescriptor?.version);
             if (!childDef) {
               throw new Error(`Child workflow not found: ${workflowName}`);
             }
             const parentStarted = fullHistory.find(
               (e): e is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => e.type === "WorkflowStarted"
             );
-            const childDescriptor = getWorkflowDescriptor(workflowName);
             const childStarted = await this.startWorkflow({
               workflowName,
               workflowVersion: childDescriptor?.version,

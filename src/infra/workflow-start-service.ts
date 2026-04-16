@@ -16,6 +16,7 @@ interface CreateWorkflowStartServiceDeps {
 export interface WorkflowStartOptions {
   correlationId?: string;
   tenantId?: string;
+  workflowVersion?: string;
 }
 
 export interface WorkflowStartService {
@@ -55,12 +56,13 @@ export function createWorkflowStartService(
     input: unknown,
     opts?: WorkflowStartOptions
   ): Promise<{ workflowId: string; runId: string; version: number }> {
-    const wfDef = getWorkflow(name);
+    const descriptor = getWorkflowDescriptor(name, opts?.workflowVersion);
+    const wfDef = getWorkflow(name, descriptor?.version ?? opts?.workflowVersion);
     if (!wfDef) {
-      throw new Error(`Workflow not found: ${name}`);
+      throw new Error(
+        `Workflow not found: ${name}${opts?.workflowVersion ? `@${opts.workflowVersion}` : ""}`
+      );
     }
-
-    const descriptor = getWorkflowDescriptor(name);
     if (descriptor?.inputSchema) {
       const result = validateJson(descriptor.inputSchema, input);
       if (!result.valid) {
@@ -79,7 +81,7 @@ export function createWorkflowStartService(
 
     const { workflowId, runId, version } = await deps.runtime.startWorkflow({
       workflowName: name,
-      workflowVersion: descriptor?.version,
+      workflowVersion: descriptor?.version ?? opts?.workflowVersion,
       tenantId: opts?.tenantId,
       input,
       definition: wfDef,
