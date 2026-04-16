@@ -2,6 +2,7 @@ import type { TaskQueue } from "../modules/task-queue";
 import type { TaskLease, TimerTask, WorkflowTask } from "../shared/tasks";
 import type { Logger } from "./logger";
 import type { DeadLetterInput } from "../shared/dead-letter";
+import { incTimerTaskDequeue } from "./metrics";
 
 interface InMemoryTimerWorkerDeps {
     taskQueue: TaskQueue;
@@ -34,6 +35,13 @@ export class InMemoryTimerWorker {
         }
         
         const timerTask = task as TimerTask;
+        incTimerTaskDequeue();
+        this.deps.log.debug("timer-worker.taskDequeued", {
+            workflowId: timerTask.workflowId,
+            runId: timerTask.runId,
+            wakeAt: timerTask.wakeAt,
+            correlationId: timerTask.correlationId,
+        });
         const now = new Date();
         const wakeAt = new Date(timerTask.wakeAt);
 

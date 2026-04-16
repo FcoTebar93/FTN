@@ -1,6 +1,7 @@
 import type { WorkflowWorkerDeps } from "../workers/workflow-worker";
 import type { TaskLease, WorkflowTask } from "../shared/tasks";
 import { ConcurrencyError } from "../modules/event-store";
+import { incActivityRetry, incConcurrencyConflict, incWorkflowTaskDequeue } from "./metrics";
 
 const DEFAULT_CONCURRENCY_RETRY_MAX_ATTEMPTS = 8;
 const DEFAULT_CONCURRENCY_RETRY_BASE_DELAY_MS = 25;
@@ -58,6 +59,15 @@ export class InMemoryWorkflowWorker {
             return;
         }
 
+        incWorkflowTaskDequeue();
+        this.log.debug("workflow-worker.taskDequeued", {
+            workflowId: task.workflowId,
+            runId: task.runId,
+            queueName: this.config.queueName,
+            correlationId: task.correlationId,
+            retryCount: task.retryCount ?? 0,
+        });
+
         let tickResult;
         try {
             tickResult = await this.runtime.runWorkflowTick(task.workflowId, task.runId, {
@@ -65,6 +75,8 @@ export class InMemoryWorkflowWorker {
             });
         } catch (error) {
             if (error instanceof ConcurrencyError) {
+                incConcurrencyConflict();
+                incActivityRetry();
                 const maxAttempts = this.config.concurrencyRetryMaxAttempts ?? DEFAULT_CONCURRENCY_RETRY_MAX_ATTEMPTS;
                 const attempt = (task.retryCount ?? 0) + 1;
 

@@ -7,6 +7,19 @@ import type { ActivityId } from "../shared/types";
 import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
 import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
+import type { Logger } from "./logger";
+import {
+    addEventAppends,
+    incConcurrencyConflict,
+    incSnapshotCreated,
+    incSnapshotLoaded,
+    incWorkflowCancellation,
+    incWorkflowCompletion,
+    incWorkflowFailure,
+    incWorkflowStart,
+    observeWorkflowRehydration,
+    observeWorkflowRunDuration,
+} from "./metrics";
 
 type WorkflowKey = string;
 
@@ -45,6 +58,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
     private readonly snapshotStore;
     private readonly config;
     private readonly taskQueue;
+    private readonly log?: Logger;
     private readonly definitions = new Map<WorkflowKey, StoredDefinition>();
 
     constructor(deps: WorkflowRuntimeDeps) {
@@ -53,6 +67,78 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         this.snapshotStore = deps.snapshotStore;
         this.taskQueue = deps.taskQueue;
         this.config = deps.config;
+        this.log = deps.log;
+    }
+
+    private getStartedAtMs(state: WorkflowState): number | undefined {
+        if (!state.startedAt) {
+            return undefined;
+        }
+
+        const startedAtMs = Date.parse(state.startedAt);
+        return Number.isFinite(startedAtMs) ? startedAtMs : undefined;
+    }
+
+    private recordTerminalMetrics(state: WorkflowState): void {
+        const startedAtMs = this.getStartedAtMs(state);
+        if (startedAtMs === undefined) {
+            return;
+        }
+
+        observeWorkflowRunDuration(Date.now() - startedAtMs);
+    }
+
+    private resolveDefinitionEntry(
+        workflowId: WorkflowId,
+        runId: RunId,
+        fullHistory: WorkflowEvent[]
+    ): StoredDefinition | undefined {
+        const key = makeWorkflowKey(workflowId, runId);
+        const existing = this.definitions.get(key);
+        if (existing) {
+            return existing;
+        }
+
+        const started = fullHistory.find(
+            (event): event is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => event.type === "WorkflowStarted"
+        );
+
+        if (!started) {
+            return undefined;
+        }
+
+        const definition = getWorkflow(started.payload.name);
+        if (!definition) {
+            return undefined;
+        }
+
+        const descriptor = getWorkflowDescriptor(started.payload.name);
+        if (
+            started.payload.workflowVersion &&
+            descriptor?.version &&
+            started.payload.workflowVersion !== descriptor.version
+        ) {
+            this.log?.warn("workflow-runtime.definitionVersionMismatch", {
+                workflowId,
+                runId,
+                workflowName: started.payload.name,
+                runVersion: started.payload.workflowVersion,
+                registryVersion: descriptor.version,
+            });
+        }
+
+        const recovered: StoredDefinition = {
+            name: started.payload.name,
+            definition,
+            input: started.payload.input,
+        };
+        this.definitions.set(key, recovered);
+        this.log?.info("workflow-runtime.definitionRecovered", {
+            workflowId,
+            runId,
+            workflowName: started.payload.name,
+        });
+        return recovered;
     }
     
     async loadCurrentState(
@@ -61,6 +147,16 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       ): Promise<WorkflowState | null> {
         const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
         const fromVersion: Version = snapshot?.version ?? 0;
+        const rehydrationStartedAt = Date.now();
+
+        if (snapshot) {
+          incSnapshotLoaded();
+          this.log?.debug("workflow-runtime.snapshotLoaded", {
+            workflowId,
+            runId,
+            snapshotVersion: snapshot.version,
+          });
+        }
       
         const events: WorkflowEvent[] = await this.eventStore.loadEvents(
           workflowId,
@@ -78,6 +174,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           events,
           snapshot?.state
         );
+        observeWorkflowRehydration(Date.now() - rehydrationStartedAt, events.length);
       
         return rehydrated.state;
     }
@@ -108,6 +205,15 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         };
 
         const persisted = await this.eventStore.appendEvents(workflowId, runId, 0 as Version, [startEvent]) as WorkflowEvent[];
+        addEventAppends(persisted.length);
+        incWorkflowStart();
+        this.log?.info("workflow-runtime.workflowStarted", {
+            workflowId,
+            runId,
+            workflowName,
+            workflowVersion,
+            tenantId,
+        });
 
         const last = persisted[persisted.length - 1];
 
@@ -126,6 +232,17 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       const correlationId = options?.correlationId;
       const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
       const fromVersion: Version | undefined = snapshot?.version;
+      const rehydrationStartedAt = Date.now();
+
+      if (snapshot) {
+        incSnapshotLoaded();
+        this.log?.debug("workflow-runtime.snapshotLoaded", {
+          workflowId,
+          runId,
+          snapshotVersion: snapshot.version,
+          correlationId,
+        });
+      }
     
       const events: WorkflowEvent[] = await this.eventStore.loadEvents(
         workflowId,
@@ -145,11 +262,13 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         events,
         snapshot?.state
       );
+      observeWorkflowRehydration(Date.now() - rehydrationStartedAt, events.length);
     
       let currentState = rehydrated.state;
       let lastEventVersion = rehydrated.lastEventVersion;
 
       const fullHistory = await this.eventStore.loadEvents(workflowId, runId, 0);
+      const defEntry = this.resolveDefinitionEntry(workflowId, runId, fullHistory);
 
       if (currentState.status !== "running") {
         return {
@@ -174,7 +293,17 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           },
         };
         const [cancelled] = await this.eventStore.appendEvents(workflowId, runId, lastEventVersion, [cancelledRaw]);
+        addEventAppends(1);
+        incWorkflowCancellation();
         currentState = this.engine.applyEvent(currentState, cancelled);
+        this.recordTerminalMetrics(currentState);
+        this.log?.info("workflow-runtime.workflowCancelled", {
+          workflowId,
+          runId,
+          correlationId,
+          reason: cancellationRequestedEvent.payload.reason,
+          requestedBy: cancellationRequestedEvent.payload.requestedBy,
+        });
         return {
           state: currentState,
           newEvents: [cancelled],
@@ -595,7 +724,9 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       };
     
       const key = makeWorkflowKey(workflowId, runId);
-      const defEntry = this.definitions.get(key);
+      if (defEntry) {
+        this.definitions.set(key, defEntry);
+      }
     
       const shouldExecuteDefinition = !!defEntry && currentState.status === "running";
     
@@ -607,6 +738,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           if (e instanceof WorkflowSuspendedError) {
             suspended = true;
           } else {
+            incWorkflowFailure();
             newDomainEvents.push({
               type: "WorkflowFailed",
               workflowId,
@@ -614,6 +746,12 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               payload: {
                 reason: e instanceof Error ? e.message : String(e),
               },
+            });
+            this.log?.error("workflow-runtime.workflowFailed", {
+              workflowId,
+              runId,
+              correlationId,
+              reason: e instanceof Error ? e.message : String(e),
             });
           }
           definitionResult = undefined;
@@ -623,12 +761,33 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       let appended: WorkflowEvent[] = [];
     
       if (newDomainEvents.length > 0) {
-        appended = await this.eventStore.appendEvents(
+        try {
+          appended = await this.eventStore.appendEvents(
+            workflowId,
+            runId,
+            lastEventVersion,
+            newDomainEvents
+          );
+        } catch (error) {
+          if (error instanceof Error && error.name === "ConcurrencyError") {
+            incConcurrencyConflict();
+            this.log?.warn("workflow-runtime.optimisticLockConflict", {
+              workflowId,
+              runId,
+              correlationId,
+              expectedVersion: lastEventVersion,
+              newEventCount: newDomainEvents.length,
+            });
+          }
+          throw error;
+        }
+        addEventAppends(appended.length);
+        this.log?.debug("workflow-runtime.eventsAppended", {
           workflowId,
           runId,
-          lastEventVersion,
-          newDomainEvents
-        );
+          correlationId,
+          count: appended.length,
+        });
         lastEventVersion = appended[appended.length - 1].version;
         const activityTasks: ActivityTask[] = [];
         const timerTasks: TimerTask[] = [];
@@ -690,6 +849,10 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         for (const task of timerTasks) {
           await this.taskQueue.enqueue(task as Task);
         }
+
+        if (appended.some((event) => event.type === "WorkflowFailed")) {
+          this.recordTerminalMetrics(currentState);
+        }
       }
     
       if (
@@ -699,6 +862,12 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         currentState.pendingTimers.length === 0 &&
         (currentState.pendingSignalWaits?.length ?? 0) === 0
       ) {
+        if (!defEntry) {
+          throw new Error(
+            `Workflow definition not available for ${workflowId}/${runId}; cannot continue a running workflow without its registered definition`
+          );
+        }
+
         const completedEvent: Omit<WorkflowEvent, "id" | "version" | "startedAt"> = {
           type: "WorkflowCompleted",
           workflowId,
@@ -715,8 +884,16 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           [completedEvent]
         );
     
+        addEventAppends(1);
+        incWorkflowCompletion();
         lastEventVersion = persistedCompleted.version;
         currentState = this.engine.applyEvent(currentState, persistedCompleted);
+        this.recordTerminalMetrics(currentState);
+        this.log?.info("workflow-runtime.workflowCompleted", {
+          workflowId,
+          runId,
+          correlationId,
+        });
         appended = [...appended, persistedCompleted];
       }
     
@@ -734,6 +911,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           version: lastEventVersion,
           state: currentState,
           createdAt: new Date().toISOString(),
+        });
+        incSnapshotCreated();
+        this.log?.debug("workflow-runtime.snapshotCreated", {
+          workflowId,
+          runId,
+          version: lastEventVersion,
+          eventsSinceSnapshot,
+          correlationId,
         });
         snapshotCreated = true;
       }

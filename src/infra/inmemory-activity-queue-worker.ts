@@ -4,6 +4,7 @@ import type { ActivityTask } from "../shared/tasks";
 import type { ActivityWorker } from "../workers/activity-worker";
 import type { Logger } from "./logger";
 import type { DeadLetterInput } from "../shared/dead-letter";
+import { incActivityTaskDequeue } from "./metrics";
 
 interface InMemoryActivityQueueWorkerDeps {
   taskQueue: TaskQueue;
@@ -35,6 +36,14 @@ export class InMemoryActivityQueueWorker {
 
     const activityTask = task as ActivityTask;
     const payload: ActivityPayload = activityTask.payload;
+    incActivityTaskDequeue();
+    this.deps.log.debug("activity-queue-worker.taskDequeued", {
+      workflowId: task.workflowId,
+      runId: task.runId,
+      activityId: activityTask.activityId,
+      activityName: activityTask.activityName,
+      correlationId: task.correlationId,
+    });
 
     try {
       await this.deps.worker.handleTask(payload);
