@@ -1,7 +1,15 @@
 export const FTN_ACCESS_TOKEN_KEY = "ftn_access_token";
 
+function defaultApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:8000`;
+  }
+  return "http://localhost:8000";
+}
+
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || "http://localhost:4000";
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || defaultApiBaseUrl();
 
 export function getAccessToken(): string | null {
   try {
