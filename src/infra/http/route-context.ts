@@ -21,7 +21,7 @@ export interface FtnAppRouteContext {
   enqueueWorkflowStart: (
     name: string,
     input: unknown,
-    opts?: { correlationId?: string; tenantId?: string }
+    opts?: { correlationId?: string; tenantId?: string; workflowVersion?: string }
   ) => Promise<{ workflowId: string; runId: string; version: number }>;
   getIntegrationsStatusForSubject: (subject: string) => Promise<
     Array<{

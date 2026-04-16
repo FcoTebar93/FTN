@@ -40,7 +40,7 @@ function toDescriptor(def: any): ActivityDescriptor {
   };
 }
 
-export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.ServerResponse, registry: ActivityRegistry, deps: { workflows: { list: () => WorkflowPublicDescriptor[]; getWorkflowDescriptor: (name: string) => WorkflowPublicDescriptor | undefined } }): Promise<boolean> {
+export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.ServerResponse, registry: ActivityRegistry, deps: { workflows: { list: () => WorkflowPublicDescriptor[]; getWorkflowDescriptor: (name: string, version?: string) => WorkflowPublicDescriptor | undefined } }): Promise<boolean> {
   if (!req.url || !req.method) return false;
 
   if (req.method === "GET" && (req.url === "/activities" || req.url.startsWith("/activities?"))) {
@@ -122,7 +122,10 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     }
   
     const name = decodeURIComponent(parts[3]);
-    const wf = deps.workflows.getWorkflowDescriptor(name);
+    const [, queryString] = req.url.split("?");
+    const params = new URLSearchParams(queryString ?? "");
+    const version = params.get("version") ?? undefined;
+    const wf = deps.workflows.getWorkflowDescriptor(name, version);
   
     if (!wf) {
       res.statusCode = 404;
