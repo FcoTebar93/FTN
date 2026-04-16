@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { getCredential, getIntegrationsStatus, listCredentials, saveCredential } from "../../api/credentials";
 import type { CredentialSummary, IntegrationStatusItem } from "../../api/types";
-import { PROVIDERS_ORDER, PROVIDER_SCHEMAS, type CredentialProvider } from "./providerSchemas";
+import {
+  PROVIDERS_ORDER,
+  PROVIDER_SCHEMAS,
+  countMissingRequiredFields,
+  getFieldErrors,
+  type CredentialProvider,
+} from "./providerSchemas";
 
 type FieldValues = Record<string, string>;
 
@@ -22,23 +28,8 @@ export function CredentialsPage() {
   const current = useMemo(() => items.find((x) => x.provider === provider), [items, provider]);
   const schema = PROVIDER_SCHEMAS[provider];
 
-  const fieldErrors = useMemo(() => {
-    const result: Record<string, string> = {};
-    for (const field of schema.fields) {
-      const value = (fieldValues[field.key] ?? "").trim();
-      if (field.required && !value) {
-        result[field.key] = "Campo obligatorio.";
-        continue;
-      }
-      if (field.validate) {
-        const err = field.validate(value, fieldValues);
-        if (err) {
-          result[field.key] = err;
-        }
-      }
-    }
-    return result;
-  }, [fieldValues, schema.fields]);
+  const fieldErrors = useMemo(() => getFieldErrors(schema, fieldValues), [fieldValues, schema]);
+  const missingRequiredCount = useMemo(() => countMissingRequiredFields(schema, fieldValues), [fieldValues, schema]);
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
 
   async function refresh() {
@@ -181,7 +172,19 @@ export function CredentialsPage() {
         <section className="credentials-editor">
           <h2>{schema.title}</h2>
           <p>{schema.description}</p>
+          {schema.requirements?.length ? (
+            <ul className="credentials-requirements">
+              {schema.requirements.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          ) : null}
           <p>Última actualización: {current?.updatedAt ? new Date(current.updatedAt).toLocaleString() : "nunca"}</p>
+          {!advancedMode && missingRequiredCount > 0 ? (
+            <p className="credentials-warning">
+              Faltan {missingRequiredCount} campo(s) obligatorio(s) para completar este provider.
+            </p>
+          ) : null}
           {statusMap[provider] && !statusMap[provider].configured ? (
             <p className="credentials-error">
               Validación: {statusMap[provider].details ?? "Configuración incompleta"}
@@ -195,7 +198,15 @@ export function CredentialsPage() {
                   isSecret && !showSecrets[field.key] ? "password" : field.type === "password" ? "text" : field.type;
                 return (
                   <label key={field.key} className="credentials-field">
-                    <span>{field.label}</span>
+                    <span className="credentials-field-label">
+                      {field.label}
+                      {field.required ? <em className="credentials-required-mark">*</em> : null}
+                      {field.description ? (
+                        <span className="credentials-help-icon" title={field.description} aria-label={`Ayuda ${field.label}`}>
+                          i
+                        </span>
+                      ) : null}
+                    </span>
                     <div className="credentials-field-input-wrap">
                       <input
                         type={inputType}
