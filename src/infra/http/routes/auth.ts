@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { readBodyCapped, extractBearerOrApiKey } from "../security";
+import { sendError, sendJson } from "../response";
 import {
   isAuthConfigured,
   isLoginConfigured,
@@ -31,9 +32,7 @@ export async function tryAuthAndAuditRoutes(
 ): Promise<boolean> {
   if (req.method === "POST" && rawPath === "/auth/login") {
     if (!isLoginConfigured(ctx.apiSecurity) && !ctx.hasDbLogin) {
-      res.statusCode = 404;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Not found" }));
+      sendError(res, 404, "Not found");
       return true;
     }
 
@@ -44,9 +43,7 @@ export async function tryAuthAndAuditRoutes(
     try {
       parsed = JSON.parse(body || "{}");
     } catch {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      sendError(res, 400, "Invalid JSON");
       return true;
     }
 
@@ -63,25 +60,19 @@ export async function tryAuthAndAuditRoutes(
     } else if (ctx.pool && ctx.apiSecurity.jwtSecret) {
       const normalized = normalizeAndValidateUsername(u);
       if (!normalized) {
-        res.statusCode = 401;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: "Invalid credentials" }));
+        sendError(res, 401, "Invalid credentials");
         return true;
       }
       const storedHash = await getUserPasswordHash(ctx.pool, normalized);
       if (!storedHash || !(await verifyPassword(p, storedHash))) {
-        res.statusCode = 401;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: "Invalid credentials" }));
+        sendError(res, 401, "Invalid credentials");
         return true;
       }
       const scopeFromDb = await getUserScopesText(ctx.pool, normalized);
       ({ token, expiresIn } = issueAccessTokenForSubject(ctx.apiSecurity, normalized, { scopeStrOverride: scopeFromDb }));
       subjectForAudit = normalized;
     } else {
-      res.statusCode = 401;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid credentials" }));
+      sendError(res, 401, "Invalid credentials");
       return true;
     }
 
@@ -102,16 +93,13 @@ export async function tryAuthAndAuditRoutes(
       action: "login",
       detail: { source: "password" },
     });
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(bodyOut));
+    sendJson(res, 200, bodyOut);
     return true;
   }
 
   if (req.method === "POST" && rawPath === "/auth/register") {
     if (!ctx.pool || !ctx.apiSecurity.registrationEnabled || !ctx.apiSecurity.jwtSecret) {
-      res.statusCode = 503;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Registration is not available" }));
+      sendError(res, 503, "Registration is not available");
       return true;
     }
 
@@ -122,9 +110,7 @@ export async function tryAuthAndAuditRoutes(
     try {
       parsed = JSON.parse(body || "{}");
     } catch {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      sendError(res, 400, "Invalid JSON");
       return true;
     }
 
@@ -132,14 +118,11 @@ export async function tryAuthAndAuditRoutes(
     const rawPass = typeof parsed.password === "string" ? parsed.password : "";
     const normalized = normalizeAndValidateUsername(rawUser);
     if (!normalized || !validatePlainPassword(rawPass)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({
-          error: "Invalid username or password",
-          detail:
-            "Usuario: 3–64 caracteres (letras, números, _, ., -). Contraseña: mínimo 10 caracteres.",
-        })
+      sendError(
+        res,
+        400,
+        "Invalid username or password",
+        "Usuario: 3–64 caracteres (letras, números, _, ., -). Contraseña: mínimo 10 caracteres."
       );
       return true;
     }
@@ -147,9 +130,7 @@ export async function tryAuthAndAuditRoutes(
     const passwordHash = await hashPassword(rawPass);
     const inserted = await insertUser(ctx.pool, normalized, passwordHash);
     if (inserted === "duplicate") {
-      res.statusCode = 409;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Username already taken" }));
+      sendError(res, 409, "Username already taken");
       return true;
     }
 
@@ -170,17 +151,13 @@ export async function tryAuthAndAuditRoutes(
       subject: normalized,
       action: "register",
     });
-    res.statusCode = 201;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(bodyReg));
+    sendJson(res, 201, bodyReg);
     return true;
   }
 
   if (req.method === "POST" && rawPath === "/auth/refresh") {
     if (!ctx.pool || !ctx.apiSecurity.jwtSecret) {
-      res.statusCode = 503;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Refresh is not available" }));
+      sendError(res, 503, "Refresh is not available");
       return true;
     }
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
@@ -189,48 +166,37 @@ export async function tryAuthAndAuditRoutes(
     try {
       parsed = JSON.parse(body || "{}");
     } catch {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      sendError(res, 400, "Invalid JSON");
       return true;
     }
     const rt = typeof parsed.refresh_token === "string" ? parsed.refresh_token : "";
     if (!rt.trim()) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Missing refresh_token" }));
+      sendError(res, 400, "Missing refresh_token");
       return true;
     }
     const consumed = await consumeRefreshToken(ctx.pool, rt.trim());
     if (!consumed) {
-      res.statusCode = 401;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid refresh token" }));
+      sendError(res, 401, "Invalid refresh token");
       return true;
     }
     const scopeFromDb = await getUserScopesText(ctx.pool, consumed.username);
     const issued = issueAccessTokenForSubject(ctx.apiSecurity, consumed.username, { scopeStrOverride: scopeFromDb });
     const refreshRaw = newRefreshTokenRaw();
     await storeRefreshToken(ctx.pool, consumed.username, refreshRaw, new Date(Date.now() + ctx.refreshTtlSeconds * 1000));
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        access_token: issued.token,
-        token_type: "Bearer",
-        expires_in: issued.expiresIn,
-        refresh_token: refreshRaw,
-        refresh_expires_in: ctx.refreshTtlSeconds,
-      })
-    );
+    sendJson(res, 200, {
+      access_token: issued.token,
+      token_type: "Bearer",
+      expires_in: issued.expiresIn,
+      refresh_token: refreshRaw,
+      refresh_expires_in: ctx.refreshTtlSeconds,
+    });
     return true;
   }
 
   if (req.method === "POST" && rawPath === "/auth/logout") {
     const rawTok = extractBearerOrApiKey(req);
     if (!rawTok || !ctx.apiSecurity.jwtSecret) {
-      res.statusCode = 401;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Unauthorized" }));
+      sendError(res, 401, "Unauthorized");
       return true;
     }
     const payload = verifyJwtHs256(rawTok, ctx.apiSecurity.jwtSecret, {
@@ -239,9 +205,7 @@ export async function tryAuthAndAuditRoutes(
     });
     const jti = typeof payload?.jti === "string" ? payload.jti : undefined;
     if (!jti) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Token cannot be revoked (missing jti)" }));
+      sendError(res, 400, "Token cannot be revoked (missing jti)");
       return true;
     }
     const expSec = typeof payload?.exp === "number" ? payload.exp : Math.floor(Date.now() / 1000) + ctx.apiSecurity.jwtTtlSeconds;
@@ -254,16 +218,13 @@ export async function tryAuthAndAuditRoutes(
       subject: sub ?? "unknown",
       action: "logout",
     });
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ ok: true }));
+    sendJson(res, 200, { ok: true });
     return true;
   }
 
   if (req.method === "GET" && rawPath === "/audit/logs") {
     if (!ctx.pool) {
-      res.statusCode = 503;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Audit log requires Postgres" }));
+      sendError(res, 503, "Audit log requires Postgres");
       return true;
     }
     const auditUrl = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -272,20 +233,16 @@ export async function tryAuthAndAuditRoutes(
       `SELECT occurred_at, subject, action, resource, detail_json FROM ftn_audit_log ORDER BY occurred_at DESC LIMIT $1`,
       [lim]
     );
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ items: r.rows }));
+    sendJson(res, 200, { items: r.rows });
     return true;
   }
 
   if (req.method === "GET" && rawPath === "/auth/status") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        loginConfigured: isLoginConfigured(ctx.apiSecurity) || ctx.hasDbLogin,
-        authRequired: isAuthConfigured(ctx.apiSecurity),
-        registrationEnabled: Boolean(ctx.apiSecurity.registrationEnabled && ctx.pool),
-      })
-    );
+    sendJson(res, 200, {
+      loginConfigured: isLoginConfigured(ctx.apiSecurity) || ctx.hasDbLogin,
+      authRequired: isAuthConfigured(ctx.apiSecurity),
+      registrationEnabled: Boolean(ctx.apiSecurity.registrationEnabled && ctx.pool),
+    });
     return true;
   }
 

@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { readBodyCapped } from "../security";
+import { sendError, sendJson } from "../response";
 import type { StoredWorkflow } from "../../../app/designer-types";
 import {
   getDesignerRuntimeName,
@@ -20,22 +21,19 @@ export async function tryDesignerReadRoutes(
   rawPath: string
 ): Promise<boolean> {
   if (req.method === "GET" && req.url === "/designer/kinds") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(DESIGNER_KINDS));
+    sendJson(res, 200, DESIGNER_KINDS);
     return true;
   }
 
   if (req.method === "GET" && (rawPath === "/integrations/status" || rawPath.startsWith("/integrations/status?"))) {
     const items = await ctx.getIntegrationsStatusForSubject(ctx.requestSubject);
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ items }));
+    sendJson(res, 200, { items });
     return true;
   }
 
   if (req.method === "GET" && (req.url === "/designer/workflows" || req.url?.startsWith("/designer/workflows?"))) {
     const items = await listStoredWorkflows(ctx.requestSubject);
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(items));
+    sendJson(res, 200, items);
     return true;
   }
 
@@ -56,8 +54,7 @@ export async function tryDesignerReadRoutes(
       return true;
     }
 
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(wf));
+    sendJson(res, 200, wf);
     return true;
   }
 
@@ -91,17 +88,13 @@ export async function tryDesignerWriteRoutes(
       const normalized = normalizeStoredWorkflow(parsed);
       const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
       if (schedErr) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: schedErr }));
+        sendError(res, 400, schedErr);
         return true;
       }
 
       const graphErr = validateDesignerWorkflow(normalized);
       if (graphErr) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: graphErr }));
+        sendError(res, 400, graphErr);
         return true;
       }
 
@@ -115,23 +108,17 @@ export async function tryDesignerWriteRoutes(
             { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
           );
         } catch (e) {
-          res.statusCode = 201;
-          res.setHeader("Content-Type", "application/json");
-          res.end(
-            JSON.stringify({
-              ok: true,
-              id: normalized.id,
-              version: normalized.version,
-              instantRunError: String((e as Error).message),
-            })
-          );
+          sendJson(res, 201, {
+            ok: true,
+            id: normalized.id,
+            version: normalized.version,
+            instantRunError: String((e as Error).message),
+          });
           return true;
         }
       }
 
-      res.setHeader("Content-Type", "application/json");
-      res.statusCode = 201;
-      res.end(JSON.stringify({ ok: true, id: normalized.id, version: normalized.version }));
+      sendJson(res, 201, { ok: true, id: normalized.id, version: normalized.version });
     } catch (e) {
       res.statusCode = 400;
       res.end(`Invalid JSON: ${(e as Error).message}`);
@@ -166,24 +153,19 @@ export async function tryDesignerWriteRoutes(
       const normalized = normalizeStoredWorkflow(stored);
       const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
       if (schedErr) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: schedErr }));
+        sendError(res, 400, schedErr);
         return true;
       }
 
       const graphErrPut = validateDesignerWorkflow(normalized);
       if (graphErrPut) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: graphErrPut }));
+        sendError(res, 400, graphErrPut);
         return true;
       }
 
       await upsertStoredWorkflow(ctx.requestSubject, normalized);
 
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ ok: true, id: normalized.id, version: normalized.version }));
+      sendJson(res, 200, { ok: true, id: normalized.id, version: normalized.version });
     } catch (e) {
       res.statusCode = 400;
       res.end(`Invalid JSON: ${(e as Error).message}`);
@@ -194,17 +176,13 @@ export async function tryDesignerWriteRoutes(
   if (req.method === "POST" && rawPath.startsWith("/designer/workflows/") && rawPath.endsWith("/test-run")) {
     const parts = rawPath.split("/").filter(Boolean);
     if (parts.length !== 4 || parts[0] !== "designer" || parts[1] !== "workflows" || parts[3] !== "test-run") {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Expected POST /designer/workflows/:id/test-run" }));
+      sendError(res, 400, "Expected POST /designer/workflows/:id/test-run");
       return true;
     }
     const id = decodeURIComponent(parts[2]);
     const wf = await getStoredWorkflow(ctx.requestSubject, id);
     if (wf === undefined) {
-      res.statusCode = 404;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Designer workflow not found" }));
+      sendError(res, 404, "Designer workflow not found");
       return true;
     }
     const bodyTr = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
@@ -220,9 +198,7 @@ export async function tryDesignerWriteRoutes(
         }
       }
     } catch {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      sendError(res, 400, "Invalid JSON body");
       return true;
     }
     try {
@@ -231,13 +207,9 @@ export async function tryDesignerWriteRoutes(
         input,
         { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
       );
-      res.statusCode = 201;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ workflowId, runId, version }));
+      sendJson(res, 201, { workflowId, runId, version });
     } catch (e) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: (e as Error).message }));
+      sendError(res, 400, (e as Error).message);
     }
     return true;
   }

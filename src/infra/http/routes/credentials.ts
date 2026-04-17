@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { readBodyCapped } from "../security";
+import { sendError, sendJson } from "../response";
 import { insertAuditLog } from "../../users";
 import { getCredential, listCredentials, upsertCredential } from "../../../app/credentials";
 import type { FtnAppRouteContext } from "../route-context";
@@ -12,8 +13,7 @@ export async function tryCredentialsRoutes(
 ): Promise<boolean> {
   if (req.method === "GET" && (rawPath === "/credentials" || rawPath.startsWith("/credentials?"))) {
     const items = await listCredentials(ctx.requestSubject);
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(items));
+    sendJson(res, 200, items);
     return true;
   }
 
@@ -60,9 +60,7 @@ export async function tryCredentialsRoutes(
           ? (parsed.secrets as Record<string, unknown>)
           : undefined;
       if (!config && !secrets) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: "Payload must include config or secrets object" }));
+        sendError(res, 400, "Payload must include config or secrets object");
         return true;
       }
       const saved = await upsertCredential(ctx.requestSubject, provider, { config, secrets });
@@ -72,12 +70,9 @@ export async function tryCredentialsRoutes(
         resource: provider,
         detail: { hasConfig: Boolean(config), hasSecrets: Boolean(secrets) },
       });
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(saved));
+      sendJson(res, 200, saved);
     } catch (e) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: (e as Error).message }));
+      sendError(res, 400, (e as Error).message);
     }
     return true;
   }
