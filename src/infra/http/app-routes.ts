@@ -1,4 +1,5 @@
 import type http from "node:http";
+import { getPathname } from "./url";
 
 export type { FtnAppRouteContext } from "./route-context";
 
@@ -22,7 +23,7 @@ export async function handleAppRoutes(
     return;
   }
 
-  const rawPath = req.url.split("?")[0] ?? "";
+  const rawPath = getPathname(req.url);
 
   if (await tryAuthAndAuditRoutes(ctx, req, res, rawPath)) return;
   if (await trySystemRoutes(ctx, req, res, rawPath)) return;
