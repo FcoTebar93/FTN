@@ -22,7 +22,7 @@ export async function buildIntegrationsStatusForSubject(
   subject: string,
   deps: BuildIntegrationsStatusDeps
 ): Promise<IntegrationStatusItem[]> {
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? {};
   const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
   const obj = (v: unknown): Record<string, unknown> =>
     v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

@@ -8,6 +8,7 @@ import { createRateLimiter } from "./http/security";
 import { getUserPasswordHash, insertUser } from "./users";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword } from "./passwords";
+import { configureCredentialsEncryptionKey } from "./credentials";
 
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
 import { configureCredentialsStore, getCredential } from "../app/credentials";
@@ -23,7 +24,7 @@ import { bootstrapHttpServer } from "./bootstrap/http";
 import { loadAppConfig } from "./config";
 import { registerShutdownHooks, startLifecycle } from "./bootstrap/lifecycle";
 
-function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
+function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv): void {
   if (env.NODE_ENV !== "production") {
     return;
   }
@@ -46,7 +47,8 @@ function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.
 }
 
 async function main(): Promise<void> {
-  const config = loadAppConfig();
+  const config = loadAppConfig(process.env);
+  configureCredentialsEncryptionKey(config.credentialsEncryptionKey);
   const log = createLogger({ useJson: config.logFormatJson });
   initFtnTelemetry({
     disabled: config.otelDisabled,
@@ -203,6 +205,8 @@ async function main(): Promise<void> {
     listDeadLetters,
     requeueDeadLetter,
     acknowledgeDeadLetter,
+    stripeSecretKey: config.stripeSecretKey,
+    stripeWebhookSecret: config.stripeWebhookSecret,
     listWorkflowsPublic: () =>
       listWorkflows().map((w) => ({
         name: w.name,

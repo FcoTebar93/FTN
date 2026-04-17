@@ -1,9 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const ALGO = "aes-256-gcm";
+let configuredKeyRaw: string | undefined;
 
-function keyFromEnv(): Buffer {
-  const raw = process.env.FTN_CREDENTIALS_ENCRYPTION_KEY?.trim();
+export function configureCredentialsEncryptionKey(raw: string | undefined): void {
+  configuredKeyRaw = raw?.trim() || undefined;
+}
+
+function keyFromConfig(): Buffer {
+  const raw = configuredKeyRaw;
   if (!raw) {
     throw new Error("FTN_CREDENTIALS_ENCRYPTION_KEY no configurada");
   }
@@ -19,7 +24,7 @@ function keyFromEnv(): Buffer {
 }
 
 export function encryptCredentials(plain: Record<string, unknown>): string {
-  const key = keyFromEnv();
+  const key = keyFromConfig();
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALGO, key, iv);
   const plaintext = Buffer.from(JSON.stringify(plain), "utf8");
@@ -29,7 +34,7 @@ export function encryptCredentials(plain: Record<string, unknown>): string {
 }
 
 export function decryptCredentials(payload: string): Record<string, unknown> {
-  const key = keyFromEnv();
+  const key = keyFromConfig();
   const parts = payload.split(".");
   if (parts.length !== 3) {
     throw new Error("Payload de credenciales cifradas inválido");

@@ -42,6 +42,7 @@ export interface AppConfig {
   ftnHttpAllowPrivateUrls: boolean;
   ftnPaymentsDisabled: boolean;
   stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
   sendgridApiKey?: string;
   emailFrom?: string;
   slackWebhookUrl?: string;
@@ -50,13 +51,14 @@ export interface AppConfig {
   twilioFromNumber?: string;
   kycProviderUrl?: string;
   kycProviderToken?: string;
+  credentialsEncryptionKey?: string;
   logFormatJson: boolean;
   otelDisabled: boolean;
   otelServiceName: string;
   apiSecurity: ApiSecurityConfig;
 }
 
-export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {
     rawEnv: env,
     systemSubject: toTrimmed(env.FTN_SYSTEM_SUBJECT) ?? "system",
@@ -89,6 +91,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ftnHttpAllowPrivateUrls: parseBoolean(env.FTN_HTTP_ALLOW_PRIVATE_URLS),
     ftnPaymentsDisabled: parseBoolean(env.FTN_PAYMENTS_DISABLED),
     stripeSecretKey: toTrimmed(env.STRIPE_SECRET_KEY),
+    stripeWebhookSecret: toTrimmed(env.STRIPE_WEBHOOK_SECRET),
     sendgridApiKey: toTrimmed(env.SENDGRID_API_KEY),
     emailFrom: toTrimmed(env.EMAIL_FROM ?? env.SMTP_FROM),
     slackWebhookUrl: toTrimmed(env.SLACK_WEBHOOK_URL),
@@ -97,6 +100,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     twilioFromNumber: toTrimmed(env.TWILIO_FROM_NUMBER ?? env.TWILIO_PHONE_NUMBER),
     kycProviderUrl: toTrimmed(env.KYC_PROVIDER_URL),
     kycProviderToken: toTrimmed(env.KYC_PROVIDER_TOKEN),
+    credentialsEncryptionKey: toTrimmed(env.FTN_CREDENTIALS_ENCRYPTION_KEY),
     logFormatJson: (env.LOG_FORMAT ?? "").trim() === "json",
     otelDisabled: parseBoolean(env.FTN_OTEL_DISABLED),
     otelServiceName: toTrimmed(env.OTEL_SERVICE_NAME) ?? "ftn-workflow-engine",
