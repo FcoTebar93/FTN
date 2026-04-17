@@ -1,17 +1,17 @@
 declare module "pg" {
-  export interface QueryResult<T = any> {
+  export interface QueryResult<T = unknown> {
     rowCount?: number;
     rows: T[];
   }
 
   export interface PoolClient {
-    query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>>;
+    query<T = unknown>(text: string, params?: unknown[]): Promise<QueryResult<T>>;
     release(): void;
   }
 
   export class Pool {
     constructor(opts: { connectionString: string; max?: number });
-    query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>>;
+    query<T = unknown>(text: string, params?: unknown[]): Promise<QueryResult<T>>;
     connect(): Promise<PoolClient>;
     end(): Promise<void>;
   }

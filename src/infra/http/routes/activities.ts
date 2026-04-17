@@ -50,7 +50,7 @@ export async function tryActivitiesRoutes(
     }
 
     const name = decodeURIComponent(parts[2]);
-    const def = ctx.activities.get(name as any);
+    const def = ctx.activities.get(name);
     if (!def) {
       res.statusCode = 404;
       res.end("Activity not found");
