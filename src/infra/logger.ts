@@ -7,6 +7,10 @@ export interface Logger {
   error(msg: string, fields?: Record<string, unknown>): void;
 }
 
+interface CreateLoggerOptions {
+  useJson?: boolean;
+}
+
 function jsonLine(level: LogLevel, msg: string, fields?: Record<string, unknown>): string {
   return JSON.stringify({
     ts: new Date().toISOString(),
@@ -16,8 +20,8 @@ function jsonLine(level: LogLevel, msg: string, fields?: Record<string, unknown>
   });
 }
 
-export function createLogger(): Logger {
-  const useJson = process.env.LOG_FORMAT === "json";
+export function createLogger(options: CreateLoggerOptions = {}): Logger {
+  const useJson = options.useJson ?? false;
 
   const write = (level: LogLevel, msg: string, fields?: Record<string, unknown>) => {
     const line = useJson

@@ -50,6 +50,9 @@ export interface AppConfig {
   twilioFromNumber?: string;
   kycProviderUrl?: string;
   kycProviderToken?: string;
+  logFormatJson: boolean;
+  otelDisabled: boolean;
+  otelServiceName: string;
   apiSecurity: ApiSecurityConfig;
 }
 
@@ -94,6 +97,9 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     twilioFromNumber: toTrimmed(env.TWILIO_FROM_NUMBER ?? env.TWILIO_PHONE_NUMBER),
     kycProviderUrl: toTrimmed(env.KYC_PROVIDER_URL),
     kycProviderToken: toTrimmed(env.KYC_PROVIDER_TOKEN),
+    logFormatJson: (env.LOG_FORMAT ?? "").trim() === "json",
+    otelDisabled: parseBoolean(env.FTN_OTEL_DISABLED),
+    otelServiceName: toTrimmed(env.OTEL_SERVICE_NAME) ?? "ftn-workflow-engine",
     apiSecurity: loadApiSecurityConfigFromEnv(env),
   };
 }

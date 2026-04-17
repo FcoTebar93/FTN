@@ -47,8 +47,11 @@ function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.
 
 async function main(): Promise<void> {
   const config = loadAppConfig();
-  const log = createLogger();
-  initFtnTelemetry();
+  const log = createLogger({ useJson: config.logFormatJson });
+  initFtnTelemetry({
+    disabled: config.otelDisabled,
+    serviceName: config.otelServiceName,
+  });
   const engine = new DefaultWorkflowEngine();
 
   const { pool, eventStore, snapshotStore } = await bootstrapPersistence({

@@ -3,13 +3,20 @@ import { Resource } from "@opentelemetry/resources";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 
 let providerRegistered = false;
+let telemetryDisabled = false;
+
+interface TelemetryOptions {
+  disabled?: boolean;
+  serviceName?: string;
+}
 
 /** Registra un tracer global (exportador no configurado: trazas listas para enganchar OTLP en despliegue). */
-export function initFtnTelemetry(): void {
-  if (providerRegistered || process.env.FTN_OTEL_DISABLED === "1" || process.env.FTN_OTEL_DISABLED === "true") {
+export function initFtnTelemetry(options: TelemetryOptions = {}): void {
+  telemetryDisabled = options.disabled ?? false;
+  if (providerRegistered || telemetryDisabled) {
     return;
   }
-  const serviceName = process.env.OTEL_SERVICE_NAME?.trim() || "ftn-workflow-engine";
+  const serviceName = options.serviceName?.trim() || "ftn-workflow-engine";
   const provider = new NodeTracerProvider({
     resource: new Resource({ "service.name": serviceName }),
   });
@@ -23,7 +30,7 @@ export async function runWithHttpSpan(
   fn: () => Promise<void>,
   opts?: { correlationId?: string; requestId?: string }
 ): Promise<void> {
-  if (process.env.FTN_OTEL_DISABLED === "1" || process.env.FTN_OTEL_DISABLED === "true") {
+  if (telemetryDisabled) {
     await fn();
     return;
   }
