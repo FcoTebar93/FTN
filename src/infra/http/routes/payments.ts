@@ -1,9 +1,9 @@
 import type http from "node:http";
 import Stripe from "stripe";
-import type { WorkflowTask } from "../../../shared/tasks";
 import { readBodyCapped } from "../security";
 import type { FtnAppRouteContext } from "../route-context";
 import { sendJson } from "../response";
+import { buildWorkflowTask } from "../../../shared/task-factories";
 
 export async function tryPaymentsRoutes(
   ctx: FtnAppRouteContext,
@@ -95,17 +95,13 @@ export async function tryPaymentsRoutes(
               },
             ]);
 
-            const task: WorkflowTask = {
+            const task = buildWorkflowTask({
               id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
-              type: "workflow",
               workflowId,
               runId,
-              createdAt: new Date().toISOString(),
-              scheduledAt: new Date().toISOString(),
-              workerType: "workflow",
               targetQueue: "workflows",
               correlationId: ctx.correlationId,
-            };
+            });
 
             await ctx.taskQueue.enqueue(task);
           }
