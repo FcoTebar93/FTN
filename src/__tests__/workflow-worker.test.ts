@@ -11,7 +11,7 @@ import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-
 import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import type { WorkflowRuntime } from "../modules/workflow-runtime";
-import type { ActivityTask } from "../shared/tasks";
+import type { ActivityTask, WorkflowTask } from "../shared/tasks";
 import { ConcurrencyError } from "../modules/event-store";
 import type { Logger } from "../infra/logger";
 
@@ -254,7 +254,7 @@ describe("InMemoryWorkflowWorker", () => {
     assert.equal(requeued.task.type, "workflow");
     assert.equal(requeued.task.workflowId, workflowId);
     assert.equal(requeued.task.runId, runId);
-    assert.equal((requeued.task as any).retryCount, 1);
+    assert.equal((requeued.task as WorkflowTask).retryCount, 1);
     await taskQueue.completeTask(requeued.leaseId);
   });
 
