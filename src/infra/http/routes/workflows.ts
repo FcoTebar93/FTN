@@ -5,6 +5,7 @@ import { matchHttpTrigger } from "../../../app/triggers";
 import { readBodyCapped } from "../security";
 import { validateJson } from "../../../shared/json-schema-validate";
 import type { FtnAppRouteContext } from "../route-context";
+import { getPathname } from "../url";
 
 export async function tryWorkflowsRoutes(
   ctx: FtnAppRouteContext,
@@ -21,7 +22,7 @@ export async function tryWorkflowsRoutes(
     }
   };
 
-  if (req.method === "POST" && url.split("?")[0] === "/workflows") {
+  if (req.method === "POST" && getPathname(url) === "/workflows") {
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
     if (body === null) return true;
     try {
@@ -166,7 +167,7 @@ export async function tryWorkflowsRoutes(
     return true;
   }
 
-  const pathOnlyTrigger = (req.url ?? "").split("?")[0];
+  const pathOnlyTrigger = getPathname(req.url);
   const trigger = matchHttpTrigger(req.method ?? "GET", pathOnlyTrigger);
 
   if (trigger) {
@@ -225,7 +226,7 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/events")) {
-    const parts = url.split("?")[0].split("/");
+    const parts = getPathname(url).split("/");
     if (parts.length !== 5) {
       res.statusCode = 400;
       res.end("Expected /workflows/:workflowId/:runId/events");
@@ -245,7 +246,7 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/steps")) {
-    const parts = url.split("?")[0].split("/");
+    const parts = getPathname(url).split("/");
     if (parts.length !== 5) {
       res.statusCode = 400;
       res.end("Expected /workflows/:workflowId/:runId/steps");
@@ -265,7 +266,7 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/workflows/")) {
-    const pathOnlyWf = url.split("?")[0];
+    const pathOnlyWf = getPathname(url);
     const parts = pathOnlyWf.split("/");
     if (parts.length !== 4) {
       res.statusCode = 400;
@@ -341,8 +342,7 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "POST" && url.startsWith("/workflows/") && url.endsWith("/cancel")) {
-    const parts = url.split("?");
-    const pathOnly = parts[0] ?? "";
+    const pathOnly = getPathname(url);
     const pathParts = pathOnly.split("/");
     if (pathParts.length !== 5) {
       res.statusCode = 400;

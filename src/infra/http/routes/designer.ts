@@ -11,6 +11,7 @@ import { normalizeStoredWorkflow, validateSchedule } from "../../../app/designer
 import { validateDesignerWorkflow } from "../../../app/designer-validate";
 import { DESIGNER_KINDS } from "../../../app/designer-kinds";
 import type { FtnAppRouteContext } from "../route-context";
+import { getPathname } from "../url";
 
 export async function tryDesignerReadRoutes(
   ctx: FtnAppRouteContext,
@@ -39,7 +40,7 @@ export async function tryDesignerReadRoutes(
   }
 
   if (req.method === "GET" && req.url?.startsWith("/designer/workflows/")) {
-    const pathOnly = req.url.split("?")[0];
+    const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
       res.statusCode = 400;
@@ -139,7 +140,7 @@ export async function tryDesignerWriteRoutes(
   }
 
   if (req.method === "PUT" && req.url?.startsWith("/designer/workflows/")) {
-    const pathOnly = req.url.split("?")[0];
+    const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
       res.statusCode = 400;

@@ -1,5 +1,6 @@
 import type http from "node:http";
 import type { FtnAppRouteContext } from "../route-context";
+import { getPathname } from "../url";
 
 export async function tryActivitiesRoutes(
   ctx: FtnAppRouteContext,
@@ -40,7 +41,7 @@ export async function tryActivitiesRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/activities/")) {
-    const pathOnlyAct = url.split("?")[0];
+    const pathOnlyAct = getPathname(url);
     const parts = pathOnlyAct.split("/");
     if (parts.length !== 3) {
       res.statusCode = 400;
