@@ -1,14 +1,7 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import { Pool } from "pg";
-import Redis from "ioredis";
 
 import { DefaultWorkflowEngine } from "../core/default-engine";
-import { InMemoryEventStore } from "./inmemory-event-store";
-import { InMemorySnapshotStore } from "./inmemory-snapshot-store";
-import { InMemoryTaskQueue } from "./inmemory-task-queue";
-import { RedisTaskQueue } from "./redis-task-queue";
-import type { TaskQueue } from "../modules/task-queue";
 import { InMemoryWorkflowRuntime } from "./inmemory-workflow-runtime";
 
 import { InMemoryWorkflowWorker } from "./inmemory-workflow-worker";
@@ -35,14 +28,13 @@ import { incHttpForbidden, incHttpRateLimited, incHttpRequest, incHttpUnauthoriz
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
 import { runScheduledWorkflowTick } from "../app/designer-scheduler";
 import { configureCredentialsStore, getCredential } from "../app/credentials";
-import { runPostgresMigrations } from "./postgres-migrations";
-import { PostgresEventStore } from "./postgres-event-store";
-import { PostgresSnapshotStore } from "./postgres-snapshot-store";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { initFtnTelemetry, runWithHttpSpan } from "./telemetry";
 import { createWorkflowStartService } from "./workflow-start-service";
 import { getPathname } from "./http/url";
+import { bootstrapPersistence } from "./bootstrap/persistence";
+import { bootstrapTaskQueue } from "./bootstrap/task-queue";
 
 function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
   if (env.NODE_ENV !== "production") {
@@ -71,36 +63,12 @@ async function main(): Promise<void> {
   initFtnTelemetry();
   const engine = new DefaultWorkflowEngine();
 
-  const engineDsUrl = (process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL)?.trim();
-  let pool: Pool | undefined;
-  if (engineDsUrl) {
-    pool = new Pool({ connectionString: engineDsUrl });
-    await runPostgresMigrations(pool);
-    log.info("ftn.engine.persistence", { backend: "postgres" });
-  } else {
-    log.info("ftn.engine.persistence", { backend: "memory" });
-  }
+  const { pool, eventStore, snapshotStore } = await bootstrapPersistence(log);
 
   configureDesignerStore(pool);
   configureCredentialsStore(pool);
 
-  const eventStore = pool ? new PostgresEventStore(pool) : new InMemoryEventStore();
-  const snapshotStore = pool ? new PostgresSnapshotStore(pool) : new InMemorySnapshotStore();
-
-  let redis: Redis | undefined;
-  const redisUrl = process.env.REDIS_URL?.trim();
-  let taskQueue: TaskQueue;
-  let redisTaskQueue: RedisTaskQueue | undefined;
-  if (redisUrl) {
-    redis = new Redis(redisUrl, { maxRetriesPerRequest: 2 });
-    const keyPrefix = process.env.FTN_REDIS_KEY_PREFIX?.trim();
-    redisTaskQueue = new RedisTaskQueue(redis, keyPrefix ? { keyPrefix } : {});
-    taskQueue = redisTaskQueue;
-    log.info("ftn.taskQueue", { backend: "redis" });
-  } else {
-    taskQueue = new InMemoryTaskQueue();
-    log.info("ftn.taskQueue", { backend: "memory" });
-  }
+  const { redis, redisTaskQueue, taskQueue, redisUrl } = bootstrapTaskQueue(log);
 
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const systemSubject = process.env.FTN_SYSTEM_SUBJECT?.trim() || "system";
