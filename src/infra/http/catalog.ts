@@ -1,6 +1,7 @@
 import type http from "node:http";
 import type { ActivityRegistry } from "../../core/activity-registry";
 import { JsonSchema } from "../../shared/json-schema";
+import { getPathname } from "./url";
 
 export interface ActivityDescriptor {
   name: string;
@@ -72,7 +73,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
   }
 
   if (req.method === "GET" && req.url.startsWith("/activities/")) {
-    const pathOnly = req.url.split("?")[0];
+    const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
 
     if (parts.length !== 3) {
@@ -113,7 +114,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
   }
   
   if (req.method === "GET" && req.url.startsWith("/catalog/workflows/")) {
-    const pathOnly = req.url.split("?")[0];
+    const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
       res.statusCode = 400;

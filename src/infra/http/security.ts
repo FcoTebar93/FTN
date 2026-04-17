@@ -1,13 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type http from "node:http";
 
-export class PayloadTooLargeError extends Error {
-  constructor() {
-    super("Payload too large");
-    this.name = "PayloadTooLargeError";
-  }
-}
-
 export interface ApiSecurityConfig {
   corsOrigins: string[];
   apiKey?: string;

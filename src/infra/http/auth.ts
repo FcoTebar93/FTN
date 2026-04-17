@@ -3,6 +3,7 @@ import type http from "node:http";
 
 import type { ApiSecurityConfig } from "./security";
 import { extractBearerOrApiKey, isPublicPath } from "./security";
+import { getPathname } from "./url";
 
 export const FTN_SCOPES = {
   catalogRead: "catalog:read",
@@ -268,7 +269,7 @@ export function authenticatePrincipal(
 }
 
 export function requiredScopesForRoute(method: string, pathWithoutQuery: string): string[] {
-  const p = pathWithoutQuery.split("?")[0] ?? "";
+  const p = getPathname(pathWithoutQuery);
 
   if (method === "GET" && (p === "/activities" || p.startsWith("/activities/"))) {
     return [FTN_SCOPES.catalogRead];
