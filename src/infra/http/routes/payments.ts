@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import type { WorkflowTask } from "../../../shared/tasks";
 import { readBodyCapped } from "../security";
 import type { FtnAppRouteContext } from "../route-context";
+import { sendJson } from "../response";
 
 export async function tryPaymentsRoutes(
   ctx: FtnAppRouteContext,
@@ -43,8 +44,7 @@ export async function tryPaymentsRoutes(
           metadata,
         });
 
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ sessionId: session.id, url: session.url }));
+        sendJson(res, 200, { sessionId: session.id, url: session.url });
       } catch (e) {
         res.statusCode = 500;
         res.end(`Error creating checkout: ${(e as Error).message}`);

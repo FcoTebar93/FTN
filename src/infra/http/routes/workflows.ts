@@ -6,6 +6,7 @@ import { readBodyCapped } from "../security";
 import { validateJson } from "../../../shared/json-schema-validate";
 import type { FtnAppRouteContext } from "../route-context";
 import { getPathname } from "../url";
+import { sendError, sendJson } from "../response";
 
 export async function tryWorkflowsRoutes(
   ctx: FtnAppRouteContext,
@@ -33,9 +34,7 @@ export async function tryWorkflowsRoutes(
           ? parsed.workflowVersion.trim()
           : undefined;
       if (!name) {
-        res.statusCode = 400;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ error: "Missing name" }));
+        sendError(res, 400, "Missing name");
         return true;
       }
       const input = parsed.input;
@@ -53,25 +52,15 @@ export async function tryWorkflowsRoutes(
             previous.inputHash !== inputHash ||
             (previous.tenantId ?? "") !== (ctx.tenantId ?? "")
           ) {
-            res.statusCode = 409;
-            res.setHeader("Content-Type", "application/json");
-            res.end(
-              JSON.stringify({
-                error: "Idempotency key already used with a different payload",
-              })
-            );
+            sendError(res, 409, "Idempotency key already used with a different payload");
             return true;
           }
-          res.statusCode = 200;
-          res.setHeader("Content-Type", "application/json");
           res.setHeader("Idempotency-Replayed", "true");
-          res.end(
-            JSON.stringify({
-              workflowId: previous.workflowId,
-              runId: previous.runId,
-              version: previous.version,
-            })
-          );
+          sendJson(res, 200, {
+            workflowId: previous.workflowId,
+            runId: previous.runId,
+            version: previous.version,
+          });
           return true;
         }
       }
@@ -91,13 +80,9 @@ export async function tryWorkflowsRoutes(
         });
       }
 
-      res.statusCode = 201;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ workflowId, runId, version }));
+      sendJson(res, 201, { workflowId, runId, version });
     } catch (e) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: (e as Error).message }));
+      sendError(res, 400, (e as Error).message);
     }
     return true;
   }
@@ -162,8 +147,7 @@ export async function tryWorkflowsRoutes(
       });
     }
 
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(summaries));
+    sendJson(res, 200, summaries);
     return true;
   }
 
@@ -187,9 +171,7 @@ export async function tryWorkflowsRoutes(
       if (descriptor?.inputSchema) {
         const result = validateJson(descriptor.inputSchema, input);
         if (!result.valid) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Invalid input", details: result.errors }));
+          sendError(res, 400, "Invalid input", result.errors);
           return true;
         }
       }
@@ -216,8 +198,7 @@ export async function tryWorkflowsRoutes(
 
       await ctx.taskQueue.enqueue(task);
 
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ workflowId, runId }));
+      sendJson(res, 200, { workflowId, runId });
     } catch (e) {
       res.statusCode = 500;
       res.end(`Error handling trigger: ${(e as Error).message}`);
@@ -240,8 +221,7 @@ export async function tryWorkflowsRoutes(
       res.end("No events found");
       return true;
     }
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(events));
+    sendJson(res, 200, events);
     return true;
   }
 
@@ -260,8 +240,7 @@ export async function tryWorkflowsRoutes(
       res.end("Workflow not found");
       return true;
     }
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(state.steps));
+    sendJson(res, 200, state.steps);
     return true;
   }
 
@@ -281,8 +260,7 @@ export async function tryWorkflowsRoutes(
       res.end("Workflow not found");
       return true;
     }
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(state));
+    sendJson(res, 200, state);
     return true;
   }
 
@@ -332,8 +310,7 @@ export async function tryWorkflowsRoutes(
 
       await ctx.taskQueue.enqueue(task);
 
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ ok: true }));
+      sendJson(res, 200, { ok: true });
     } catch (e) {
       res.statusCode = 500;
       res.end(`Error sending signal: ${(e as Error).message}`);
@@ -359,9 +336,7 @@ export async function tryWorkflowsRoutes(
       return true;
     }
     if (state.status !== "running") {
-      res.statusCode = 409;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: `Workflow is already ${state.status}` }));
+      sendError(res, 409, `Workflow is already ${state.status}`);
       return true;
     }
 
@@ -374,9 +349,7 @@ export async function tryWorkflowsRoutes(
         reason = typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : undefined;
       }
     } catch {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      sendError(res, 400, "Invalid JSON body");
       return true;
     }
 
@@ -405,9 +378,7 @@ export async function tryWorkflowsRoutes(
     };
     await ctx.taskQueue.enqueue(task);
 
-    res.statusCode = 202;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ ok: true, requested: true }));
+    sendJson(res, 202, { ok: true, requested: true });
     return true;
   }
 
