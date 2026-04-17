@@ -9,7 +9,6 @@ import { tryDesignerReadRoutes, tryDesignerWriteRoutes } from "./routes/designer
 import { tryCredentialsRoutes } from "./routes/credentials";
 import { tryWorkflowsRoutes } from "./routes/workflows";
 import { tryPaymentsRoutes } from "./routes/payments";
-import { tryActivitiesRoutes } from "./routes/activities";
 import type { FtnAppRouteContext } from "./route-context";
 
 export async function handleAppRoutes(
@@ -32,7 +31,6 @@ export async function handleAppRoutes(
   if (await tryDesignerWriteRoutes(ctx, req, res, rawPath)) return;
   if (await tryWorkflowsRoutes(ctx, req, res, rawPath)) return;
   if (await tryPaymentsRoutes(ctx, req, res, rawPath)) return;
-  if (await tryActivitiesRoutes(ctx, req, res, rawPath)) return;
 
   res.statusCode = 404;
   res.end("Not found");
