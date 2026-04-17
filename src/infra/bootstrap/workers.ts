@@ -32,16 +32,29 @@ interface BootstrapWorkersInput {
   taskQueue: TaskQueue;
   activities: ActivityRegistry;
   log: Logger;
+  deadLetterMaxItems: number;
+  workflowConcurrencyRetryMaxAttempts: number;
+  workflowConcurrencyRetryBaseDelayMs: number;
+  workflowConcurrencyRetryMaxDelayMs: number;
+  workflowConcurrencyRetryJitterRatio: number;
 }
 
 export function bootstrapWorkers(input: BootstrapWorkersInput): WorkersBootstrapResult {
-  const { engine, eventStore, snapshotStore, taskQueue, activities, log } = input;
+  const {
+    engine,
+    eventStore,
+    snapshotStore,
+    taskQueue,
+    activities,
+    log,
+    deadLetterMaxItems,
+    workflowConcurrencyRetryMaxAttempts,
+    workflowConcurrencyRetryBaseDelayMs,
+    workflowConcurrencyRetryMaxDelayMs,
+    workflowConcurrencyRetryJitterRatio,
+  } = input;
   const activityRuntime = new DefaultActivityRuntime({ eventStore, snapshotStore, engine });
   const activityWorkerCore = new ActivityWorker(activities, activityRuntime);
-  const deadLetterMaxItems = Math.max(
-    100,
-    Number.parseInt(process.env.FTN_DEAD_LETTER_MAX_ITEMS ?? "1000", 10) || 1000
-  );
   const deadLetters: DeadLetterEntry[] = [];
   const addDeadLetter = (deadLetterInput: DeadLetterInput): void => {
     const entry: DeadLetterEntry = {
@@ -128,22 +141,10 @@ export function bootstrapWorkers(input: BootstrapWorkersInput): WorkersBootstrap
       queueName: "workflows",
       leaseTimeoutMs: 10_000,
       pollIntervalMs: 100,
-      concurrencyRetryMaxAttempts: Math.max(
-        1,
-        Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_MAX_ATTEMPTS ?? "8", 10) || 8
-      ),
-      concurrencyRetryBaseDelayMs: Math.max(
-        0,
-        Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_BASE_DELAY_MS ?? "25", 10) || 25
-      ),
-      concurrencyRetryMaxDelayMs: Math.max(
-        1,
-        Number.parseInt(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_MAX_DELAY_MS ?? "1000", 10) || 1000
-      ),
-      concurrencyRetryJitterRatio: Math.max(
-        0,
-        Number.parseFloat(process.env.FTN_WORKFLOW_CONCURRENCY_RETRY_JITTER_RATIO ?? "0.2") || 0.2
-      ),
+      concurrencyRetryMaxAttempts: workflowConcurrencyRetryMaxAttempts,
+      concurrencyRetryBaseDelayMs: workflowConcurrencyRetryBaseDelayMs,
+      concurrencyRetryMaxDelayMs: workflowConcurrencyRetryMaxDelayMs,
+      concurrencyRetryJitterRatio: workflowConcurrencyRetryJitterRatio,
     },
   });
 

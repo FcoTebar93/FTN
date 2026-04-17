@@ -11,14 +11,20 @@ export interface TaskQueueBootstrapResult {
   redisUrl: string | undefined;
 }
 
-export function bootstrapTaskQueue(log: Logger): TaskQueueBootstrapResult {
+interface BootstrapTaskQueueInput {
+  log: Logger;
+  redisUrl?: string;
+  redisKeyPrefix?: string;
+}
+
+export function bootstrapTaskQueue(input: BootstrapTaskQueueInput): TaskQueueBootstrapResult {
+  const { log, redisUrl, redisKeyPrefix } = input;
   let redis: Redis | undefined;
   let taskQueue: TaskQueue;
   let redisTaskQueue: RedisTaskQueue | undefined;
-  const redisUrl = process.env.REDIS_URL?.trim();
   if (redisUrl) {
     redis = new Redis(redisUrl, { maxRetriesPerRequest: 2 });
-    const keyPrefix = process.env.FTN_REDIS_KEY_PREFIX?.trim();
+    const keyPrefix = redisKeyPrefix;
     redisTaskQueue = new RedisTaskQueue(redis, keyPrefix ? { keyPrefix } : {});
     taskQueue = redisTaskQueue;
     log.info("ftn.taskQueue", { backend: "redis" });

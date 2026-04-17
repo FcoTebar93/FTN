@@ -19,33 +19,33 @@ export interface ApiSecurityConfig {
   trustProxy: boolean;
 }
 
-export function loadApiSecurityConfigFromEnv(): ApiSecurityConfig {
-  const corsRaw = process.env.FTN_CORS_ORIGINS ?? "http://localhost:5173";
+export function loadApiSecurityConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ApiSecurityConfig {
+  const corsRaw = env.FTN_CORS_ORIGINS ?? "http://localhost:5173";
   const corsOrigins = corsRaw
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const apiKey = process.env.FTN_API_KEY?.trim() || undefined;
-  const jwtSecret = process.env.FTN_JWT_SECRET?.trim() || undefined;
-  const jwtIssuer = process.env.FTN_JWT_ISSUER?.trim() || undefined;
-  const jwtAudience = process.env.FTN_JWT_AUDIENCE?.trim() || undefined;
-  const enableRbac = process.env.FTN_ENABLE_RBAC === "true" || process.env.FTN_ENABLE_RBAC === "1";
-  const apiKeyScopesRaw = process.env.FTN_API_KEY_SCOPES?.trim();
+  const apiKey = env.FTN_API_KEY?.trim() || undefined;
+  const jwtSecret = env.FTN_JWT_SECRET?.trim() || undefined;
+  const jwtIssuer = env.FTN_JWT_ISSUER?.trim() || undefined;
+  const jwtAudience = env.FTN_JWT_AUDIENCE?.trim() || undefined;
+  const enableRbac = env.FTN_ENABLE_RBAC === "true" || env.FTN_ENABLE_RBAC === "1";
+  const apiKeyScopesRaw = env.FTN_API_KEY_SCOPES?.trim();
   const apiKeyScopes = apiKeyScopesRaw
     ? apiKeyScopesRaw.split(/[\s,]+/).filter(Boolean)
     : ["*"];
 
-  const loginUsername = process.env.FTN_AUTH_LOGIN_USERNAME?.trim() || "ftn";
-  const loginPassword = process.env.FTN_AUTH_LOGIN_PASSWORD?.trim() || undefined;
+  const loginUsername = env.FTN_AUTH_LOGIN_USERNAME?.trim() || "ftn";
+  const loginPassword = env.FTN_AUTH_LOGIN_PASSWORD?.trim() || undefined;
   const registrationEnabled =
-    process.env.FTN_AUTH_REGISTRATION_ENABLED === "true" || process.env.FTN_AUTH_REGISTRATION_ENABLED === "1";
-  const jwtTtlSeconds = Math.max(60, parseInt(process.env.FTN_JWT_TTL_SECONDS ?? "3600", 10) || 3600);
-  const loginScopes = process.env.FTN_AUTH_LOGIN_SCOPES?.trim() || "*";
+    env.FTN_AUTH_REGISTRATION_ENABLED === "true" || env.FTN_AUTH_REGISTRATION_ENABLED === "1";
+  const jwtTtlSeconds = Math.max(60, parseInt(env.FTN_JWT_TTL_SECONDS ?? "3600", 10) || 3600);
+  const loginScopes = env.FTN_AUTH_LOGIN_SCOPES?.trim() || "*";
 
-  const rateLimitPerMinute = Math.max(0, parseInt(process.env.FTN_HTTP_RATE_LIMIT_PER_MINUTE ?? "300", 10) || 0);
-  const maxBodyBytes = Math.max(1024, parseInt(process.env.FTN_HTTP_MAX_BODY_BYTES ?? String(1024 * 1024), 10) || 1024 * 1024);
-  const trustProxy = process.env.FTN_TRUST_PROXY === "true" || process.env.FTN_TRUST_PROXY === "1";
+  const rateLimitPerMinute = Math.max(0, parseInt(env.FTN_HTTP_RATE_LIMIT_PER_MINUTE ?? "300", 10) || 0);
+  const maxBodyBytes = Math.max(1024, parseInt(env.FTN_HTTP_MAX_BODY_BYTES ?? String(1024 * 1024), 10) || 1024 * 1024);
+  const trustProxy = env.FTN_TRUST_PROXY === "true" || env.FTN_TRUST_PROXY === "1";
 
   return {
     corsOrigins,

@@ -12,8 +12,14 @@ export interface PersistenceBootstrapResult {
   snapshotStore: PostgresSnapshotStore | InMemorySnapshotStore;
 }
 
-export async function bootstrapPersistence(log: Logger): Promise<PersistenceBootstrapResult> {
-  const engineDsUrl = (process.env.FTN_ENGINE_DATABASE_URL ?? process.env.DATABASE_URL)?.trim();
+interface BootstrapPersistenceInput {
+  log: Logger;
+  engineDatabaseUrl?: string;
+}
+
+export async function bootstrapPersistence(input: BootstrapPersistenceInput): Promise<PersistenceBootstrapResult> {
+  const { log, engineDatabaseUrl } = input;
+  const engineDsUrl = engineDatabaseUrl;
   let pool: Pool | undefined;
   if (engineDsUrl) {
     pool = new Pool({ connectionString: engineDsUrl });
