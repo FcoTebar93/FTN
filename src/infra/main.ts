@@ -4,13 +4,12 @@ import { getWorkflow, getWorkflowDescriptor, listWorkflows } from "../app/workfl
 
 import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-activity-registry";
 import { registerIntegrations } from "../modules/integrations";
-import { createRateLimiter, loadApiSecurityConfigFromEnv } from "./http/security";
+import { createRateLimiter } from "./http/security";
 import { getUserPasswordHash, insertUser } from "./users";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword } from "./passwords";
 
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
-import { runScheduledWorkflowTick } from "../app/designer-scheduler";
 import { configureCredentialsStore, getCredential } from "../app/credentials";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
@@ -21,6 +20,8 @@ import { bootstrapTaskQueue } from "./bootstrap/task-queue";
 import { buildIntegrationsConfig } from "./bootstrap/integrations";
 import { bootstrapWorkers } from "./bootstrap/workers";
 import { bootstrapHttpServer } from "./bootstrap/http";
+import { loadAppConfig } from "./config";
+import { registerShutdownHooks, startLifecycle } from "./bootstrap/lifecycle";
 
 function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
   if (env.NODE_ENV !== "production") {
@@ -45,19 +46,27 @@ function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.
 }
 
 async function main(): Promise<void> {
+  const config = loadAppConfig();
   const log = createLogger();
   initFtnTelemetry();
   const engine = new DefaultWorkflowEngine();
 
-  const { pool, eventStore, snapshotStore } = await bootstrapPersistence(log);
+  const { pool, eventStore, snapshotStore } = await bootstrapPersistence({
+    log,
+    engineDatabaseUrl: config.engineDatabaseUrl,
+  });
 
   configureDesignerStore(pool);
   configureCredentialsStore(pool);
 
-  const { redis, redisTaskQueue, taskQueue, redisUrl } = bootstrapTaskQueue(log);
+  const { redis, redisTaskQueue, taskQueue, redisUrl } = bootstrapTaskQueue({
+    log,
+    redisUrl: config.redisUrl,
+    redisKeyPrefix: config.redisKeyPrefix,
+  });
 
-  const systemSubject = process.env.FTN_SYSTEM_SUBJECT?.trim() || "system";
-  const integrationsConfig = await buildIntegrationsConfig({ pool, redis, redisUrl });
+  const systemSubject = config.systemSubject;
+  const integrationsConfig = await buildIntegrationsConfig({ config, pool, redis, redisUrl });
 
   const activities = new InMemoryActivityRegistry();
   registerIntegrations(activities, integrationsConfig);
@@ -70,18 +79,23 @@ async function main(): Promise<void> {
     listDeadLetters,
     requeueDeadLetter,
     acknowledgeDeadLetter,
-  } = bootstrapWorkers({ engine, eventStore, snapshotStore, taskQueue, activities, log });
+  } = bootstrapWorkers({
+    engine,
+    eventStore,
+    snapshotStore,
+    taskQueue,
+    activities,
+    log,
+    deadLetterMaxItems: config.deadLetterMaxItems,
+    workflowConcurrencyRetryMaxAttempts: config.workflowConcurrencyRetryMaxAttempts,
+    workflowConcurrencyRetryBaseDelayMs: config.workflowConcurrencyRetryBaseDelayMs,
+    workflowConcurrencyRetryMaxDelayMs: config.workflowConcurrencyRetryMaxDelayMs,
+    workflowConcurrencyRetryJitterRatio: config.workflowConcurrencyRetryJitterRatio,
+  });
 
-  const multiTenantEnabled =
-    process.env.FTN_MULTI_TENANT_ENABLED === "1" || process.env.FTN_MULTI_TENANT_ENABLED === "true";
-  const tenantMaxConcurrentRuns = Math.max(
-    1,
-    Number.parseInt(process.env.FTN_TENANT_MAX_CONCURRENT_RUNS ?? "100", 10) || 100
-  );
-  const idempotencyTtlMs = Math.max(
-    60_000,
-    Number.parseInt(process.env.FTN_IDEMPOTENCY_TTL_MS ?? String(24 * 60 * 60 * 1000), 10) || 24 * 60 * 60 * 1000
-  );
+  const multiTenantEnabled = config.multiTenantEnabled;
+  const tenantMaxConcurrentRuns = config.tenantMaxConcurrentRuns;
+  const idempotencyTtlMs = config.idempotencyTtlMs;
   const idempotencyStore = new Map<
     string,
     {
@@ -124,11 +138,11 @@ async function main(): Promise<void> {
     tenantMaxConcurrentRuns,
   });
 
-  const apiSecurity = loadApiSecurityConfigFromEnv();
-  logProductionEnvWarnings(log);
+  const apiSecurity = config.apiSecurity;
+  logProductionEnvWarnings(log, config.rawEnv);
   const hasDbLogin = Boolean(pool && apiSecurity.jwtSecret);
   const rateLimiter = createRateLimiter(apiSecurity.rateLimitPerMinute);
-  const refreshTtlSeconds = Math.max(60, parseInt(process.env.FTN_REFRESH_TTL_SECONDS ?? "604800", 10) || 604800);
+  const refreshTtlSeconds = config.refreshTtlSeconds;
 
   async function getIntegrationsStatusForSubject(subject: string): Promise<Array<{
     key: string;
@@ -141,13 +155,13 @@ async function main(): Promise<void> {
       hasPostgres: Boolean(pool),
       hasRedis: Boolean(redis),
       getCredential,
-      env: process.env,
+      env: config.rawEnv,
     });
   }
 
   if (pool && apiSecurity.jwtSecret) {
-    const defaultUsernameRaw = process.env.FTN_DEFAULT_USER_USERNAME?.trim() || "demo";
-    const defaultPasswordRaw = process.env.FTN_DEFAULT_USER_PASSWORD?.trim() || "demo-password-123";
+    const defaultUsernameRaw = config.defaultUserUsername;
+    const defaultPasswordRaw = config.defaultUserPassword;
     const defaultUsername = normalizeAndValidateUsername(defaultUsernameRaw);
     if (defaultUsername && validatePlainPassword(defaultPasswordRaw)) {
       const exists = await getUserPasswordHash(pool, defaultUsername);
@@ -216,74 +230,26 @@ async function main(): Promise<void> {
     log,
   });
 
-  const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
-  server.listen(PORT, () => {
-    log.info("server.listen", { port: PORT, url: `http://localhost:${PORT}` });
+  const port = config.port;
+  server.listen(port, () => {
+    log.info("server.listen", { port, url: `http://localhost:${port}` });
   });
 
-  let recoverTimer: ReturnType<typeof setInterval> | undefined;
-  const recoverIntervalMs = Number(process.env.FTN_REDIS_RECOVER_INTERVAL_MS ?? "60000");
-  const staleLeaseMs = Number(process.env.FTN_REDIS_STALE_LEASE_MS ?? String(10 * 60 * 1000));
-  if (redisTaskQueue && recoverIntervalMs > 0) {
-    const queues = ["workflows", "activities", "timers"] as const;
-    recoverTimer = setInterval(() => {
-      if (cancellation.aborted) {
-        return;
-      }
-      void (async () => {
-        for (const q of queues) {
-          try {
-            const n = await redisTaskQueue.recoverStaleProcessing(q, staleLeaseMs);
-            if (n > 0) {
-              log.info("ftn.taskQueue.recovered", { queue: q, count: n });
-            }
-          } catch (e) {
-            log.error("ftn.taskQueue.recoverFailed", { queue: q, err: String(e) });
-          }
-        }
-      })();
-    }, recoverIntervalMs);
-  }
-
-  const designerSchedulerTimer: ReturnType<typeof setInterval> = setInterval(() => {
-    if (cancellation.aborted) {
-      return;
-    }
-    void runScheduledWorkflowTick({
-      listSchedulerRows,
-      recordScheduledRun,
-      recordScheduledFailure,
-      startWorkflow: async (name, input, opts) => {
-        await enqueueWorkflowStart(name, input, opts);
-      },
-      log,
-    });
-  }, Math.max(
-    10_000,
-    parseInt(process.env.FTN_DESIGNER_SCHEDULER_INTERVAL_MS ?? "30000", 10)
-  ));
-
-  const shutdown = async () => {
-    cancellation.aborted = true;
-    if (recoverTimer) {
-      clearInterval(recoverTimer);
-    }
-    clearInterval(designerSchedulerTimer);
-    if (pool) {
-      await pool.end();
-    }
-    if (redis) {
-      await redis.quit();
-    }
-    server.close(() => process.exit(0));
-  };
-
-  process.on("SIGINT", () => {
-    void shutdown();
+  const lifecycle = startLifecycle({
+    cancellation,
+    redisTaskQueue,
+    recoverIntervalMs: config.recoverIntervalMs,
+    staleLeaseMs: config.staleLeaseMs,
+    designerSchedulerIntervalMs: config.designerSchedulerIntervalMs,
+    listSchedulerRows,
+    recordScheduledRun,
+    recordScheduledFailure,
+    startWorkflow: async (name, input, opts) => {
+      await enqueueWorkflowStart(name, input, opts);
+    },
+    log,
   });
-  process.on("SIGTERM", () => {
-    void shutdown();
-  });
+  registerShutdownHooks(lifecycle, { pool, redis, server });
 }
 
 void main().catch((err) => {
