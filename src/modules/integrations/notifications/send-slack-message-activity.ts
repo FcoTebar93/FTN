@@ -28,8 +28,7 @@ export function sendSlackMessageActivityDefinition(config: NotificationsConfig):
     async execute(input: SendSlackMessageInput, ctx: ActivityExecutionContext): Promise<SendSlackMessageResult> {
       ctx.log("Enviando mensaje a Slack", { text: input.text });
 
-      const fetchFn: (url: string, init?: any) => Promise<any> =
-        (globalThis as any).fetch;
+      const fetchFn = globalThis.fetch;
 
       if (!fetchFn) {
         throw new Error("fetch global no disponible en este entorno");

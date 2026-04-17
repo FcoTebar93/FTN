@@ -47,7 +47,7 @@ export function sendEmailActivityDefinition(config: NotificationsConfig): Activi
 
       const to = Array.isArray(input.to) ? input.to : [input.to];
 
-      const msg: any = {
+      const msg: Parameters<typeof sgMail.send>[0] = {
         from: emailFrom,
         to,
         subject: input.subject ?? "[FTN] Notificación",
