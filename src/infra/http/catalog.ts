@@ -1,5 +1,6 @@
 import type http from "node:http";
 import type { ActivityRegistry } from "../../core/activity-registry";
+import type { AnyActivityDefinition } from "../../core/activities";
 import { JsonSchema } from "../../shared/json-schema";
 import { getPathname } from "./url";
 
@@ -25,7 +26,7 @@ export interface WorkflowPublicDescriptor {
     resultSchema?: JsonSchema;
 }
 
-function toDescriptor(def: any): ActivityDescriptor {
+function toDescriptor(def: AnyActivityDefinition): ActivityDescriptor {
   const name: string = def.name;
   const module = String(name.split(".")[0] ?? "unknown");
 
@@ -57,7 +58,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
 
     const defs = tag ? registry.listByTag(tag) : registry.list();
 
-    const filtered = defs.filter((def: any) => {
+    const filtered = defs.filter((def: AnyActivityDefinition) => {
       const mod = String(def.name?.split(".")[0] ?? "");
       if (module && mod !== module) return false;
       if (q && !String(def.name ?? "").toLowerCase().includes(q)) return false;
@@ -83,7 +84,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     }
 
     const name = decodeURIComponent(parts[2]);
-    const def = registry.get(name as any);
+    const def = registry.get(name);
 
     if (!def) {
       res.statusCode = 404;

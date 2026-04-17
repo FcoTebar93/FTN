@@ -8,6 +8,13 @@ function isRetryableError(_err: unknown, def: { maxAttempts?: number } | undefin
   return (def?.maxAttempts ?? 1) > 1;
 }
 
+function toErrorInfo(err: unknown): { name: string; message: string } {
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message };
+  }
+  return { name: "Error", message: String(err) };
+}
+
 export class ActivityWorker {
   constructor(
     private readonly registry: ActivityRegistry,
@@ -55,14 +62,15 @@ export class ActivityWorker {
         result,
       };
       await this.runtime.handleResult(task, res);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const retryable = isRetryableError(err, def);
+      const info = toErrorInfo(err);
 
       const res: ActivityResult = {
         kind: "failure",
         activityId: task.activityId,
-        errorType: err?.name ?? "Error",
-        errorMessage: err?.message ?? String(err),
+        errorType: info.name,
+        errorMessage: info.message,
         retryable,
       };
 

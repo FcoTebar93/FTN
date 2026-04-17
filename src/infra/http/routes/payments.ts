@@ -5,6 +5,21 @@ import type { FtnAppRouteContext } from "../route-context";
 import { sendJson } from "../response";
 import { buildWorkflowTask } from "../../../shared/task-factories";
 
+interface CheckoutLineItemInput {
+  quantity: number;
+  unitAmountCents: number;
+  name: string;
+}
+
+interface CheckoutRequestBody {
+  successUrl: string;
+  cancelUrl: string;
+  customerEmail?: string;
+  currency: string;
+  lineItems: CheckoutLineItemInput[];
+  metadata?: Record<string, string>;
+}
+
 export async function tryPaymentsRoutes(
   ctx: FtnAppRouteContext,
   req: http.IncomingMessage,
@@ -16,7 +31,7 @@ export async function tryPaymentsRoutes(
     req.on("data", (chunk) => (body += chunk));
     req.on("end", async () => {
       try {
-        const parsed = JSON.parse(body || "{}");
+        const parsed = JSON.parse(body || "{}") as CheckoutRequestBody;
         const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsed;
 
         const key = process.env.STRIPE_SECRET_KEY;
@@ -26,14 +41,14 @@ export async function tryPaymentsRoutes(
           return;
         }
 
-        const stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
+        const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
         const session = await stripe.checkout.sessions.create({
           mode: "payment",
           success_url: successUrl,
           cancel_url: cancelUrl,
           customer_email: customerEmail,
           currency,
-          line_items: lineItems.map((li: any) => ({
+          line_items: lineItems.map((li) => ({
             quantity: li.quantity,
             price_data: {
               currency,
@@ -66,11 +81,11 @@ export async function tryPaymentsRoutes(
         return true;
       }
 
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" as any });
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" });
       const event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret);
 
       if (event.type === "checkout.session.completed") {
-        const session: any = event.data.object;
+        const session = event.data.object as Stripe.Checkout.Session;
         const md = session.metadata || {};
         const workflowId = md.workflowId;
         const runId = md.runId;
