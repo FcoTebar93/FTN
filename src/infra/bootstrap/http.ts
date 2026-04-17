@@ -70,6 +70,8 @@ interface BootstrapHttpServerInput {
   }) => DeadLetterEntry[];
   requeueDeadLetter: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   acknowledgeDeadLetter: (id: string) => { ok: true } | { ok: false; error: string };
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
   listWorkflowsPublic: () => WorkflowPublicDescriptor[];
   getWorkflowPublicDescriptor: (name: string) => WorkflowPublicDescriptor | undefined;
   log: Logger;
@@ -187,6 +189,8 @@ export function bootstrapHttpServer(input: BootstrapHttpServerInput): http.Serve
               requestId,
               correlationId,
               tenantId,
+              stripeSecretKey: input.stripeSecretKey,
+              stripeWebhookSecret: input.stripeWebhookSecret,
               getIdempotentWorkflowStart: input.getIdempotentWorkflowStart,
               saveIdempotentWorkflowStart: input.saveIdempotentWorkflowStart,
               listDeadLetters: input.listDeadLetters,

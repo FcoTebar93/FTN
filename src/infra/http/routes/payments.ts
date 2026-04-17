@@ -34,7 +34,7 @@ export async function tryPaymentsRoutes(
         const parsed = JSON.parse(body || "{}") as CheckoutRequestBody;
         const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsed;
 
-        const key = process.env.STRIPE_SECRET_KEY;
+        const key = ctx.stripeSecretKey;
         if (!key) {
           sendError(res, 500, "STRIPE_SECRET_KEY not configured");
           return;
@@ -71,8 +71,8 @@ export async function tryPaymentsRoutes(
     const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
     if (body === null) return true;
     try {
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      const webhookSecret = ctx.stripeWebhookSecret;
+      const stripeSecretKey = ctx.stripeSecretKey;
       if (!webhookSecret || !stripeSecretKey) {
         sendError(res, 500, "Stripe secrets not configured");
         return true;

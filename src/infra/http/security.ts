@@ -19,7 +19,7 @@ export interface ApiSecurityConfig {
   trustProxy: boolean;
 }
 
-export function loadApiSecurityConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ApiSecurityConfig {
+export function loadApiSecurityConfigFromEnv(env: NodeJS.ProcessEnv): ApiSecurityConfig {
   const corsRaw = env.FTN_CORS_ORIGINS ?? "http://localhost:5173";
   const corsOrigins = corsRaw
     .split(",")

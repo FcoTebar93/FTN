@@ -35,6 +35,8 @@ export interface FtnAppRouteContext {
   requestId: string;
   correlationId: string;
   tenantId?: string;
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
   getIdempotentWorkflowStart: (
     key: string
   ) =>
