@@ -1,7 +1,8 @@
 import type { WorkflowWorkerDeps } from "../workers/workflow-worker";
-import type { TaskLease, WorkflowTask } from "../shared/tasks";
+import type { TaskLease } from "../shared/tasks";
 import { ConcurrencyError } from "../modules/event-store";
 import { incActivityRetry, incConcurrencyConflict, incWorkflowTaskDequeue } from "./metrics";
+import { buildWorkflowTask } from "../shared/task-factories";
 
 const DEFAULT_CONCURRENCY_RETRY_MAX_ATTEMPTS = 8;
 const DEFAULT_CONCURRENCY_RETRY_BASE_DELAY_MS = 25;
@@ -114,13 +115,14 @@ export class InMemoryWorkflowWorker {
                 });
 
                 await this.sleep(delayMs);
-                const retryTask: WorkflowTask = {
-                    ...task,
+                const retryTask = buildWorkflowTask({
                     id: `wf-task-${task.workflowId}-${task.runId}-retry-${attempt}-${Date.now()}`,
+                    workflowId: task.workflowId,
+                    runId: task.runId,
+                    targetQueue: task.targetQueue,
+                    correlationId: task.correlationId,
                     retryCount: attempt,
-                    createdAt: new Date().toISOString(),
-                    scheduledAt: new Date().toISOString(),
-                };
+                });
                 await this.taskQueue.completeTask(lease.leaseId);
                 await this.taskQueue.enqueue(retryTask);
                 return;
@@ -150,17 +152,13 @@ export class InMemoryWorkflowWorker {
         const { state } = tickResult;
         const hasPending = state.pendingActivities.length > 0 || state.pendingTimers.length > 0;
         if (hasPending && state.status === "running") {
-            const nextTask: WorkflowTask = {
+            const nextTask = buildWorkflowTask({
                 id: `wf-task-${task.workflowId}-${task.runId}-${Date.now()}`,
-                type: "workflow",
                 workflowId: task.workflowId,
                 runId: task.runId,
-                createdAt: new Date().toISOString(),
-                scheduledAt: new Date().toISOString(),
-                workerType: "workflow",
                 targetQueue: this.config.queueName,
-                ...(task.correlationId ? { correlationId: task.correlationId } : {}),
-            };
+                correlationId: task.correlationId,
+            });
             await this.taskQueue.enqueue(nextTask);
         }
     }

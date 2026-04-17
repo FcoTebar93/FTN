@@ -1,7 +1,7 @@
 import type { WorkflowEvent } from "../core/events";
 import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
 import { validateJson } from "../shared/json-schema-validate";
-import type { WorkflowTask } from "../shared/tasks";
+import { buildWorkflowTask } from "../shared/task-factories";
 import type { EventStore } from "../modules/event-store";
 import type { TaskQueue } from "../modules/task-queue";
 import type { WorkflowRuntime } from "../modules/workflow-runtime";
@@ -87,17 +87,13 @@ export function createWorkflowStartService(
       definition: wfDef,
     });
 
-    const task: WorkflowTask = {
+    const task = buildWorkflowTask({
       id: `wf-task-${workflowId}-${runId}`,
-      type: "workflow",
       workflowId,
       runId,
-      createdAt: new Date().toISOString(),
-      scheduledAt: new Date().toISOString(),
-      workerType: "workflow",
       targetQueue: "workflows",
-      ...(opts?.correlationId ? { correlationId: opts.correlationId } : {}),
-    };
+      correlationId: opts?.correlationId,
+    });
     await deps.taskQueue.enqueue(task);
     return { workflowId, runId, version };
   }

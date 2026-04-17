@@ -1,8 +1,9 @@
 import type { TaskQueue } from "../modules/task-queue";
-import type { TaskLease, TimerTask, WorkflowTask } from "../shared/tasks";
+import type { TaskLease, TimerTask } from "../shared/tasks";
 import type { Logger } from "./logger";
 import type { DeadLetterInput } from "../shared/dead-letter";
 import { incTimerTaskDequeue } from "./metrics";
+import { buildWorkflowTask } from "../shared/task-factories";
 
 interface InMemoryTimerWorkerDeps {
     taskQueue: TaskQueue;
@@ -55,17 +56,13 @@ export class InMemoryTimerWorker {
             return;
         }
 
-        const wfTask: WorkflowTask = {
+        const wfTask = buildWorkflowTask({
             id: `wf-task-${timerTask.workflowId}-${timerTask.runId}-${Date.now()}`,
-            type: "workflow",
             workflowId: timerTask.workflowId,
             runId: timerTask.runId,
-            createdAt: new Date().toISOString(),
-            scheduledAt: new Date().toISOString(),
-            workerType: "workflow",
             targetQueue: this.deps.workflowQueueName,
-            ...(timerTask.correlationId ? { correlationId: timerTask.correlationId } : {}),
-        };
+            correlationId: timerTask.correlationId,
+        });
 
         await this.deps.taskQueue.enqueue(wfTask);
         await this.deps.taskQueue.completeTask(lease.leaseId);

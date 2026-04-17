@@ -6,6 +6,7 @@ import type { FTNApi, ActivityHandle, WorkflowDefinition, RetryOptions } from ".
 import type { ActivityId } from "../shared/types";
 import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
+import { buildTimerTask, buildWorkflowTask } from "../shared/task-factories";
 import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
 import type { Logger } from "./logger";
 import {
@@ -680,17 +681,13 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               input,
               definition: childDef,
             });
-            const childTask: Task = {
+            const childTask: Task = buildWorkflowTask({
               id: `wf-task-${childStarted.workflowId}-${childStarted.runId}`,
-              type: "workflow",
               workflowId: childStarted.workflowId,
               runId: childStarted.runId,
-              createdAt: new Date().toISOString(),
-              scheduledAt: new Date().toISOString(),
-              workerType: "workflow",
               targetQueue: "workflows",
-              ...(correlationId ? { correlationId } : {}),
-            };
+              correlationId,
+            });
             await this.taskQueue.enqueue(childTask);
             newDomainEvents.push({
               type: "ChildWorkflowStarted",
@@ -827,18 +824,16 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
           if (ev.type === "TimerScheduled") {
             const { wakeAt } = ev.payload;
-            timerTasks.push({
+            timerTasks.push(buildTimerTask({
               id: `timer-${ev.workflowId}-${ev.runId}-${ev.version}`,
-              type: "timer",
               workflowId: ev.workflowId,
               runId: ev.runId,
               wakeAt,
+              targetQueue: "timers",
               createdAt: ev.startedAt,
               scheduledAt: ev.startedAt,
-              workerType: "workflow",
-              targetQueue: "timers",
-              ...(correlationId ? { correlationId } : {}),
-            });
+              correlationId,
+            }));
           }
         }
 
