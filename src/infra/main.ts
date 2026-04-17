@@ -42,6 +42,7 @@ import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { initFtnTelemetry, runWithHttpSpan } from "./telemetry";
 import { createWorkflowStartService } from "./workflow-start-service";
+import { getPathname } from "./http/url";
 
 function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv = process.env): void {
   if (env.NODE_ENV !== "production") {
@@ -433,7 +434,7 @@ async function main(): Promise<void> {
         : requestId;
     res.setHeader("X-Correlation-Id", correlationId);
 
-    const rawPathEarly = (req.url ?? "").split("?")[0] ?? "";
+    const rawPathEarly = getPathname(req.url);
     const methodEarly = req.method ?? "GET";
 
     if (methodEarly === "GET" && rawPathEarly === "/metrics") {
