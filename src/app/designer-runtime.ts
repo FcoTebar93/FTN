@@ -2,7 +2,7 @@ import type { WorkflowDefinition } from "../core/ftn";
 import type { ActivityStep, ConditionalStep, ParallelStep, RetryStep, StoredWorkflow, WorkflowStep } from "./designer-types";
 
 interface ExecutionContext {
-  input: any;
+  input: unknown;
   stepResults: Record<string, unknown>;
 }
 
@@ -14,12 +14,13 @@ function findStep(stored: StoredWorkflow, id: string): WorkflowStep {
   return step;
 }
 
-function getByPath(root: any, path: string): unknown {
+function getByPath(root: unknown, path: string): unknown {
     const parts = path.split(".").filter(Boolean);
-    let current: any = root;
+    let current: unknown = root;
     for (const part of parts) {
       if (current == null) return undefined;
-      current = current[part];
+      if (typeof current !== "object") return undefined;
+      current = (current as Record<string, unknown>)[part];
     }
     return current;
 }
@@ -73,7 +74,7 @@ function resolveTemplatesInValue(value: unknown, ctx: ExecutionContext): unknown
 
 export function buildWorkflowDefinitionFromStored(
   stored: StoredWorkflow
-): WorkflowDefinition<any, any> {
+): WorkflowDefinition<unknown, unknown> {
   return async (ftn, input) => {
     const ctx: ExecutionContext = {
       input,
@@ -87,14 +88,14 @@ export function buildWorkflowDefinitionFromStored(
 
       if (step.kind === "activity") {
         const resolvedInput = resolveTemplatesInValue(step.input, ctx);
-        const handle = ftn.activity<any, any>(step.activityName, resolvedInput);
+        const handle = ftn.activity<unknown, unknown>(step.activityName, resolvedInput);
         const [result] = await ftn.join([handle]);
         ctx.stepResults[step.id] = result;
       } else if (step.kind === "sleep") {
         await ftn.sleep(step.milliseconds);
         ctx.stepResults[step.id] = true;
       } else if (step.kind === "signal") {
-        const signalData = await ftn.signal<any>(step.signalName);
+        const signalData = await ftn.signal<unknown>(step.signalName);
         ctx.stepResults[step.id] = signalData;
       } else if (step.kind === "conditional") {
         const cond = (step as ConditionalStep);
@@ -112,7 +113,7 @@ export function buildWorkflowDefinitionFromStored(
         const result = await ftn.retry(
           { maxAttempts: Math.max(1, r.maxAttempts), backOffMs: r.backOffMs },
           async () => {
-            const h = ftn.activity<any, any>(act.activityName, resolvedInput);
+            const h = ftn.activity<unknown, unknown>(act.activityName, resolvedInput);
             const [out] = await ftn.join([h]);
             return out;
           }
@@ -122,14 +123,14 @@ export function buildWorkflowDefinitionFromStored(
       } else if (step.kind === "parallel") {
         const p = step as ParallelStep;
       
-        const branchActivityHandles: Promise<any>[] = [];
+        const branchActivityHandles: Promise<void>[] = [];
       
         for (const branch of p.branches) {
           for (const stepId of branch) {
             const targetStep = findStep(stored, stepId);
             if (targetStep.kind !== "activity") continue;
             const resolvedBranchInput = resolveTemplatesInValue((targetStep as ActivityStep).input ?? {}, ctx);
-            const handle = ftn.activity<any, any>((targetStep as ActivityStep).activityName, resolvedBranchInput);
+            const handle = ftn.activity<unknown, unknown>((targetStep as ActivityStep).activityName, resolvedBranchInput);
             branchActivityHandles.push(ftn.join([handle]).then(([r]) => {
               ctx.stepResults[stepId] = r;
             }));

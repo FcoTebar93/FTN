@@ -26,7 +26,7 @@ type WorkflowKey = string;
 
 type StoredDefinition = {
     name: string;
-    definition: WorkflowDefinition<any, any>;
+    definition: WorkflowDefinition<unknown, unknown>;
     input: unknown;
 };
 
@@ -188,7 +188,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         const key = makeWorkflowKey(workflowId, runId);
         this.definitions.set(key, {
             name: workflowName,
-            definition: options.definition as WorkflowDefinition<any, any>,
+            definition: options.definition as unknown as WorkflowDefinition<unknown, unknown>,
             input: options.input as unknown,
         });
         
