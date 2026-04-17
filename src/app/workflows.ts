@@ -7,7 +7,7 @@ import type { JsonSchema } from "../shared/json-schema";
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
 
-type WorkflowCatalog = Map<string, WorkflowDescriptor<any, any>>;
+type WorkflowCatalog = Map<string, WorkflowDescriptor<unknown, unknown>>;
 type VersionedWorkflowCatalog = Map<string, WorkflowCatalog>;
 const workflowCatalog: VersionedWorkflowCatalog = new Map();
 
@@ -15,7 +15,7 @@ function getVersionBucket(name: string): WorkflowCatalog | undefined {
   return workflowCatalog.get(name);
 }
 
-function getLatestDescriptor(name: string): WorkflowDescriptor<any, any> | undefined {
+function getLatestDescriptor(name: string): WorkflowDescriptor<unknown, unknown> | undefined {
   const bucket = getVersionBucket(name);
   if (!bucket || bucket.size === 0) return undefined;
   return Array.from(bucket.values()).sort((a, b) => b.version.localeCompare(a.version))[0];
@@ -32,8 +32,8 @@ export function getWorkflowDescriptor(
 }
 
 export function registerWorkflow<TInput, TResult>(descriptor: WorkflowDescriptor<TInput, TResult>): void {
-  const bucket = workflowCatalog.get(descriptor.name) ?? new Map<string, WorkflowDescriptor<any, any>>();
-  bucket.set(descriptor.version, descriptor as WorkflowDescriptor<any, any>);
+  const bucket = workflowCatalog.get(descriptor.name) ?? new Map<string, WorkflowDescriptor<unknown, unknown>>();
+  bucket.set(descriptor.version, descriptor as unknown as WorkflowDescriptor<unknown, unknown>);
   workflowCatalog.set(descriptor.name, bucket);
 }
 
@@ -52,7 +52,7 @@ export function listWorkflowVersions(name: string): Array<Omit<WorkflowDescripto
     .sort((a, b) => a.version.localeCompare(b.version));
 }
 
-export function getWorkflow(name: string, version?: string): WorkflowDefinition<any, any> | undefined {
+export function getWorkflow(name: string, version?: string): WorkflowDefinition<unknown, unknown> | undefined {
   if (version) {
     return getVersionBucket(name)?.get(version)?.definition;
   }

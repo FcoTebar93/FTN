@@ -25,4 +25,4 @@ export interface ActivityDefinition<TInput, TResult> {
   resultSchema?: JsonSchema;
 }
 
-export type AnyActivityDefinition = ActivityDefinition<any, any>;
+export type AnyActivityDefinition = ActivityDefinition<unknown, unknown>;
