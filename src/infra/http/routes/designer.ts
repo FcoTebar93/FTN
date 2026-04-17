@@ -41,16 +41,14 @@ export async function tryDesignerReadRoutes(
     const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
-      res.statusCode = 400;
-      res.end("Expected /designer/workflows/:id");
+      sendError(res, 400, "Expected /designer/workflows/:id");
       return true;
     }
 
     const id = decodeURIComponent(parts[3]);
     const wf = await getStoredWorkflow(ctx.requestSubject, id);
     if (wf === undefined) {
-      res.statusCode = 404;
-      res.end("Designer workflow not found");
+      sendError(res, 404, "Designer workflow not found");
       return true;
     }
 
@@ -74,14 +72,12 @@ export async function tryDesignerWriteRoutes(
       const parsed = JSON.parse(body || "{}") as StoredWorkflow;
 
       if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-        res.statusCode = 400;
-        res.end("Invalid StoredWorkflow payload");
+        sendError(res, 400, "Invalid StoredWorkflow payload");
         return true;
       }
 
       if ((await getStoredWorkflow(ctx.requestSubject, parsed.id)) !== undefined) {
-        res.statusCode = 409;
-        res.end(`StoredWorkflow "${parsed.id}" already exists`);
+        sendError(res, 409, `StoredWorkflow "${parsed.id}" already exists`);
         return true;
       }
 
@@ -120,8 +116,7 @@ export async function tryDesignerWriteRoutes(
 
       sendJson(res, 201, { ok: true, id: normalized.id, version: normalized.version });
     } catch (e) {
-      res.statusCode = 400;
-      res.end(`Invalid JSON: ${(e as Error).message}`);
+      sendError(res, 400, `Invalid JSON: ${(e as Error).message}`);
     }
     return true;
   }
@@ -130,8 +125,7 @@ export async function tryDesignerWriteRoutes(
     const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
-      res.statusCode = 400;
-      res.end("Expected /designer/workflows/:id");
+      sendError(res, 400, "Expected /designer/workflows/:id");
       return true;
     }
 
@@ -143,8 +137,7 @@ export async function tryDesignerWriteRoutes(
       const parsed = JSON.parse(body || "{}") as StoredWorkflow;
 
       if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-        res.statusCode = 400;
-        res.end("Invalid StoredWorkflow payload");
+        sendError(res, 400, "Invalid StoredWorkflow payload");
         return true;
       }
 
@@ -167,8 +160,7 @@ export async function tryDesignerWriteRoutes(
 
       sendJson(res, 200, { ok: true, id: normalized.id, version: normalized.version });
     } catch (e) {
-      res.statusCode = 400;
-      res.end(`Invalid JSON: ${(e as Error).message}`);
+      sendError(res, 400, `Invalid JSON: ${(e as Error).message}`);
     }
     return true;
   }

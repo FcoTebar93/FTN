@@ -2,7 +2,7 @@ import type http from "node:http";
 import Stripe from "stripe";
 import { readBodyCapped } from "../security";
 import type { FtnAppRouteContext } from "../route-context";
-import { sendJson } from "../response";
+import { sendError, sendJson } from "../response";
 import { buildWorkflowTask } from "../../../shared/task-factories";
 
 interface CheckoutLineItemInput {
@@ -36,8 +36,7 @@ export async function tryPaymentsRoutes(
 
         const key = process.env.STRIPE_SECRET_KEY;
         if (!key) {
-          res.statusCode = 500;
-          res.end("STRIPE_SECRET_KEY not configured");
+          sendError(res, 500, "STRIPE_SECRET_KEY not configured");
           return;
         }
 
@@ -61,8 +60,7 @@ export async function tryPaymentsRoutes(
 
         sendJson(res, 200, { sessionId: session.id, url: session.url });
       } catch (e) {
-        res.statusCode = 500;
-        res.end(`Error creating checkout: ${(e as Error).message}`);
+        sendError(res, 500, `Error creating checkout: ${(e as Error).message}`);
       }
     });
     return true;
@@ -76,8 +74,7 @@ export async function tryPaymentsRoutes(
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
       if (!webhookSecret || !stripeSecretKey) {
-        res.statusCode = 500;
-        res.end("Stripe secrets not configured");
+        sendError(res, 500, "Stripe secrets not configured");
         return true;
       }
 
@@ -126,8 +123,7 @@ export async function tryPaymentsRoutes(
       res.statusCode = 200;
       res.end("[OK] webhook processed");
     } catch (err) {
-      res.statusCode = 400;
-      res.end(`Webhook error: ${(err as Error).message}`);
+      sendError(res, 400, `Webhook error: ${(err as Error).message}`);
     }
 
     return true;

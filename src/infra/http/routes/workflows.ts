@@ -161,8 +161,7 @@ export async function tryWorkflowsRoutes(
       const descriptor = getWorkflowDescriptor(trigger.workflowName);
       const wfDef = getWorkflow(trigger.workflowName, descriptor?.version);
       if (!wfDef) {
-        res.statusCode = 500;
-        res.end(`Workflow "${trigger.workflowName}" not registered`);
+        sendError(res, 500, `Workflow "${trigger.workflowName}" not registered`);
         return true;
       }
       const parsedBody = body ? JSON.parse(body) : undefined;
@@ -196,8 +195,7 @@ export async function tryWorkflowsRoutes(
 
       sendJson(res, 200, { workflowId, runId });
     } catch (e) {
-      res.statusCode = 500;
-      res.end(`Error handling trigger: ${(e as Error).message}`);
+      sendError(res, 500, `Error handling trigger: ${(e as Error).message}`);
     }
     return true;
   }
@@ -205,16 +203,14 @@ export async function tryWorkflowsRoutes(
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/events")) {
     const parts = getPathname(url).split("/");
     if (parts.length !== 5) {
-      res.statusCode = 400;
-      res.end("Expected /workflows/:workflowId/:runId/events");
+      sendError(res, 400, "Expected /workflows/:workflowId/:runId/events");
       return true;
     }
     const workflowId = parts[2];
     const runId = parts[3];
     const events = await ctx.eventStore.loadEvents(workflowId, runId, 0);
     if (!events || events.length === 0) {
-      res.statusCode = 404;
-      res.end("No events found");
+      sendError(res, 404, "No events found");
       return true;
     }
     sendJson(res, 200, events);
@@ -224,16 +220,14 @@ export async function tryWorkflowsRoutes(
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/steps")) {
     const parts = getPathname(url).split("/");
     if (parts.length !== 5) {
-      res.statusCode = 400;
-      res.end("Expected /workflows/:workflowId/:runId/steps");
+      sendError(res, 400, "Expected /workflows/:workflowId/:runId/steps");
       return true;
     }
     const workflowId = parts[2];
     const runId = parts[3];
     const state = await ctx.runtime.loadCurrentState(workflowId, runId);
     if (!state) {
-      res.statusCode = 404;
-      res.end("Workflow not found");
+      sendError(res, 404, "Workflow not found");
       return true;
     }
     sendJson(res, 200, state.steps);
@@ -244,16 +238,14 @@ export async function tryWorkflowsRoutes(
     const pathOnlyWf = getPathname(url);
     const parts = pathOnlyWf.split("/");
     if (parts.length !== 4) {
-      res.statusCode = 400;
-      res.end("Expected /workflows/:workflowId/:runId");
+      sendError(res, 400, "Expected /workflows/:workflowId/:runId");
       return true;
     }
     const workflowId = parts[2];
     const runId = parts[3];
     const state = await ctx.runtime.loadCurrentState(workflowId, runId);
     if (!state) {
-      res.statusCode = 404;
-      res.end("Workflow not found");
+      sendError(res, 404, "Workflow not found");
       return true;
     }
     sendJson(res, 200, state);
@@ -263,8 +255,7 @@ export async function tryWorkflowsRoutes(
   if (req.method === "POST" && url.startsWith("/workflows/") && url.endsWith("/signals")) {
     const parts = url.split("/");
     if (parts.length !== 5) {
-      res.statusCode = 400;
-      res.end("Expected /workflows/:workflowId/:runId/signals");
+      sendError(res, 400, "Expected /workflows/:workflowId/:runId/signals");
       return true;
     }
     const workflowId = parts[2];
@@ -278,8 +269,7 @@ export async function tryWorkflowsRoutes(
 
       const state = await ctx.runtime.loadCurrentState(workflowId, runId);
       if (!state) {
-        res.statusCode = 404;
-        res.end("Workflow not found");
+        sendError(res, 404, "Workflow not found");
         return true;
       }
 
@@ -304,8 +294,7 @@ export async function tryWorkflowsRoutes(
 
       sendJson(res, 200, { ok: true });
     } catch (e) {
-      res.statusCode = 500;
-      res.end(`Error sending signal: ${(e as Error).message}`);
+      sendError(res, 500, `Error sending signal: ${(e as Error).message}`);
     }
     return true;
   }
@@ -314,8 +303,7 @@ export async function tryWorkflowsRoutes(
     const pathOnly = getPathname(url);
     const pathParts = pathOnly.split("/");
     if (pathParts.length !== 5) {
-      res.statusCode = 400;
-      res.end("Expected /workflows/:workflowId/:runId/cancel");
+      sendError(res, 400, "Expected /workflows/:workflowId/:runId/cancel");
       return true;
     }
 
@@ -323,8 +311,7 @@ export async function tryWorkflowsRoutes(
     const runId = pathParts[3];
     const state = await ctx.runtime.loadCurrentState(workflowId, runId);
     if (!state) {
-      res.statusCode = 404;
-      res.end("Workflow not found");
+      sendError(res, 404, "Workflow not found");
       return true;
     }
     if (state.status !== "running") {

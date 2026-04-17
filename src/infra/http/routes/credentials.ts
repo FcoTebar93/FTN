@@ -20,15 +20,13 @@ export async function tryCredentialsRoutes(
   if (req.method === "GET" && rawPath.startsWith("/credentials/")) {
     const parts = rawPath.split("/");
     if (parts.length !== 3 || !parts[2]) {
-      res.statusCode = 400;
-      res.end("Expected /credentials/:provider");
+      sendError(res, 400, "Expected /credentials/:provider");
       return true;
     }
     const provider = decodeURIComponent(parts[2]);
     const cred = await getCredential(ctx.requestSubject, provider);
     if (!cred) {
-      res.statusCode = 404;
-      res.end("Credential not found");
+      sendError(res, 404, "Credential not found");
       return true;
     }
     res.setHeader("Content-Type", "application/json");
@@ -39,8 +37,7 @@ export async function tryCredentialsRoutes(
   if (req.method === "PUT" && rawPath.startsWith("/credentials/")) {
     const parts = rawPath.split("/");
     if (parts.length !== 3 || !parts[2]) {
-      res.statusCode = 400;
-      res.end("Expected /credentials/:provider");
+      sendError(res, 400, "Expected /credentials/:provider");
       return true;
     }
     const provider = decodeURIComponent(parts[2]);
