@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { getPathname } from "./url";
+import { sendError } from "./response";
 
 export type { FtnAppRouteContext } from "./route-context";
 
@@ -17,8 +18,7 @@ export async function handleAppRoutes(
   res: http.ServerResponse
 ): Promise<void> {
   if (!req.url || !req.method) {
-    res.statusCode = 400;
-    res.end("Bad request");
+    sendError(res, 400, "Bad request");
     return;
   }
 
@@ -32,6 +32,5 @@ export async function handleAppRoutes(
   if (await tryWorkflowsRoutes(ctx, req, res, rawPath)) return;
   if (await tryPaymentsRoutes(ctx, req, res, rawPath)) return;
 
-  res.statusCode = 404;
-  res.end("Not found");
+  sendError(res, 404, "Not found");
 }

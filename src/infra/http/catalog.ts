@@ -3,6 +3,7 @@ import type { ActivityRegistry } from "../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../core/activities";
 import { JsonSchema } from "../../shared/json-schema";
 import { getPathname } from "./url";
+import { sendError } from "./response";
 
 export interface ActivityDescriptor {
   name: string;
@@ -78,8 +79,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     const parts = pathOnly.split("/");
 
     if (parts.length !== 3) {
-      res.statusCode = 400;
-      res.end("Expected /activities/:name");
+      sendError(res, 400, "Expected /activities/:name");
       return true;
     }
 
@@ -87,8 +87,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     const def = registry.get(name);
 
     if (!def) {
-      res.statusCode = 404;
-      res.end("Activity not found");
+      sendError(res, 404, "Activity not found");
       return true;
     }
 
@@ -118,8 +117,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     const pathOnly = getPathname(req.url);
     const parts = pathOnly.split("/");
     if (parts.length !== 4) {
-      res.statusCode = 400;
-      res.end("Expected /catalog/workflows/:name");
+      sendError(res, 400, "Expected /catalog/workflows/:name");
       return true;
     }
   
@@ -130,8 +128,7 @@ export async function handleCatalogRoutes(req: http.IncomingMessage, res: http.S
     const wf = deps.workflows.getWorkflowDescriptor(name, version);
   
     if (!wf) {
-      res.statusCode = 404;
-      res.end("Workflow not found");
+      sendError(res, 404, "Workflow not found");
       return true;
     }
   
