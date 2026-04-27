@@ -8,7 +8,6 @@ import { sendSmsActivityDefinition } from "./send-sms-activity";
 import { registerDefinitions } from "../helpers";
 
 export interface NotificationsConfig extends IntegrationModuleConfig {
-  enabled: boolean;
   sendgridApiKey?: string;
   emailFrom?: string;
   slackWebhookUrl?: string;

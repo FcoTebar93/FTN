@@ -5,7 +5,6 @@ import { checkFraudScoreActivityDefinition } from "./check-fraud-score";
 import { registerDefinitions } from "../helpers";
 
 export interface IdentityConfig extends IntegrationModuleConfig {
-  enabled: boolean;
   providerUrl?: string;
   providerToken?: string;
 }
