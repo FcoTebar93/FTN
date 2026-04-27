@@ -4,6 +4,7 @@ import { readBodyCapped } from "../security";
 import type { FtnAppRouteContext } from "../route-context";
 import { sendError, sendJson } from "../response";
 import { buildWorkflowTask } from "../../../shared/task-factories";
+import { readJsonBodyCapped } from "../request";
 
 interface CheckoutLineItemInput {
   quantity: number;
@@ -27,42 +28,36 @@ export async function tryPaymentsRoutes(
   _rawPath: string
 ): Promise<boolean> {
   if (req.method === "POST" && req.url === "/pay/checkout") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const parsed = JSON.parse(body || "{}") as CheckoutRequestBody;
-        const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsed;
-
-        const key = ctx.stripeSecretKey;
-        if (!key) {
-          sendError(res, 500, "STRIPE_SECRET_KEY not configured");
-          return;
-        }
-
-        const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
-        const session = await stripe.checkout.sessions.create({
-          mode: "payment",
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          customer_email: customerEmail,
-          currency,
-          line_items: lineItems.map((li) => ({
-            quantity: li.quantity,
-            price_data: {
-              currency,
-              unit_amount: li.unitAmountCents,
-              product_data: { name: li.name },
-            },
-          })),
-          metadata,
-        });
-
-        sendJson(res, 200, { sessionId: session.id, url: session.url });
-      } catch (e) {
-        sendError(res, 500, `Error creating checkout: ${(e as Error).message}`);
+    const parsedResult = await readJsonBodyCapped<CheckoutRequestBody>(req, res, ctx.apiSecurity.maxBodyBytes);
+    if (!parsedResult.ok) return true;
+    try {
+      const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsedResult.value;
+      const key = ctx.stripeSecretKey;
+      if (!key) {
+        sendError(res, 500, "STRIPE_SECRET_KEY not configured");
+        return true;
       }
-    });
+      const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        customer_email: customerEmail,
+        currency,
+        line_items: lineItems.map((li) => ({
+          quantity: li.quantity,
+          price_data: {
+            currency,
+            unit_amount: li.unitAmountCents,
+            product_data: { name: li.name },
+          },
+        })),
+        metadata,
+      });
+      sendJson(res, 200, { sessionId: session.id, url: session.url });
+    } catch (e) {
+      sendError(res, 500, `Error creating checkout: ${(e as Error).message}`);
+    }
     return true;
   }
 
@@ -106,7 +101,6 @@ export async function tryPaymentsRoutes(
                 },
               },
             ]);
-
             const task = buildWorkflowTask({
               id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
               workflowId,
@@ -114,12 +108,10 @@ export async function tryPaymentsRoutes(
               targetQueue: "workflows",
               correlationId: ctx.correlationId,
             });
-
             await ctx.taskQueue.enqueue(task);
           }
         }
       }
-
       res.statusCode = 200;
       res.end("[OK] webhook processed");
     } catch (err) {

@@ -1,5 +1,5 @@
 import type http from "node:http";
-import { readBodyCapped, extractBearerOrApiKey } from "../security";
+import { extractBearerOrApiKey } from "../security";
 import { sendError, sendJson } from "../response";
 import {
   isAuthConfigured,
@@ -23,6 +23,7 @@ import {
   storeRefreshToken,
 } from "../../users";
 import type { FtnAppRouteContext } from "../route-context";
+import { readJsonBodyCapped } from "../request";
 
 export async function tryAuthAndAuditRoutes(
   ctx: FtnAppRouteContext,
@@ -36,16 +37,14 @@ export async function tryAuthAndAuditRoutes(
       return true;
     }
 
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-
-    let parsed: { username?: unknown; password?: unknown };
-    try {
-      parsed = JSON.parse(body || "{}");
-    } catch {
-      sendError(res, 400, "Invalid JSON");
-      return true;
-    }
+    const parsedResult = await readJsonBodyCapped<{ username?: unknown; password?: unknown }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes,
+      { invalidJsonMessage: "Invalid JSON" }
+    );
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
 
     const u = typeof parsed.username === "string" ? parsed.username : "";
     const p = typeof parsed.password === "string" ? parsed.password : "";
@@ -103,16 +102,14 @@ export async function tryAuthAndAuditRoutes(
       return true;
     }
 
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-
-    let parsed: { username?: unknown; password?: unknown };
-    try {
-      parsed = JSON.parse(body || "{}");
-    } catch {
-      sendError(res, 400, "Invalid JSON");
-      return true;
-    }
+    const parsedResult = await readJsonBodyCapped<{ username?: unknown; password?: unknown }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes,
+      { invalidJsonMessage: "Invalid JSON" }
+    );
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
 
     const rawUser = typeof parsed.username === "string" ? parsed.username : "";
     const rawPass = typeof parsed.password === "string" ? parsed.password : "";
@@ -160,15 +157,14 @@ export async function tryAuthAndAuditRoutes(
       sendError(res, 503, "Refresh is not available");
       return true;
     }
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-    let parsed: { refresh_token?: unknown };
-    try {
-      parsed = JSON.parse(body || "{}");
-    } catch {
-      sendError(res, 400, "Invalid JSON");
-      return true;
-    }
+    const parsedResult = await readJsonBodyCapped<{ refresh_token?: unknown }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes,
+      { invalidJsonMessage: "Invalid JSON" }
+    );
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
     const rt = typeof parsed.refresh_token === "string" ? parsed.refresh_token : "";
     if (!rt.trim()) {
       sendError(res, 400, "Missing refresh_token");

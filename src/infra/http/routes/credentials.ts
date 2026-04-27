@@ -1,9 +1,10 @@
 import type http from "node:http";
-import { readBodyCapped } from "../security";
 import { sendError, sendJson } from "../response";
 import { insertAuditLog } from "../../users";
 import { getCredential, listCredentials, upsertCredential } from "../../../app/credentials";
 import type { FtnAppRouteContext } from "../route-context";
+import { getPathParams } from "../path-params";
+import { readJsonBodyCapped } from "../request";
 
 export async function tryCredentialsRoutes(
   ctx: FtnAppRouteContext,
@@ -18,8 +19,8 @@ export async function tryCredentialsRoutes(
   }
 
   if (req.method === "GET" && rawPath.startsWith("/credentials/")) {
-    const parts = rawPath.split("/");
-    if (parts.length !== 3 || !parts[2]) {
+    const parts = getPathParams(rawPath, 3);
+    if (!parts || !parts[2]) {
       sendError(res, 400, "Expected /credentials/:provider");
       return true;
     }
@@ -29,48 +30,43 @@ export async function tryCredentialsRoutes(
       sendError(res, 404, "Credential not found");
       return true;
     }
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(cred));
+    sendJson(res, 200, cred);
     return true;
   }
 
   if (req.method === "PUT" && rawPath.startsWith("/credentials/")) {
-    const parts = rawPath.split("/");
-    if (parts.length !== 3 || !parts[2]) {
+    const parts = getPathParams(rawPath, 3);
+    if (!parts || !parts[2]) {
       sendError(res, 400, "Expected /credentials/:provider");
       return true;
     }
     const provider = decodeURIComponent(parts[2]);
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-    try {
-      const parsed = JSON.parse(body || "{}") as {
-        config?: unknown;
-        secrets?: unknown;
-      };
-      const config =
-        parsed.config && typeof parsed.config === "object" && !Array.isArray(parsed.config)
-          ? (parsed.config as Record<string, unknown>)
-          : undefined;
-      const secrets =
-        parsed.secrets && typeof parsed.secrets === "object" && !Array.isArray(parsed.secrets)
-          ? (parsed.secrets as Record<string, unknown>)
-          : undefined;
-      if (!config && !secrets) {
-        sendError(res, 400, "Payload must include config or secrets object");
-        return true;
-      }
-      const saved = await upsertCredential(ctx.requestSubject, provider, { config, secrets });
-      await insertAuditLog(ctx.pool, {
-        subject: ctx.requestSubject,
-        action: "credentials.upsert",
-        resource: provider,
-        detail: { hasConfig: Boolean(config), hasSecrets: Boolean(secrets) },
-      });
-      sendJson(res, 200, saved);
-    } catch (e) {
-      sendError(res, 400, (e as Error).message);
+    const parsedResult = await readJsonBodyCapped<{
+      config?: unknown;
+      secrets?: unknown;
+    }>(req, res, ctx.apiSecurity.maxBodyBytes);
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
+    const config =
+      parsed.config && typeof parsed.config === "object" && !Array.isArray(parsed.config)
+        ? (parsed.config as Record<string, unknown>)
+        : undefined;
+    const secrets =
+      parsed.secrets && typeof parsed.secrets === "object" && !Array.isArray(parsed.secrets)
+        ? (parsed.secrets as Record<string, unknown>)
+        : undefined;
+    if (!config && !secrets) {
+      sendError(res, 400, "Payload must include config or secrets object");
+      return true;
     }
+    const saved = await upsertCredential(ctx.requestSubject, provider, { config, secrets });
+    await insertAuditLog(ctx.pool, {
+      subject: ctx.requestSubject,
+      action: "credentials.upsert",
+      resource: provider,
+      detail: { hasConfig: Boolean(config), hasSecrets: Boolean(secrets) },
+    });
+    sendJson(res, 200, saved);
     return true;
   }
 

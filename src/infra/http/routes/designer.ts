@@ -1,5 +1,4 @@
 import type http from "node:http";
-import { readBodyCapped } from "../security";
 import { sendError, sendJson } from "../response";
 import type { StoredWorkflow } from "../../../app/designer-types";
 import {
@@ -13,6 +12,8 @@ import { validateDesignerWorkflow } from "../../../app/designer-validate";
 import { DESIGNER_KINDS } from "../../../app/designer-kinds";
 import type { FtnAppRouteContext } from "../route-context";
 import { getPathname } from "../url";
+import { getPathParams } from "../path-params";
+import { readJsonBodyCapped } from "../request";
 
 export async function tryDesignerReadRoutes(
   ctx: FtnAppRouteContext,
@@ -39,8 +40,8 @@ export async function tryDesignerReadRoutes(
 
   if (req.method === "GET" && req.url?.startsWith("/designer/workflows/")) {
     const pathOnly = getPathname(req.url);
-    const parts = pathOnly.split("/");
-    if (parts.length !== 4) {
+    const parts = getPathParams(pathOnly, 4);
+    if (!parts) {
       sendError(res, 400, "Expected /designer/workflows/:id");
       return true;
     }
@@ -66,102 +67,97 @@ export async function tryDesignerWriteRoutes(
   rawPath: string
 ): Promise<boolean> {
   if (req.method === "POST" && req.url === "/designer/workflows") {
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-    try {
-      const parsed = JSON.parse(body || "{}") as StoredWorkflow;
+    const parsedResult = await readJsonBodyCapped<StoredWorkflow>(req, res, ctx.apiSecurity.maxBodyBytes, {
+      invalidJsonMessage: "Invalid JSON",
+    });
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
 
-      if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-        sendError(res, 400, "Invalid StoredWorkflow payload");
-        return true;
-      }
-
-      if ((await getStoredWorkflow(ctx.requestSubject, parsed.id)) !== undefined) {
-        sendError(res, 409, `StoredWorkflow "${parsed.id}" already exists`);
-        return true;
-      }
-
-      const normalized = normalizeStoredWorkflow(parsed);
-      const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
-      if (schedErr) {
-        sendError(res, 400, schedErr);
-        return true;
-      }
-
-      const graphErr = validateDesignerWorkflow(normalized);
-      if (graphErr) {
-        sendError(res, 400, graphErr);
-        return true;
-      }
-
-      await upsertStoredWorkflow(ctx.requestSubject, normalized);
-
-      if (normalized.schedule?.type === "instant") {
-        try {
-          await ctx.enqueueWorkflowStart(
-            getDesignerRuntimeName(ctx.requestSubject, normalized.id),
-            normalized.scheduledInput ?? {},
-            { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
-          );
-        } catch (e) {
-          sendJson(res, 201, {
-            ok: true,
-            id: normalized.id,
-            version: normalized.version,
-            instantRunError: String((e as Error).message),
-          });
-          return true;
-        }
-      }
-
-      sendJson(res, 201, { ok: true, id: normalized.id, version: normalized.version });
-    } catch (e) {
-      sendError(res, 400, `Invalid JSON: ${(e as Error).message}`);
+    if (!parsed.id || !parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
+      sendError(res, 400, "Invalid StoredWorkflow payload");
+      return true;
     }
+
+    if ((await getStoredWorkflow(ctx.requestSubject, parsed.id)) !== undefined) {
+      sendError(res, 409, `StoredWorkflow "${parsed.id}" already exists`);
+      return true;
+    }
+
+    const normalized = normalizeStoredWorkflow(parsed);
+    const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
+    if (schedErr) {
+      sendError(res, 400, schedErr);
+      return true;
+    }
+
+    const graphErr = validateDesignerWorkflow(normalized);
+    if (graphErr) {
+      sendError(res, 400, graphErr);
+      return true;
+    }
+
+    await upsertStoredWorkflow(ctx.requestSubject, normalized);
+
+    if (normalized.schedule?.type === "instant") {
+      try {
+        await ctx.enqueueWorkflowStart(
+          getDesignerRuntimeName(ctx.requestSubject, normalized.id),
+          normalized.scheduledInput ?? {},
+          { correlationId: ctx.correlationId, tenantId: ctx.tenantId }
+        );
+      } catch (e) {
+        sendJson(res, 201, {
+          ok: true,
+          id: normalized.id,
+          version: normalized.version,
+          instantRunError: String((e as Error).message),
+        });
+        return true;
+      }
+    }
+
+    sendJson(res, 201, { ok: true, id: normalized.id, version: normalized.version });
     return true;
   }
 
   if (req.method === "PUT" && req.url?.startsWith("/designer/workflows/")) {
     const pathOnly = getPathname(req.url);
-    const parts = pathOnly.split("/");
-    if (parts.length !== 4) {
+    const parts = getPathParams(pathOnly, 4);
+    if (!parts) {
       sendError(res, 400, "Expected /designer/workflows/:id");
       return true;
     }
 
     const id = decodeURIComponent(parts[3]);
+    const parsedResult = await readJsonBodyCapped<StoredWorkflow>(req, res, ctx.apiSecurity.maxBodyBytes, {
+      invalidJsonMessage: "Invalid JSON",
+    });
+    if (!parsedResult.ok) return true;
+    const parsed = parsedResult.value;
 
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-    try {
-      const parsed = JSON.parse(body || "{}") as StoredWorkflow;
-
-      if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
-        sendError(res, 400, "Invalid StoredWorkflow payload");
-        return true;
-      }
-
-      const stored: StoredWorkflow = { ...parsed, id };
-
-      const normalized = normalizeStoredWorkflow(stored);
-      const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
-      if (schedErr) {
-        sendError(res, 400, schedErr);
-        return true;
-      }
-
-      const graphErrPut = validateDesignerWorkflow(normalized);
-      if (graphErrPut) {
-        sendError(res, 400, graphErrPut);
-        return true;
-      }
-
-      await upsertStoredWorkflow(ctx.requestSubject, normalized);
-
-      sendJson(res, 200, { ok: true, id: normalized.id, version: normalized.version });
-    } catch (e) {
-      sendError(res, 400, `Invalid JSON: ${(e as Error).message}`);
+    if (!parsed.version || !parsed.displayName || !parsed.steps || !parsed.entryStepId) {
+      sendError(res, 400, "Invalid StoredWorkflow payload");
+      return true;
     }
+
+    const stored: StoredWorkflow = { ...parsed, id };
+
+    const normalized = normalizeStoredWorkflow(stored);
+    const schedErr = validateSchedule(normalized.schedule ?? { type: "instant" });
+    if (schedErr) {
+      sendError(res, 400, schedErr);
+      return true;
+    }
+
+    const graphErrPut = validateDesignerWorkflow(normalized);
+    if (graphErrPut) {
+      sendError(res, 400, graphErrPut);
+      return true;
+    }
+
+    await upsertStoredWorkflow(ctx.requestSubject, normalized);
+
+    sendJson(res, 200, { ok: true, id: normalized.id, version: normalized.version });
     return true;
   }
 
@@ -177,21 +173,20 @@ export async function tryDesignerWriteRoutes(
       sendError(res, 404, "Designer workflow not found");
       return true;
     }
-    const bodyTr = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (bodyTr === null) return true;
     let input: unknown = wf.scheduledInput ?? {};
-    try {
-      if (bodyTr.trim()) {
-        const parsedBody = JSON.parse(bodyTr) as { input?: unknown };
-        if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody) && "input" in parsedBody) {
-          input = parsedBody.input;
-        } else {
-          input = parsedBody;
-        }
+
+    const bodyTrResult = await readJsonBodyCapped<unknown>(req, res, ctx.apiSecurity.maxBodyBytes, {
+      emptyAs: undefined,
+      invalidJsonMessage: "Invalid JSON body",
+    });
+    if (!bodyTrResult.ok) return true;
+    const parsedBody = bodyTrResult.value;
+    if (parsedBody !== undefined) {
+      if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody) && "input" in parsedBody) {
+        input = (parsedBody as { input?: unknown }).input;
+      } else {
+        input = parsedBody;
       }
-    } catch {
-      sendError(res, 400, "Invalid JSON body");
-      return true;
     }
     try {
       const { workflowId, runId, version } = await ctx.enqueueWorkflowStart(

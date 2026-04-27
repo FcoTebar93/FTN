@@ -4,6 +4,22 @@ import { join } from "node:path";
 import { SWAGGER_UI_HTML } from "../../swagger-ui";
 import type { FtnAppRouteContext } from "../route-context";
 import type { DeadLetterStatus } from "../../../shared/dead-letter";
+import { sendError, sendJson } from "../response";
+
+function getDeadLetterActionId(rawPath: string, action: "requeue" | "ack"): string | undefined {
+  const match = rawPath.match(
+    action === "requeue" ? /^\/dead-letters\/([^/]+)\/requeue$/ : /^\/dead-letters\/([^/]+)\/ack$/
+  );
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function sendDeadLetterResult(res: http.ServerResponse, id: string, result: { ok: true } | { ok: false; error: string }): void {
+  if (!result.ok) {
+    sendError(res, result.error === "Dead letter not found" ? 404 : 409, result.error);
+    return;
+  }
+  sendJson(res, 202, { ok: true, id });
+}
 
 export async function trySystemRoutes(
   ctx: FtnAppRouteContext,
@@ -12,17 +28,14 @@ export async function trySystemRoutes(
   rawPath: string
 ): Promise<boolean> {
   if (req.method === "GET" && rawPath === "/health") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ status: "ok" }));
+    sendJson(res, 200, { status: "ok" });
     return true;
   }
 
   if (req.method === "GET" && rawPath === "/openapi.json") {
     const specPath = join(process.cwd(), "docs/api/openapi.json");
     if (!existsSync(specPath)) {
-      res.statusCode = 404;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "OpenAPI spec not found" }));
+      sendError(res, 404, "OpenAPI spec not found");
       return true;
     }
     const raw = readFileSync(specPath, "utf8");
@@ -64,9 +77,7 @@ export async function trySystemRoutes(
       }
     }
     const ok = (!ctx.pool || checks.postgres === true) && (!ctx.redis || checks.redis === true);
-    res.statusCode = ok ? 200 : 503;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ status: ok ? "ready" : "not_ready", checks }));
+    sendJson(res, ok ? 200 : 503, { status: ok ? "ready" : "not_ready", checks });
     return true;
   }
 
@@ -78,61 +89,34 @@ export async function trySystemRoutes(
     const statusRaw = parsed.searchParams.get("status");
     const allowedStatus: DeadLetterStatus[] = ["pending", "requeued", "acknowledged"];
     if (statusRaw && !allowedStatus.includes(statusRaw as DeadLetterStatus)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid status filter. Allowed: pending, requeued, acknowledged" }));
+      sendError(res, 400, "Invalid status filter. Allowed: pending, requeued, acknowledged");
       return true;
     }
     const status = statusRaw && allowedStatus.includes(statusRaw as DeadLetterStatus)
       ? (statusRaw as DeadLetterStatus)
       : undefined;
     const items = ctx.listDeadLetters({ limit, queueName, taskType, status });
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ items, total: items.length }));
+    sendJson(res, 200, { items, total: items.length });
     return true;
   }
 
   if (req.method === "POST" && rawPath.startsWith("/dead-letters/") && rawPath.endsWith("/requeue")) {
-    const match = rawPath.match(/^\/dead-letters\/([^/]+)\/requeue$/);
-    if (!match) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid dead-letter route" }));
+    const id = getDeadLetterActionId(rawPath, "requeue");
+    if (!id) {
+      sendError(res, 400, "Invalid dead-letter route");
       return true;
     }
-    const id = decodeURIComponent(match[1]);
-    const result = await ctx.requeueDeadLetter(id);
-    if (!result.ok) {
-      res.statusCode = result.error === "Dead letter not found" ? 404 : 409;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: result.error }));
-      return true;
-    }
-    res.statusCode = 202;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ ok: true, id }));
+    sendDeadLetterResult(res, id, await ctx.requeueDeadLetter(id));
     return true;
   }
 
   if (req.method === "POST" && rawPath.startsWith("/dead-letters/") && rawPath.endsWith("/ack")) {
-    const match = rawPath.match(/^\/dead-letters\/([^/]+)\/ack$/);
-    if (!match) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Invalid dead-letter route" }));
+    const id = getDeadLetterActionId(rawPath, "ack");
+    if (!id) {
+      sendError(res, 400, "Invalid dead-letter route");
       return true;
     }
-    const id = decodeURIComponent(match[1]);
-    const result = ctx.acknowledgeDeadLetter(id);
-    if (!result.ok) {
-      res.statusCode = result.error === "Dead letter not found" ? 404 : 409;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: result.error }));
-      return true;
-    }
-    res.statusCode = 202;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ ok: true, id }));
+    sendDeadLetterResult(res, id, ctx.acknowledgeDeadLetter(id));
     return true;
   }
 

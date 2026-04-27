@@ -7,6 +7,8 @@ import type { FtnAppRouteContext } from "../route-context";
 import { getPathname } from "../url";
 import { sendError, sendJson } from "../response";
 import { buildWorkflowTask } from "../../../shared/task-factories";
+import { getPathParams } from "../path-params";
+import { readJsonBodyCapped } from "../request";
 
 export async function tryWorkflowsRoutes(
   ctx: FtnAppRouteContext,
@@ -24,10 +26,14 @@ export async function tryWorkflowsRoutes(
   };
 
   if (req.method === "POST" && getPathname(url) === "/workflows") {
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
+    const parsedResult = await readJsonBodyCapped<{ name?: unknown; input?: unknown; workflowVersion?: unknown }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes
+    );
+    if (!parsedResult.ok) return true;
     try {
-      const parsed = JSON.parse(body || "{}") as { name?: unknown; input?: unknown; workflowVersion?: unknown };
+      const parsed = parsedResult.value;
       const name = typeof parsed.name === "string" ? parsed.name : "";
       const workflowVersion =
         typeof parsed.workflowVersion === "string" && parsed.workflowVersion.trim()
@@ -79,7 +85,6 @@ export async function tryWorkflowsRoutes(
           tenantId: ctx.tenantId,
         });
       }
-
       sendJson(res, 201, { workflowId, runId, version });
     } catch (e) {
       sendError(res, 400, (e as Error).message);
@@ -118,16 +123,13 @@ export async function tryWorkflowsRoutes(
     for (const { workflowId, runId } of slice) {
       const state = await ctx.runtime.loadCurrentState(workflowId, runId);
       if (!state) continue;
-
       const events = await ctx.eventStore.loadEvents(workflowId, runId, 0);
       const startEvent = events.find((e) => e.type === "WorkflowStarted");
       const name =
         startEvent && startEvent.type === "WorkflowStarted" ? startEvent.payload.name : "unknown";
       const retryAttempts = events.filter((e) => e.type === "RetryAttemptStarted").length;
       const lastEventType = events.length > 0 ? events[events.length - 1]!.type : undefined;
-
       if (statusFilter && state.status !== statusFilter) continue;
-
       summaries.push({
         workflowId,
         runId,
@@ -146,7 +148,6 @@ export async function tryWorkflowsRoutes(
         lastEventType,
       });
     }
-
     sendJson(res, 200, summaries);
     return true;
   }
@@ -166,7 +167,6 @@ export async function tryWorkflowsRoutes(
       }
       const parsedBody = body ? JSON.parse(body) : undefined;
       const input = trigger.useBodyAsInput ? parsedBody : undefined;
-
       if (descriptor?.inputSchema) {
         const result = validateJson(descriptor.inputSchema, input);
         if (!result.valid) {
@@ -174,7 +174,6 @@ export async function tryWorkflowsRoutes(
           return true;
         }
       }
-
       const { workflowId, runId } = await ctx.runtime.startWorkflow({
         workflowName: trigger.workflowName,
         workflowVersion: descriptor?.version,
@@ -182,7 +181,6 @@ export async function tryWorkflowsRoutes(
         input,
         definition: wfDef,
       });
-
       const task = buildWorkflowTask({
         id: `wf-task-${workflowId}-${runId}`,
         workflowId,
@@ -190,9 +188,7 @@ export async function tryWorkflowsRoutes(
         targetQueue: "workflows",
         correlationId: ctx.correlationId,
       });
-
       await ctx.taskQueue.enqueue(task);
-
       sendJson(res, 200, { workflowId, runId });
     } catch (e) {
       sendError(res, 500, `Error handling trigger: ${(e as Error).message}`);
@@ -201,8 +197,8 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/events")) {
-    const parts = getPathname(url).split("/");
-    if (parts.length !== 5) {
+    const parts = getPathParams(getPathname(url), 5);
+    if (!parts) {
       sendError(res, 400, "Expected /workflows/:workflowId/:runId/events");
       return true;
     }
@@ -218,8 +214,8 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "GET" && url.startsWith("/workflows/") && url.endsWith("/steps")) {
-    const parts = getPathname(url).split("/");
-    if (parts.length !== 5) {
+    const parts = getPathParams(getPathname(url), 5);
+    if (!parts) {
       sendError(res, 400, "Expected /workflows/:workflowId/:runId/steps");
       return true;
     }
@@ -236,8 +232,8 @@ export async function tryWorkflowsRoutes(
 
   if (req.method === "GET" && url.startsWith("/workflows/")) {
     const pathOnlyWf = getPathname(url);
-    const parts = pathOnlyWf.split("/");
-    if (parts.length !== 4) {
+    const parts = getPathParams(pathOnlyWf, 4);
+    if (!parts) {
       sendError(res, 400, "Expected /workflows/:workflowId/:runId");
       return true;
     }
@@ -253,18 +249,21 @@ export async function tryWorkflowsRoutes(
   }
 
   if (req.method === "POST" && url.startsWith("/workflows/") && url.endsWith("/signals")) {
-    const parts = url.split("/");
-    if (parts.length !== 5) {
+    const parts = getPathParams(getPathname(url), 5);
+    if (!parts) {
       sendError(res, 400, "Expected /workflows/:workflowId/:runId/signals");
       return true;
     }
     const workflowId = parts[2];
     const runId = parts[3];
-
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
+    const parsedResult = await readJsonBodyCapped<{ signalName?: unknown; data?: unknown }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes
+    );
+    if (!parsedResult.ok) return true;
     try {
-      const parsed = JSON.parse(body || "{}");
+      const parsed = parsedResult.value;
       const { signalName, data } = parsed;
 
       const state = await ctx.runtime.loadCurrentState(workflowId, runId);
@@ -281,7 +280,6 @@ export async function tryWorkflowsRoutes(
           payload: { signalName, data },
         },
       ]);
-
       const task = buildWorkflowTask({
         id: `wf-task-signal-${workflowId}-${runId}-${Date.now()}`,
         workflowId,
@@ -289,9 +287,7 @@ export async function tryWorkflowsRoutes(
         targetQueue: "workflows",
         correlationId: ctx.correlationId,
       });
-
       await ctx.taskQueue.enqueue(task);
-
       sendJson(res, 200, { ok: true });
     } catch (e) {
       sendError(res, 500, `Error sending signal: ${(e as Error).message}`);
@@ -301,12 +297,11 @@ export async function tryWorkflowsRoutes(
 
   if (req.method === "POST" && url.startsWith("/workflows/") && url.endsWith("/cancel")) {
     const pathOnly = getPathname(url);
-    const pathParts = pathOnly.split("/");
-    if (pathParts.length !== 5) {
+    const pathParts = getPathParams(pathOnly, 5);
+    if (!pathParts) {
       sendError(res, 400, "Expected /workflows/:workflowId/:runId/cancel");
       return true;
     }
-
     const workflowId = pathParts[2];
     const runId = pathParts[3];
     const state = await ctx.runtime.loadCurrentState(workflowId, runId);
@@ -319,19 +314,17 @@ export async function tryWorkflowsRoutes(
       return true;
     }
 
-    const body = await readBodyCapped(req, res, ctx.apiSecurity.maxBodyBytes);
-    if (body === null) return true;
-    let reason: string | undefined;
-    try {
-      if (body.trim()) {
-        const parsed = JSON.parse(body) as { reason?: unknown };
-        reason = typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : undefined;
-      }
-    } catch {
-      sendError(res, 400, "Invalid JSON body");
-      return true;
-    }
-
+    const parsedResult = await readJsonBodyCapped<{ reason?: unknown } | undefined>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes,
+      { emptyAs: undefined, invalidJsonMessage: "Invalid JSON body" }
+    );
+    if (!parsedResult.ok) return true;
+    const reason =
+      typeof parsedResult.value?.reason === "string" && parsedResult.value.reason.trim()
+        ? parsedResult.value.reason.trim()
+        : undefined;
     await ctx.eventStore.appendEvents(workflowId, runId, state.version, [
       {
         type: "WorkflowCancelRequested",
@@ -343,7 +336,6 @@ export async function tryWorkflowsRoutes(
         },
       },
     ]);
-
     const task = buildWorkflowTask({
       id: `wf-task-cancel-${workflowId}-${runId}-${Date.now()}`,
       workflowId,
@@ -352,7 +344,6 @@ export async function tryWorkflowsRoutes(
       correlationId: ctx.correlationId,
     });
     await ctx.taskQueue.enqueue(task);
-
     sendJson(res, 202, { ok: true, requested: true });
     return true;
   }
