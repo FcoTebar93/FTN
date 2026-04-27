@@ -5,6 +5,7 @@ import { stripeCreateCheckoutSessionActivityDefinition } from "./stripe-create-c
 import { validateOrderActivityDefinition } from "./validate-order";
 import { chargePaymentActivityDefinition } from "./charge-payment";
 import { getPaymentStatusActivityDefinition } from "./get-payment-status";
+import { registerDefinitions } from "../helpers";
 
 export interface PaymentsConfig extends IntegrationModuleConfig {
   stripeSecretKey?: string;
@@ -13,22 +14,17 @@ export interface PaymentsConfig extends IntegrationModuleConfig {
 export const PaymentsModule: IntegrationModule = {
   name: "payments",
   registerActivities(registry: ActivityRegistry, config: PaymentsConfig) {
-    if (!config.enabled){
+    if (!config.enabled) {
       return;
     }
 
-    const defs: AnyActivityDefinition[] = [];
-
-    defs.push(validateOrderActivityDefinition());
-    defs.push(chargePaymentActivityDefinition());
+    const defs: AnyActivityDefinition[] = [validateOrderActivityDefinition(), chargePaymentActivityDefinition()];
 
     if (config.stripeSecretKey) {
       defs.push(stripeCreateCheckoutSessionActivityDefinition(config));
       defs.push(getPaymentStatusActivityDefinition(config));
     }
 
-    for (const def of defs) {
-      registry.register(def);
-    }
+    registerDefinitions(registry, defs);
   },
 };

@@ -1,11 +1,11 @@
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { AnyActivityDefinition } from "../../../core/activities";
 import { generateQrCodeActivityDefinition } from "./generate-qr-code";
 import { renderPdfFromTemplateActivityDefinition } from "./render-pdf-from-template";
+import { registerDefinitions } from "../helpers";
 
 export interface DocumentsConfig {
-    enabled: boolean;
+  enabled: boolean;
 }
 
 export const DocumentsModule: IntegrationModule = {
@@ -14,14 +14,9 @@ export const DocumentsModule: IntegrationModule = {
     if (!config.enabled) {
       return;
     }
-
-    const defs: AnyActivityDefinition[] = [
+    registerDefinitions(registry, [
       generateQrCodeActivityDefinition(),
       renderPdfFromTemplateActivityDefinition(),
-    ];
-
-    for (const def of defs) {
-      registry.register(def);
-    }
+    ]);
   },
 };

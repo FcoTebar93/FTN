@@ -1,10 +1,10 @@
-import { Pool } from "pg";
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { AnyActivityDefinition } from "../../../core/activities";
 import { dbExecuteActivityDefinition } from "./db-execute";
 import { putKeyValueActivityDefinition } from "./put-key-value";
 import { getKeyValueActivityDefinition } from "./get-key-value";
+import type { Pool } from "pg";
+import { registerDefinitions, resolvePool } from "../helpers";
 
 export interface StorageConfig {
   enabled: boolean;
@@ -16,22 +16,12 @@ export const StorageModule: IntegrationModule = {
   name: "storage",
   registerActivities(registry: ActivityRegistry, config: StorageConfig) {
     if (!config.enabled) return;
-
-    const pool =
-      config.pool ??
-      (config.databaseUrl ? new Pool({ connectionString: config.databaseUrl }) : undefined);
-    if (!pool) return;
-
-    const merged: StorageConfig = { ...config, pool };
-
-    const defs: AnyActivityDefinition[] = [
+    const merged = resolvePool(config);
+    if (!merged) return;
+    registerDefinitions(registry, [
       dbExecuteActivityDefinition(merged),
       putKeyValueActivityDefinition(merged),
       getKeyValueActivityDefinition(merged),
-    ];
-
-    for (const def of defs) {
-      registry.register(def);
-    }
+    ]);
   },
 };

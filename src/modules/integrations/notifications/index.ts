@@ -5,6 +5,7 @@ import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
 import { sendWebhookActivityDefinition } from "./send-webhook-activity";
 import { sendSmsActivityDefinition } from "./send-sms-activity";
+import { registerDefinitions } from "../helpers";
 
 export interface NotificationsConfig extends IntegrationModuleConfig {
   enabled: boolean;
@@ -31,13 +32,9 @@ export const NotificationsModule: IntegrationModule = {
       defs.push(sendSlackMessageActivityDefinition(config));
     }
 
-    if (config.enabled) {
-      defs.push(sendWebhookActivityDefinition(config));
-      defs.push(sendSmsActivityDefinition(config));
-    }
+    defs.push(sendWebhookActivityDefinition(config));
+    defs.push(sendSmsActivityDefinition(config));
 
-    for (const def of defs) {
-      registry.register(def);
-    }
+    registerDefinitions(registry, defs);
   },
 };

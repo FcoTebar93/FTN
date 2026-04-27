@@ -1,8 +1,8 @@
-import { Pool } from "pg";
 import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { AnyActivityDefinition } from "../../../core/activities";
 import { upsertUserActivityDefinition } from "./upsert-user";
+import type { Pool } from "pg";
+import { registerDefinitions, resolvePool } from "../helpers";
 
 export interface CrmConfig extends IntegrationModuleConfig {
   databaseUrl?: string;
@@ -15,22 +15,10 @@ export const CrmModule: IntegrationModule = {
     if (!config.enabled) {
       return;
     }
-
-    const pool =
-      config.pool ??
-      (config.databaseUrl ? new Pool({ connectionString: config.databaseUrl }) : undefined);
-    if (!pool) {
+    const merged = resolvePool(config);
+    if (!merged) {
       return;
     }
-
-    const merged: CrmConfig = { ...config, pool };
-
-    const defs: AnyActivityDefinition[] = [
-      upsertUserActivityDefinition(merged),
-    ];
-
-    for (const def of defs) {
-      registry.register(def);
-    }
+    registerDefinitions(registry, [upsertUserActivityDefinition(merged)]);
   },
 };

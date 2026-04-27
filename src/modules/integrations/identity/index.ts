@@ -1,30 +1,25 @@
 import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { AnyActivityDefinition } from "../../../core/activities";
 import { verifyIdentityActivityDefinition } from "./verify-identity";
 import { checkFraudScoreActivityDefinition } from "./check-fraud-score";
+import { registerDefinitions } from "../helpers";
 
 export interface IdentityConfig extends IntegrationModuleConfig {
-    enabled: boolean;
-    providerUrl?: string;
-    providerToken?: string;
+  enabled: boolean;
+  providerUrl?: string;
+  providerToken?: string;
 }
 
 export const IdentityModule: IntegrationModule = {
-    name: "identity",
-    registerActivities(registry: ActivityRegistry, config: IdentityConfig) {
-
-        if (!config.enabled){
-            return;
-        }
-
-        const defs: AnyActivityDefinition[] = [
-          verifyIdentityActivityDefinition(config),
-          checkFraudScoreActivityDefinition(),
-        ];
-
-        for (const def of defs) {
-            registry.register(def);
-        }
+  name: "identity",
+  registerActivities(registry: ActivityRegistry, config: IdentityConfig) {
+    if (!config.enabled) {
+      return;
     }
+    const defs = [
+      verifyIdentityActivityDefinition(config),
+      checkFraudScoreActivityDefinition(),
+    ];
+    registerDefinitions(registry, defs);
+  },
 };

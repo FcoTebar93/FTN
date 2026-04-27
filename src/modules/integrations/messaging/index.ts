@@ -1,8 +1,8 @@
 import type { IntegrationModule } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
-import type { AnyActivityDefinition } from "../../../core/activities";
 import type { MessagingConfig } from "./types";
 import { redisPublishActivityDefinition } from "./redis-publish";
+import { registerDefinitions } from "../helpers";
 
 export type { MessagingConfig } from "./types";
 
@@ -16,15 +16,11 @@ export const MessagingModule: IntegrationModule = {
       return;
     }
 
-    const defs: AnyActivityDefinition[] = [
+    registerDefinitions(registry, [
       redisPublishActivityDefinition({
         ...config,
         ...(config.redis ? {} : { redisUrl: config.redisUrl!.trim() }),
       }),
-    ];
-
-    for (const def of defs) {
-      registry.register(def);
-    }
+    ]);
   },
 };
