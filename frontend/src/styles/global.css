@@ -1445,7 +1445,8 @@
     width: min(760px, 118%);
     height: auto;
     object-fit: contain;
-    border-radius: 0;
+    border-radius: 14px;
+    border: 1px solid rgba(229, 231, 235, 0.3);
     opacity: 1;
     clip-path: inset(18px 0 18px 0);
     transform: scale(1.06);
