@@ -89,7 +89,9 @@ export function LandingPage() {
               </p>
             </div>
             <div className="landing-bolt" aria-hidden="true">
-              <img className="landing-hero-image" src={heroFtnImage} alt="FTN automatiza conecta transforma" />
+              <div className="landing-hero-image-frame">
+                <img className="landing-hero-image" src={heroFtnImage} alt="FTN automatiza conecta transforma" />
+              </div>
             </div>
           </div>
         </section>
