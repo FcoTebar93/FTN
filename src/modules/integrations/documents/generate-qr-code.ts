@@ -4,7 +4,7 @@ import type { GenerateQrCodeInput, GenerateQrCodeResult } from "./types";
 
 export function generateQrCodeActivityDefinition(): ActivityDefinition<GenerateQrCodeInput, GenerateQrCodeResult> {
     return {
-        name: "generate-qr-code",
+        name: "documents.generateQrCode:v1",
         maxAttempts: 3,
         timeoutMs: 30_000,
         tags: ["documents", "qr-code"],

@@ -13,7 +13,7 @@ export function stripeCreateCheckoutSessionActivityDefinition(config: PaymentsCo
     const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" });
 
     return {
-        name: "stripe-create-checkout-session",
+        name: "payments.stripeCreateCheckoutSession:v1",
         maxAttempts: 3,
         timeoutMs: 30_000,
         tags: ["payments", "stripe"],

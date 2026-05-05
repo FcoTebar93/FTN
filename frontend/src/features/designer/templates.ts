@@ -109,19 +109,14 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
           name: "Crear sesión de checkout",
           activityName: "payments.stripeCreateCheckoutSession:v1",
           input: {
-            mode: "payment",
             successUrl: "https://example.com/pago-exito",
             cancelUrl: "https://example.com/pago-cancelado",
+            currency: "eur",
             lineItems: [
               {
+                name: "{{ input.planName }}",
                 quantity: 1,
-                priceData: {
-                  currency: "eur",
-                  unitAmount: "{{ input.priceCents }}",
-                  productData: {
-                    name: "{{ input.planName }}",
-                  },
-                },
+                unitAmountCents: "{{ input.priceCents }}",
               },
             ],
             customerEmail: "{{ input.email }}",
