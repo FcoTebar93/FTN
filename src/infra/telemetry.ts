@@ -10,7 +10,6 @@ interface TelemetryOptions {
   serviceName?: string;
 }
 
-/** Registra un tracer global (exportador no configurado: trazas listas para enganchar OTLP en despliegue). */
 export function initFtnTelemetry(options: TelemetryOptions = {}): void {
   telemetryDisabled = options.disabled ?? false;
   if (providerRegistered || telemetryDisabled) {
@@ -24,7 +23,6 @@ export function initFtnTelemetry(options: TelemetryOptions = {}): void {
   providerRegistered = true;
 }
 
-/** Ejecuta el manejador HTTP dentro de un span raíz (no-op si OTEL desactivado). */
 export async function runWithHttpSpan(
   req: { method?: string; url?: string },
   fn: () => Promise<void>,

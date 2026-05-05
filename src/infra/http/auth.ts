@@ -20,7 +20,6 @@ export interface AuthPrincipal {
   kind: "api_key" | "jwt";
   subject?: string;
   scopes: Set<string>;
-  /** Presente en JWT emitidos por FTN (revocación / logout). */
   jti?: string;
 }
 

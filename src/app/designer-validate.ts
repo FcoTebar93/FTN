@@ -2,7 +2,6 @@ import type { ConditionalStep, RetryStep, StoredWorkflow, WorkflowStep } from ".
 
 const CONDITION_OPERATORS = ["===", "!==", ">=", "<=", ">", "<"] as const;
 
-/** Comprueba que la expresión del conditional use un operador soportado por el runtime (mismo subconjunto que evalCondition). */
 export function validateConditionalExpression(expression: string): string | null {
   const expr = expression.trim();
   if (!expr) {
@@ -20,7 +19,6 @@ function findStep(stored: StoredWorkflow, id: string): WorkflowStep | undefined 
   return stored.steps.find((s) => s.id === id);
 }
 
-/** Validaciones de grafo y expresiones antes de persistir un workflow del designer. */
 export function validateDesignerWorkflow(w: StoredWorkflow): string | null {
   const ids = new Set(w.steps.map((s) => s.id));
   if (!ids.has(w.entryStepId)) {

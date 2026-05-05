@@ -10,7 +10,6 @@ export interface BaseTask {
     scheduledAt: string;
     workerType: "workflow" | "activity";
     targetQueue: string;
-    /** Traza HTTP u orígenes (scheduler); se propaga a activity/timer/workflow hijos. */
     correlationId?: string;
 }
 

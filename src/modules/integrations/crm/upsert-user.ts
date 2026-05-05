@@ -66,10 +66,9 @@ export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinit
         if (res.rowCount && res.rowCount > 0) {
           return { userId: res.rows[0].id };
         }
-        // Si no existe, caemos al flujo de insert por email
+        /* fall through */
       }
 
-      // Upsert por email: si ya existe, actualiza; si no, crea nuevo
       const res = await pool.query<UserIdRow>(
         `
         insert into users (email, name, plan_name, metadata)

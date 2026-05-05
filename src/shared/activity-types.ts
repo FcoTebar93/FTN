@@ -7,7 +7,6 @@ export interface ActivityTask {
     input: unknown;
     attempt: number;
     scheduledAt: string;
-    /** Copia del correlationId del run (p. ej. cabecera HTTP) para ctx.log en actividades. */
     correlationId?: string;
   }
   

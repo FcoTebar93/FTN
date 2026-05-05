@@ -44,7 +44,7 @@ export async function loginWithPassword(username: string, password: string): Pro
         message = j.error;
       }
     } catch {
-      /* usar texto crudo */
+      /* ignore */
     }
     throw new Error(message);
   }
@@ -66,7 +66,7 @@ export async function registerUser(username: string, password: string): Promise<
         message = j.detail ? `${j.error}: ${j.detail}` : j.error;
       }
     } catch {
-      /* usar texto crudo */
+      /* ignore */
     }
     throw new Error(message);
   }

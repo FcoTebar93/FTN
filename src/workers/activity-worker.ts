@@ -1,4 +1,3 @@
-// src/workers/activity-worker.ts
 import type { ActivityRegistry } from "../core/activity-registry";
 import type { ActivityExecutionContext } from "../core/activities";
 import type { ActivityTask, ActivityResult } from "../shared/activity-types";

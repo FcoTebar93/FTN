@@ -40,8 +40,6 @@ export function sendWebhookActivityDefinition(_config: NotificationsConfig): Act
       const response = await executeHttpRequest(
         { ...input, method, timeoutMs: input.timeoutMs ?? 10_000 },
         {
-          // Mantiene el comportamiento previo de webhook:
-          // permite URLs privadas (útil en integraciones internas) y exige 2xx.
           allowPrivateUrls: true,
           requireOk: true,
         }

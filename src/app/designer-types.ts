@@ -40,7 +40,6 @@ export interface RetryStep extends BaseStep {
   kind: "retry";
   maxAttempts: number;
   backOffMs?: number;
-  /** Id de un paso `activity` en el mismo workflow cuya ejecución se envuelve en ftn.retry */
   targetStepId: string;
 }
 
