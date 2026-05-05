@@ -297,7 +297,7 @@ describe("InMemoryWorkflowRuntime", () => {
 
     activities.register({
       name: "echo-activity",
-      async execute(input: { value: number }) {
+      async execute(input: { value: number }, _ctx) {
         return input;
       },
     });
