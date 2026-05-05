@@ -7,6 +7,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { SessionToolbar } from "./features/auth/SessionToolbar";
 import { CredentialsPage } from "./features/credentials/CredentialsPage";
+import { LandingPage } from "./features/landing/LandingPage";
 import { fetchAuthStatus, getCurrentSessionSubject } from "./auth/session";
 import type { AuthStatus } from "./auth/session";
 import { API_BASE_URL, getAccessToken } from "./config";
@@ -57,7 +58,7 @@ export function App() {
     setShowLogin(false);
     setHasSession(true);
     if (window.location.pathname === "/register") {
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", "/runs");
     }
   }
 
@@ -113,7 +114,26 @@ export function App() {
     );
   }
 
-  if (showLogin) {
+  if (path === "/login") {
+    if (getAccessToken()) {
+      window.location.replace("/runs");
+      return (
+        <div className="app app-boot">
+          <p className="app-boot-text">Redirigiendo…</p>
+        </div>
+      );
+    }
+    return (
+      <LoginPage
+        onSuccess={handleLoginSuccess}
+        registrationEnabled={Boolean(authStatus?.registrationEnabled)}
+      />
+    );
+  }
+
+  const isPublicLanding = path === "/";
+
+  if (showLogin && !isPublicLanding) {
     return (
       <LoginPage
         onSuccess={handleLoginSuccess}
@@ -138,12 +158,20 @@ export function App() {
     return wrapped(<PaymentModal backendBaseUrl={API_BASE_URL} />);
   }
 
+  if (isPublicLanding) {
+    return <LandingPage />;
+  }
+
   if (path.startsWith("/designer")) {
     return wrapped(<DesignerPage />);
   }
 
   if (path.startsWith("/credentials")) {
     return wrapped(<CredentialsPage />);
+  }
+
+  if (path === "/runs" || path.startsWith("/workflows")) {
+    return wrapped(<WorkflowsPage />);
   }
 
   return wrapped(<WorkflowsPage />);

@@ -11,7 +11,7 @@ export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
       <div className="session-toolbar-left">
         <span className="session-toolbar-brand">FTN</span>
         {userLabel ? <span className="session-toolbar-user">@{userLabel}</span> : null}
-        <a className="session-toolbar-link" href="/">
+        <a className="session-toolbar-link" href="/runs">
           Runs
         </a>
         <a className="session-toolbar-link" href="/designer">
