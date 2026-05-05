@@ -10,7 +10,7 @@ export function getPaymentStatusActivityDefinition(config: PaymentsConfig): Acti
     throw new Error("Config inválida para payments.getPaymentStatus: falta stripeSecretKey");
   }
 
-  const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" });
+  const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
 
   return {
     name: "payments.getPaymentStatus:v1",

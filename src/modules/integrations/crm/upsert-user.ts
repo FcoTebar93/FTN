@@ -2,6 +2,10 @@ import type { ActivityDefinition, ActivityExecutionContext } from "../../../core
 import type { UpsertUserInput, UpsertUserResult } from "./types";
 import type { CrmConfig } from "./index";
 
+interface UserIdRow {
+  id: string;
+}
+
 export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinition<UpsertUserInput, UpsertUserResult> {
   const pool = config.pool;
   if (!pool) {
@@ -39,7 +43,7 @@ export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinit
       });
 
       if (input.userId) {
-        const res = await pool.query(
+        const res = await pool.query<UserIdRow>(
           `
           update users
           set email = $2,
@@ -66,7 +70,7 @@ export function upsertUserActivityDefinition(config: CrmConfig): ActivityDefinit
       }
 
       // Upsert por email: si ya existe, actualiza; si no, crea nuevo
-      const res = await pool.query(
+      const res = await pool.query<UserIdRow>(
         `
         insert into users (email, name, plan_name, metadata)
         values ($1, $2, $3, $4)

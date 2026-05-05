@@ -1,5 +1,6 @@
 import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
+import type { AnyActivityDefinition } from "../../../core/activities";
 import { stripeCreateCheckoutSessionActivityDefinition } from "./stripe-create-checkout-session";
 import { validateOrderActivityDefinition } from "./validate-order";
 import { chargePaymentActivityDefinition } from "./charge-payment";
@@ -17,11 +18,14 @@ export const PaymentsModule: IntegrationModule = {
       return;
     }
 
-    const defs = [validateOrderActivityDefinition(), chargePaymentActivityDefinition()];
+    const defs: AnyActivityDefinition[] = [
+      validateOrderActivityDefinition() as AnyActivityDefinition,
+      chargePaymentActivityDefinition() as AnyActivityDefinition,
+    ];
 
     if (config.stripeSecretKey) {
-      defs.push(stripeCreateCheckoutSessionActivityDefinition(config));
-      defs.push(getPaymentStatusActivityDefinition(config));
+      defs.push(stripeCreateCheckoutSessionActivityDefinition(config) as AnyActivityDefinition);
+      defs.push(getPaymentStatusActivityDefinition(config) as AnyActivityDefinition);
     }
 
     registerDefinitions(registry, defs);

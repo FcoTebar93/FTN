@@ -2,6 +2,10 @@ import type { ActivityDefinition, ActivityExecutionContext } from "../../../core
 import type { GetKeyValueInput, GetKeyValueResult } from "./types";
 import type { StorageConfig } from "./index";
 
+interface KeyValueRow {
+  value: unknown;
+}
+
 export function getKeyValueActivityDefinition(
   config: StorageConfig
 ): ActivityDefinition<GetKeyValueInput, GetKeyValueResult> {
@@ -31,7 +35,7 @@ export function getKeyValueActivityDefinition(
         key: input.key,
       });
 
-      const res = await pool.query(
+      const res = await pool.query<KeyValueRow>(
         `select value from kv_store where namespace = $1 and key = $2`,
         [input.namespace, input.key]
       );

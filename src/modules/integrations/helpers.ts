@@ -1,13 +1,13 @@
 import { Pool } from "pg";
 import type { ActivityRegistry } from "../../core/activity-registry";
-import type { ActivityDefinition, AnyActivityDefinition } from "../../core/activities";
+import type { AnyActivityDefinition } from "../../core/activities";
 
 export function registerDefinitions(
   registry: ActivityRegistry,
-  definitions: readonly ActivityDefinition<any, any>[]
+  definitions: readonly AnyActivityDefinition[]
 ): void {
   for (const definition of definitions) {
-    registry.register(definition as AnyActivityDefinition);
+    registry.register(definition);
   }
 }
 

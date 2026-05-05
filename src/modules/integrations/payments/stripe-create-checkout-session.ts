@@ -10,7 +10,7 @@ export function stripeCreateCheckoutSessionActivityDefinition(config: PaymentsCo
         throw new Error("Stripe secret key is not configured");
     }
 
-    const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" });
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
 
     return {
         name: "payments.stripeCreateCheckoutSession:v1",

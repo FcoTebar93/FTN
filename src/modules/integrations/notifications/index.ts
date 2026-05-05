@@ -24,15 +24,15 @@ export const NotificationsModule: IntegrationModule = {
     const defs: AnyActivityDefinition[] = [];
 
     if (config.sendgridApiKey && config.emailFrom) {
-      defs.push(sendEmailActivityDefinition(config));
+      defs.push(sendEmailActivityDefinition(config) as AnyActivityDefinition);
     }
 
     if (config.slackWebhookUrl) {
-      defs.push(sendSlackMessageActivityDefinition(config));
+      defs.push(sendSlackMessageActivityDefinition(config) as AnyActivityDefinition);
     }
 
-    defs.push(sendWebhookActivityDefinition(config));
-    defs.push(sendSmsActivityDefinition(config));
+    defs.push(sendWebhookActivityDefinition(config) as AnyActivityDefinition);
+    defs.push(sendSmsActivityDefinition(config) as AnyActivityDefinition);
 
     registerDefinitions(registry, defs);
   },

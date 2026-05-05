@@ -51,7 +51,7 @@ export function sendEmailActivityDefinition(config: NotificationsConfig): Activi
         from: emailFrom,
         to,
         subject: input.subject ?? "[FTN] Notificación",
-        ...(input.textBody ? { text: input.textBody } : {}),
+        text: input.textBody ?? "Notificación FTN",
         ...(input.htmlBody ? { html: input.htmlBody } : {}),
       };
 
