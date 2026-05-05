@@ -1,3 +1,6 @@
+import heroFtnImage from "../../../../ftn.png";
+import { useEffect } from "preact/hooks";
+
 const capabilities = [
   {
     title: "Motor determinista con replay",
@@ -30,6 +33,30 @@ const integrations = [
 ];
 
 export function LandingPage() {
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".reveal-on-scroll"));
+    if (nodes.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const el = entry.target as HTMLElement;
+          el.classList.add("is-visible");
+          observer.unobserve(el);
+        }
+      },
+      {
+        threshold: 0.18,
+        rootMargin: "0px 0px -8% 0px"
+      }
+    );
+
+    for (const node of nodes) observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="landing">
       <header className="landing-nav">
@@ -51,7 +78,7 @@ export function LandingPage() {
       </header>
 
       <main>
-        <section className="landing-hero">
+        <section className="landing-hero reveal-on-scroll reveal-delay-0">
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-kicker">Workflow engine de nueva generacion</p>
@@ -62,23 +89,12 @@ export function LandingPage() {
               </p>
             </div>
             <div className="landing-bolt" aria-hidden="true">
-              <div className="landing-bolt-core" />
+              <img className="landing-hero-image" src={heroFtnImage} alt="FTN automatiza conecta transforma" />
             </div>
           </div>
         </section>
 
-        <section className="landing-social-proof">
-          <div className="landing-container landing-logos">
-            <span>Pagos</span>
-            <span>Retail</span>
-            <span>SaaS</span>
-            <span>Logistica</span>
-            <span>HealthTech</span>
-            <span>FinOps</span>
-          </div>
-        </section>
-
-        <section id="capabilities" className="landing-section">
+        <section id="capabilities" className="landing-section reveal-on-scroll reveal-delay-1">
           <div className="landing-container">
             <h2>Arquitectura pensada para produccion</h2>
             <p className="landing-section-intro">
@@ -96,7 +112,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="use-cases" className="landing-section landing-section-panel">
+        <section id="use-cases" className="landing-section landing-section-panel reveal-on-scroll reveal-delay-1">
           <div className="landing-container landing-split">
             <aside className="landing-pill-list" aria-label="Categorias de casos de uso">
               {useCases.map((label) => (
@@ -115,20 +131,27 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="integrations" className="landing-section">
+        <section id="integrations" className="landing-section reveal-on-scroll reveal-delay-2">
           <div className="landing-container">
             <h2>Integraciones listas para conectar</h2>
-            <div className="landing-integration-grid">
-              {integrations.map((name) => (
-                <span key={name} className="landing-integration-chip">
-                  {name}
-                </span>
-              ))}
+            <div className="landing-integrations-marquee" aria-label="Integraciones disponibles">
+              <div className="landing-integrations-track">
+                {integrations.map((name) => (
+                  <span key={`a-${name}`} className="landing-integration-chip">
+                    {name}
+                  </span>
+                ))}
+                {integrations.map((name) => (
+                  <span key={`b-${name}`} className="landing-integration-chip">
+                    {name}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="landing-section">
+        <section className="landing-section reveal-on-scroll reveal-delay-2">
           <div className="landing-container landing-proof-grid">
             <article className="landing-proof-card">
               <p className="landing-proof-label">Determinismo</p>

@@ -1141,6 +1141,25 @@
     flex-direction: column;
     gap: 16px;
   }
+  .login-back-wrap {
+    margin: 0 0 14px 0;
+  }
+  .login-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .login-back-link::before {
+    content: "←";
+    font-size: 14px;
+    line-height: 1;
+  }
+  .login-back-link:hover {
+    color: var(--accent-strong);
+  }
   .login-field {
     display: flex;
     flex-direction: column;
@@ -1234,11 +1253,42 @@
     min-height: 100vh;
     background: var(--color-void-base);
     color: var(--color-ash-text);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .landing::before,
+  .landing::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .landing::before {
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.032) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+    background-size: 44px 44px, 44px 44px;
+    mask-image: radial-gradient(circle at 50% 35%, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.06) 75%, transparent 100%);
+    opacity: 0.32;
+    animation: landing-grid-drift 22s linear infinite;
+  }
+
+  .landing::after {
+    background:
+      radial-gradient(40% 60% at 84% 10%, rgba(255, 92, 12, 0.13), transparent 72%),
+      radial-gradient(38% 55% at 8% 76%, rgba(7, 122, 199, 0.12), transparent 75%);
+    opacity: 0.55;
+    animation: landing-atmosphere-shift 14s ease-in-out infinite alternate;
   }
 
   .landing-container {
     width: min(1200px, calc(100% - 48px));
     margin: 0 auto;
+    position: relative;
+    z-index: 1;
   }
 
   .landing-nav {
@@ -1328,8 +1378,19 @@
   }
 
   .landing-hero {
-    padding: 80px 0 56px;
-    background: radial-gradient(126.99% 234.27% at 10.15% 142.35%, rgba(217, 126, 75, 0.133) 0%, rgba(255, 255, 255, 0) 37%);
+    padding: 80px 0 96px;
+    position: relative;
+  }
+
+  .landing-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(141deg, rgba(7, 122, 199, 0.14), rgba(107, 33, 239, 0.08) 42%, transparent 75%);
+    opacity: 0.35;
+    mix-blend-mode: screen;
   }
 
   .landing-hero-grid {
@@ -1380,34 +1441,48 @@
     overflow: hidden;
   }
 
-  .landing-bolt-core {
-    width: min(430px, 82%);
-    aspect-ratio: 1 / 1;
-    border-radius: 32% 68% 48% 52% / 38% 49% 51% 62%;
-    background:
-      radial-gradient(circle at 35% 35%, rgba(255, 215, 170, 0.8) 0, rgba(255, 105, 24, 0.92) 45%, rgba(158, 34, 4, 0.75) 100%);
-    box-shadow:
-      0 0 80px rgba(255, 82, 10, 0.45),
-      0 0 120px rgba(255, 12, 0, 0.24),
-      inset 0 -10px 40px rgba(124, 16, 2, 0.55);
-    transform: rotate(-16deg) translateX(28px);
-  }
-
-  .landing-social-proof {
-    padding: 18px 0 8px;
-  }
-
-  .landing-logos {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px 48px;
-    justify-content: center;
-    color: var(--color-ash-text);
-    font-size: 14px;
+  .landing-hero-image {
+    width: min(760px, 118%);
+    height: auto;
+    object-fit: contain;
+    border-radius: 0;
+    opacity: 1;
+    clip-path: inset(18px 0 18px 0);
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 30px rgba(7, 122, 199, 0.24)) drop-shadow(0 0 52px rgba(107, 33, 239, 0.16));
   }
 
   .landing-section {
     padding: 80px 0;
+  }
+
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(26px) scale(0.992);
+    filter: blur(3px);
+    transition:
+      opacity 980ms cubic-bezier(0.2, 0.75, 0.2, 1),
+      transform 980ms cubic-bezier(0.2, 0.75, 0.2, 1),
+      filter 980ms cubic-bezier(0.2, 0.75, 0.2, 1);
+  }
+
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+
+  .reveal-delay-0 {
+    transition-duration: 1180ms;
+    transition-delay: 0ms;
+  }
+
+  .reveal-delay-1 {
+    transition-delay: 120ms;
+  }
+
+  .reveal-delay-2 {
+    transition-delay: 190ms;
   }
 
   .landing-section h2 {
@@ -1466,6 +1541,21 @@
     display: grid;
     grid-template-columns: minmax(220px, 28%) minmax(0, 1fr);
     gap: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .landing-split::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 38px 38px, 38px 38px;
+    opacity: 0.18;
+    animation: landing-grid-drift 24s linear infinite reverse;
   }
 
   .landing-pill-list {
@@ -1484,6 +1574,37 @@
     background: rgba(163, 163, 163, 0.2);
     padding: 0 20px;
     font-size: 14px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .landing-pill::after {
+    content: "";
+    position: absolute;
+    left: -42%;
+    top: -120%;
+    width: 32%;
+    height: 320%;
+    background: linear-gradient(180deg, rgba(7, 122, 199, 0), rgba(107, 33, 239, 0.65), rgba(7, 122, 199, 0));
+    transform: rotate(24deg);
+    opacity: 0;
+    transition: transform 0.4s ease, left 0.4s ease, opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .landing-pill:hover,
+  .landing-pill:focus-visible {
+    border-color: rgba(107, 33, 239, 0.85);
+    box-shadow: 0 0 0 1px rgba(7, 122, 199, 0.45) inset;
+    transform: translateY(-1px);
+  }
+
+  .landing-pill:hover::after,
+  .landing-pill:focus-visible::after {
+    left: 112%;
+    opacity: 0.8;
+    transform: rotate(24deg) translateY(-4px);
   }
 
   .landing-panel h2 {
@@ -1514,11 +1635,41 @@
     background: var(--gradient-electric-current);
   }
 
-  .landing-integration-grid {
+  .landing-integrations-marquee {
     margin-top: 24px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    padding: 10px 8px;
+  }
+
+  .landing-integrations-marquee::before,
+  .landing-integrations-marquee::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 120px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .landing-integrations-marquee::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(14, 9, 24, 1) 0%, rgba(14, 9, 24, 0) 100%);
+  }
+
+  .landing-integrations-marquee::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(14, 9, 24, 1) 0%, rgba(14, 9, 24, 0) 100%);
+  }
+
+  .landing-integrations-track {
+    display: flex;
+    align-items: center;
     gap: 12px;
+    width: max-content;
+    animation: landing-marquee-left 22s linear infinite;
   }
 
   .landing-integration-chip {
@@ -1528,6 +1679,52 @@
     color: var(--color-cloud-white);
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: var(--color-elevated-surface);
+    min-width: 160px;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  }
+
+  .landing-integration-chip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(141deg, rgba(7, 122, 199, 0.22), rgba(107, 33, 239, 0.22));
+    opacity: 0;
+    transition: opacity 0.24s ease;
+  }
+
+  .landing-integration-chip::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(141deg, rgba(7, 122, 199, 0.9), rgba(107, 33, 239, 0.9));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.24s ease;
+    pointer-events: none;
+  }
+
+  .landing-integration-chip:hover,
+  .landing-integration-chip:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(7, 122, 199, 0.55);
+    box-shadow: 0 10px 24px rgba(4, 11, 31, 0.34);
+    background: #201a2f;
+  }
+
+  .landing-integration-chip:hover::before,
+  .landing-integration-chip:hover::after,
+  .landing-integration-chip:focus-visible::before,
+  .landing-integration-chip:focus-visible::after {
+    opacity: 1;
   }
 
   .landing-proof-grid {
@@ -1541,6 +1738,70 @@
     padding: 24px 28px;
     background: transparent;
     box-shadow: rgba(255, 255, 255, 0.1) 0 0 0 1px inset, rgba(255, 142, 93, 0.3) 0 1px 0 0 inset;
+    position: relative;
+  }
+
+  .landing-proof-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(120deg, rgba(7, 122, 199, 0.1), transparent 40%, rgba(255, 82, 26, 0.08));
+    opacity: 0.55;
+  }
+
+  @keyframes landing-grid-drift {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      transform: translate3d(44px, 44px, 0);
+    }
+  }
+
+  @keyframes landing-atmosphere-shift {
+    0% {
+      opacity: 0.4;
+      transform: scale(1) translate3d(0, 0, 0);
+    }
+    100% {
+      opacity: 0.62;
+      transform: scale(1.04) translate3d(0, -8px, 0);
+    }
+  }
+
+  @keyframes landing-marquee-left {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(calc(-50% - 6px));
+    }
+  }
+
+  @media (max-width: 920px) {
+    .landing-integrations-marquee::before,
+    .landing-integrations-marquee::after {
+      width: 56px;
+    }
+
+    .landing-integrations-track {
+      animation-duration: 18s;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing::before,
+    .landing::after,
+    .landing-integrations-track,
+    .reveal-on-scroll {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
+      filter: none !important;
+      transition: none !important;
+    }
   }
 
   .landing-proof-label {
@@ -1580,8 +1841,9 @@
       min-height: 260px;
     }
 
-    .landing-bolt-core {
-      transform: rotate(-12deg);
+    .landing-hero-image {
+      width: min(660px, 128%);
+      clip-path: inset(12px 0 12px 0);
     }
   }
 

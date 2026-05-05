@@ -38,6 +38,11 @@ export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
           <h1 className="login-title">FTN</h1>
           <p className="login-subtitle">Inicia sesión para continuar</p>
         </header>
+        <p className="login-back-wrap">
+          <a className="login-back-link" href="/">
+            Volver
+          </a>
+        </p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
             <span className="login-label">Usuario</span>

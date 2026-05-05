@@ -3,9 +3,9 @@ export const FTN_ACCESS_TOKEN_KEY = "ftn_access_token";
 function defaultApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:8000`;
+    return `${protocol}//${hostname}:4000`;
   }
-  return "http://localhost:8000";
+  return "http://localhost:4000";
 }
 
 export const API_BASE_URL =
