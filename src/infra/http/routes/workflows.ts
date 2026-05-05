@@ -265,6 +265,10 @@ export async function tryWorkflowsRoutes(
     try {
       const parsed = parsedResult.value;
       const { signalName, data } = parsed;
+      if (typeof signalName !== "string" || !signalName.trim()) {
+        sendError(res, 400, "signalName must be a non-empty string");
+        return true;
+      }
 
       const state = await ctx.runtime.loadCurrentState(workflowId, runId);
       if (!state) {
@@ -277,7 +281,7 @@ export async function tryWorkflowsRoutes(
           type: "SignalReceived",
           workflowId,
           runId,
-          payload: { signalName, data },
+          payload: { signalName: signalName.trim(), data },
         },
       ]);
       const task = buildWorkflowTask({

@@ -37,7 +37,7 @@ export async function tryPaymentsRoutes(
         sendError(res, 500, "STRIPE_SECRET_KEY not configured");
         return true;
       }
-      const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
+      const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
         success_url: successUrl,
@@ -73,7 +73,7 @@ export async function tryPaymentsRoutes(
         return true;
       }
 
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" });
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
       const event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret);
 
       if (event.type === "checkout.session.completed") {

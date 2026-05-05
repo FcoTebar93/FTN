@@ -1,7 +1,7 @@
 import type { ApiSecurityConfig } from "./security";
 import type { Pool } from "pg";
 import type Redis from "ioredis";
-import type { InMemoryActivityRegistry } from "../../modules/activity-registry/inmemory-activity-registry";
+import type { ActivityRegistry } from "../../core/activity-registry";
 import type { InMemoryWorkflowRuntime } from "../inmemory-workflow-runtime";
 import type { EventStore } from "../../modules/event-store";
 import type { TaskQueue } from "../../modules/task-queue";
@@ -13,7 +13,7 @@ export interface FtnAppRouteContext {
   hasDbLogin: boolean;
   refreshTtlSeconds: number;
   requestSubject: string;
-  activities: InMemoryActivityRegistry;
+  activities: ActivityRegistry;
   runtime: InMemoryWorkflowRuntime;
   eventStore: EventStore;
   taskQueue: TaskQueue;
