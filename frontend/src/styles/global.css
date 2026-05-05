@@ -1584,3 +1584,50 @@
       transform: rotate(-12deg);
     }
   }
+
+  .not-found-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--color-void-base);
+    color: var(--color-ash-text);
+  }
+
+  .not-found-card {
+    width: min(720px, 100%);
+    border-radius: 24px;
+    padding: 40px 36px;
+    background: var(--color-deep-panel);
+    box-shadow: rgba(255, 255, 255, 0.1) 0 0 0 1px inset, rgba(255, 142, 93, 0.3) 0 1px 0 0 inset;
+  }
+
+  .not-found-code {
+    margin: 0;
+    color: var(--color-fog-text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+  }
+
+  .not-found-card h1 {
+    margin: 12px 0 0;
+    color: var(--color-cloud-white);
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 0.96;
+    letter-spacing: -0.8px;
+    font-weight: 300;
+  }
+
+  .not-found-card p {
+    margin: 16px 0 0;
+    line-height: 1.6;
+  }
+
+  .not-found-actions {
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
