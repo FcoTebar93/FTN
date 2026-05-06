@@ -1445,9 +1445,11 @@
     width: min(760px, 118%);
     aspect-ratio: 16 / 9;
     border-radius: 14px;
-    border: 1px solid rgba(229, 231, 235, 0.42);
+    border: 0;
     overflow: hidden;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    box-shadow:
+      rgba(255, 255, 255, 0.1) 0 0 0 1px inset,
+      rgba(255, 142, 93, 0.3) 0 1px 0 0 inset;
   }
 
   .landing-hero-image {
@@ -1471,9 +1473,9 @@
     transform: translateY(26px) scale(0.992);
     filter: blur(3px);
     transition:
-      opacity 980ms cubic-bezier(0.2, 0.75, 0.2, 1),
-      transform 980ms cubic-bezier(0.2, 0.75, 0.2, 1),
-      filter 980ms cubic-bezier(0.2, 0.75, 0.2, 1);
+      opacity 1080ms cubic-bezier(0.2, 0.75, 0.2, 1),
+      transform 1080ms cubic-bezier(0.2, 0.75, 0.2, 1),
+      filter 1080ms cubic-bezier(0.2, 0.75, 0.2, 1);
   }
 
   .reveal-on-scroll.is-visible {
@@ -1482,17 +1484,34 @@
     filter: blur(0);
   }
 
+  .landing .reveal-from-left {
+    transform: translate3d(-34px, 0, 0) scale(0.992);
+  }
+
+  .landing .reveal-from-right {
+    transform: translate3d(34px, 0, 0) scale(0.992);
+  }
+
+  .landing .reveal-from-left.is-visible,
+  .landing .reveal-from-right.is-visible {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
   .reveal-delay-0 {
-    transition-duration: 1180ms;
+    transition-duration: 1280ms;
     transition-delay: 0ms;
   }
 
   .reveal-delay-1 {
-    transition-delay: 120ms;
+    transition-delay: 420ms;
   }
 
   .reveal-delay-2 {
-    transition-delay: 190ms;
+    transition-delay: 760ms;
+  }
+
+  .reveal-delay-3 {
+    transition-delay: 1120ms;
   }
 
   .landing-section h2 {

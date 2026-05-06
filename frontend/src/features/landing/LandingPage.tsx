@@ -78,17 +78,21 @@ export function LandingPage() {
       </header>
 
       <main>
-        <section className="landing-hero reveal-on-scroll reveal-delay-0">
+        <section className="landing-hero">
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
-              <p className="landing-kicker">Workflow engine de nueva generacion</p>
-              <h1>Automatiza procesos complejos con un motor FTN determinista y multi-worker.</h1>
-              <p>
+              <p className="landing-kicker reveal-on-scroll reveal-from-left reveal-delay-1">
+                Workflow engine de nueva generacion
+              </p>
+              <h1 className="reveal-on-scroll reveal-from-left reveal-delay-2">
+                Automatiza procesos complejos con un motor FTN determinista y multi-worker.
+              </h1>
+              <p className="reveal-on-scroll reveal-from-left reveal-delay-3">
                 FTN es una plataforma de orquestacion para construir flujos robustos con event sourcing, snapshots,
                 ejecucion reproducible y un DSL diseñado para sistemas reales.
               </p>
             </div>
-            <div className="landing-bolt" aria-hidden="true">
+            <div className="landing-bolt reveal-on-scroll reveal-from-right reveal-delay-0" aria-hidden="true">
               <div className="landing-hero-image-frame">
                 <img className="landing-hero-image" src={heroFtnImage} alt="FTN automatiza conecta transforma" />
               </div>
