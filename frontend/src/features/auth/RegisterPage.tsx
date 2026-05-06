@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { registerUser } from "../../auth/session";
+import { useUiText } from "../../i18n";
 
 type RegisterPageProps = {
   onSuccess: () => void;
@@ -7,6 +8,7 @@ type RegisterPageProps = {
 };
 
 export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
+  const { t } = useUiText();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -17,7 +19,7 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("Las contraseñas no coinciden.");
+      setError(t.auth.passwordsNoMatch);
       return;
     }
     setSubmitting(true);
@@ -27,13 +29,11 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes("already taken") || msg.includes("409")) {
-        setError("Ese nombre de usuario ya está en uso.");
+        setError(t.auth.usernameTaken);
       } else if (msg.toLowerCase().includes("invalid")) {
-        setError(
-          "Revisa el usuario (3–64 caracteres, letras, números, _, ., -) y la contraseña (mínimo 10 caracteres)."
-        );
+        setError(t.auth.invalidUserOrPass);
       } else {
-        setError(msg || "No se pudo completar el registro.");
+        setError(msg || t.auth.registerFailed);
       }
     } finally {
       setSubmitting(false);
@@ -44,12 +44,12 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
     <div className="login-screen">
       <div className="login-card">
         <header className="login-header">
-          <h1 className="login-title">Crear cuenta</h1>
-          <p className="login-subtitle">Registro en FTN</p>
+          <h1 className="login-title">{t.auth.createAccount}</h1>
+          <p className="login-subtitle">{t.auth.registerSubtitle}</p>
         </header>
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
-            <span className="login-label">Usuario</span>
+            <span className="login-label">{t.auth.username}</span>
             <input
               className="login-input"
               type="text"
@@ -62,7 +62,7 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
             />
           </label>
           <label className="login-field">
-            <span className="login-label">Contraseña</span>
+            <span className="login-label">{t.auth.password}</span>
             <input
               className="login-input"
               type="password"
@@ -76,7 +76,7 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
             />
           </label>
           <label className="login-field">
-            <span className="login-label">Confirmar contraseña</span>
+            <span className="login-label">{t.auth.confirmPassword}</span>
             <input
               className="login-input"
               type="password"
@@ -91,11 +91,11 @@ export function RegisterPage({ onSuccess, onCancel }: RegisterPageProps) {
           </label>
           {error ? <p className="login-error">{error}</p> : null}
           <button className="login-submit" type="submit" disabled={submitting}>
-            {submitting ? "Creando cuenta…" : "Registrarse"}
+            {submitting ? t.auth.creatingAccount : t.auth.register}
           </button>
           <p className="login-footer">
             <button type="button" className="login-link-button" onClick={onCancel} disabled={submitting}>
-              Volver al inicio de sesión
+              {t.auth.backToLogin}
             </button>
           </p>
         </form>

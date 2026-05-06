@@ -1345,11 +1345,41 @@
   }
 
   .landing-lang-toggle {
-    min-width: 40px;
-    width: 40px;
-    height: 40px;
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
     padding: 0;
     border-radius: 999px;
+    font-size: 20px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif;
+  }
+
+  .lang-toggle-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 10, 25, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--color-ash-text);
+    box-shadow: rgba(0, 0, 0, 0.26) 0 0 8px 0;
+    cursor: pointer;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif;
+  }
+
+  .lang-toggle-btn:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .lang-toggle-emoji {
     font-size: 18px;
     line-height: 1;
   }

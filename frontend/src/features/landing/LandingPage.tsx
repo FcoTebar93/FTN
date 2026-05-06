@@ -1,32 +1,16 @@
 import heroFtnImage from "../../../../ftn.png";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect } from "preact/hooks";
+import { useUiText } from "../../i18n";
+import { LanguageToggleButton } from "../../i18n/LanguageToggleButton";
 
-type Locale = "es" | "en";
-
-const translations: Record<
-  Locale,
-  {
-    nav: { capabilities: string; useCases: string; integrations: string; login: string; switchTo: string };
-    hero: { kicker: string; title: string; body: string; alt: string };
-    capabilities: { title: string; intro: string; items: Array<{ title: string; description: string }> };
-    useCases: { labels: string[]; title: string; body: string };
-    integrations: { title: string; aria: string; items: string[] };
-    proof: Array<{ label: string; title: string; body: string }>;
-  }
-> = {
+const landingText = {
   es: {
-    nav: {
-      capabilities: "Capacidades",
-      useCases: "Casos de uso",
-      integrations: "Integraciones",
-      login: "Iniciar sesion",
-      switchTo: "EN"
-    },
+    nav: { capabilities: "Capacidades", useCases: "Casos de uso", integrations: "Integraciones" },
     hero: {
       kicker: "Workflow engine de nueva generacion",
       title: "Automatiza procesos complejos con un motor FTN determinista y multi-worker.",
       body: "FTN es una plataforma de orquestacion para construir flujos robustos con event sourcing, snapshots, ejecucion reproducible y un DSL diseñado para sistemas reales.",
-      alt: "FTN automatiza conecta transforma"
+      alt: "FTN automatiza conecta transforma",
     },
     capabilities: {
       title: "Arquitectura pensada para produccion",
@@ -35,61 +19,55 @@ const translations: Record<
         {
           title: "Motor determinista con replay",
           description:
-            "Cada ejecución se reconstruye desde eventos para reproducibilidad total, depuración precisa y operación multi-worker segura."
+            "Cada ejecución se reconstruye desde eventos para reproducibilidad total, depuración precisa y operación multi-worker segura.",
         },
         {
           title: "DSL FTN para orquestación real",
           description:
-            "Define workflows con actividades, paralelismo, joins, retries, waits y señales sin perder control del estado."
+            "Define workflows con actividades, paralelismo, joins, retries, waits y señales sin perder control del estado.",
         },
         {
           title: "Event sourcing + snapshots",
           description:
-            "Persistencia append-only con snapshots periódicos para escalar lectura, rehidratación y recovery."
-        }
-      ]
+            "Persistencia append-only con snapshots periódicos para escalar lectura, rehidratación y recovery.",
+        },
+      ],
     },
     useCases: {
       labels: ["Onboarding híbrido", "Cobros y checkout", "Alertas y notificaciones", "Operaciones logísticas"],
       title: "Del trigger al resultado, sin caos operacional",
-      body: "Orquesta flujos de negocio con validaciones, pagos, notificaciones y acciones externas en un solo recorrido auditable. Si algo falla, puedes reintentar por actividad sin reiniciar todo el proceso."
+      body: "Orquesta flujos de negocio con validaciones, pagos, notificaciones y acciones externas en un solo recorrido auditable. Si algo falla, puedes reintentar por actividad sin reiniciar todo el proceso.",
     },
     integrations: {
       title: "Integraciones listas para conectar",
       aria: "Integraciones disponibles",
-      items: ["Stripe", "Slack", "Email", "CRM", "Storage", "Redis", "HTTP APIs", "Sistemas legacy"]
+      items: ["Stripe", "Slack", "Email", "CRM", "Storage", "Redis", "HTTP APIs", "Sistemas legacy"],
     },
     proof: [
       {
         label: "Determinismo",
         title: "100% replayable",
-        body: "Tu estado se puede reconstruir de forma consistente para auditoria y debugging."
+        body: "Tu estado se puede reconstruir de forma consistente para auditoria y debugging.",
       },
       {
         label: "Escalabilidad",
         title: "Multi-worker nativo",
-        body: "Separa workers de workflow y actividades para distribuir carga sin romper invariantes."
+        body: "Separa workers de workflow y actividades para distribuir carga sin romper invariantes.",
       },
       {
         label: "Productividad",
         title: "DSL orientado a dominio",
-        body: "Modela procesos de negocio complejos en TypeScript con primitives claras y testeables."
-      }
-    ]
+        body: "Modela procesos de negocio complejos en TypeScript con primitives claras y testeables.",
+      },
+    ],
   },
   en: {
-    nav: {
-      capabilities: "Capabilities",
-      useCases: "Use Cases",
-      integrations: "Integrations",
-      login: "Sign in",
-      switchTo: "ES"
-    },
+    nav: { capabilities: "Capabilities", useCases: "Use Cases", integrations: "Integrations" },
     hero: {
       kicker: "Next-generation workflow engine",
       title: "Automate complex processes with a deterministic, multi-worker FTN engine.",
       body: "FTN is an orchestration platform to build robust flows with event sourcing, snapshots, reproducible execution, and a DSL designed for real systems.",
-      alt: "FTN automate connect transform"
+      alt: "FTN automate connect transform",
     },
     capabilities: {
       title: "Architecture designed for production",
@@ -98,60 +76,53 @@ const translations: Record<
         {
           title: "Deterministic engine with replay",
           description:
-            "Every run is rebuilt from events for full reproducibility, precise debugging, and safe multi-worker operation."
+            "Every run is rebuilt from events for full reproducibility, precise debugging, and safe multi-worker operation.",
         },
         {
           title: "FTN DSL for real orchestration",
           description:
-            "Define workflows with activities, parallelism, joins, retries, waits, and signals without losing state control."
+            "Define workflows with activities, parallelism, joins, retries, waits, and signals without losing state control.",
         },
         {
           title: "Event sourcing + snapshots",
           description:
-            "Append-only persistence with periodic snapshots to scale reads, rehydration, and recovery."
-        }
-      ]
+            "Append-only persistence with periodic snapshots to scale reads, rehydration, and recovery.",
+        },
+      ],
     },
     useCases: {
       labels: ["Hybrid onboarding", "Billing and checkout", "Alerts and notifications", "Logistics operations"],
       title: "From trigger to outcome, without operational chaos",
-      body: "Orchestrate business flows with validations, payments, notifications, and external actions in one auditable path. If something fails, retry per activity without restarting the whole process."
+      body: "Orchestrate business flows with validations, payments, notifications, and external actions in one auditable path. If something fails, retry per activity without restarting the whole process.",
     },
     integrations: {
       title: "Integrations ready to connect",
       aria: "Available integrations",
-      items: ["Stripe", "Slack", "Email", "CRM", "Storage", "Redis", "HTTP APIs", "Legacy systems"]
+      items: ["Stripe", "Slack", "Email", "CRM", "Storage", "Redis", "HTTP APIs", "Legacy systems"],
     },
     proof: [
       {
         label: "Determinism",
         title: "100% replayable",
-        body: "Your state can be reconstructed consistently for auditability and debugging."
+        body: "Your state can be reconstructed consistently for auditability and debugging.",
       },
       {
         label: "Scalability",
         title: "Native multi-worker",
-        body: "Split workflow and activity workers to distribute load without breaking invariants."
+        body: "Split workflow and activity workers to distribute load without breaking invariants.",
       },
       {
         label: "Productivity",
         title: "Domain-oriented DSL",
-        body: "Model complex business processes in TypeScript with clear, testable primitives."
-      }
-    ]
-  }
-};
+        body: "Model complex business processes in TypeScript with clear, testable primitives.",
+      },
+    ],
+  },
+} as const;
 
 export function LandingPage() {
-  const [locale, setLocale] = useState<Locale>(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("ftn_locale") : null;
-    return stored === "en" ? "en" : "es";
-  });
-  const t = translations[locale];
-
-  useEffect(() => {
-    window.localStorage.setItem("ftn_locale", locale);
-  }, [locale]);
+  const { locale, setLocale, t } = useUiText();
+  const lt = landingText[locale];
 
   useEffect(() => {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>(".reveal-on-scroll"));
@@ -185,24 +156,16 @@ export function LandingPage() {
             <a className="landing-brand" href="/">
               FTN
             </a>
-            <button
-              type="button"
-              className="landing-btn landing-btn-ghost landing-lang-toggle"
-              onClick={() => setLocale((curr) => (curr === "es" ? "en" : "es"))}
-              aria-label={locale === "es" ? "Switch language to English" : "Cambiar idioma a español"}
-              title={locale === "es" ? "Switch to English" : "Cambiar a español"}
-            >
-              <span aria-hidden="true">{locale === "es" ? "🇪🇸" : "🇬🇧"}</span>
-            </button>
+            <LanguageToggleButton className="landing-btn landing-btn-ghost landing-lang-toggle" />
           </div>
           <nav className="landing-links" aria-label="Navegacion principal">
-            <a href="#capabilities">{t.nav.capabilities}</a>
-            <a href="#use-cases">{t.nav.useCases}</a>
-            <a href="#integrations">{t.nav.integrations}</a>
+            <a href="#capabilities">{lt.nav.capabilities}</a>
+            <a href="#use-cases">{lt.nav.useCases}</a>
+            <a href="#integrations">{lt.nav.integrations}</a>
           </nav>
           <div className="landing-nav-actions">
             <a className="landing-btn landing-btn-primary" href="/login">
-              {t.nav.login}
+              {t.auth.signIn}
             </a>
           </div>
         </div>
@@ -213,18 +176,18 @@ export function LandingPage() {
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-kicker reveal-on-scroll reveal-from-left reveal-delay-1">
-                {t.hero.kicker}
+                {lt.hero.kicker}
               </p>
               <h1 className="reveal-on-scroll reveal-from-left reveal-delay-2">
-                {t.hero.title}
+                {lt.hero.title}
               </h1>
               <p className="reveal-on-scroll reveal-from-left reveal-delay-3">
-                {t.hero.body}
+                {lt.hero.body}
               </p>
             </div>
             <div className="landing-bolt reveal-on-scroll reveal-from-right reveal-delay-0" aria-hidden="true">
               <div className="landing-hero-image-frame">
-                <img className="landing-hero-image" src={heroFtnImage} alt={t.hero.alt} />
+                <img className="landing-hero-image" src={heroFtnImage} alt={lt.hero.alt} />
               </div>
             </div>
           </div>
@@ -232,10 +195,10 @@ export function LandingPage() {
 
         <section id="capabilities" className="landing-section reveal-on-scroll reveal-delay-1">
           <div className="landing-container">
-            <h2>{t.capabilities.title}</h2>
-            <p className="landing-section-intro">{t.capabilities.intro}</p>
+            <h2>{lt.capabilities.title}</h2>
+            <p className="landing-section-intro">{lt.capabilities.intro}</p>
             <div className="landing-card-grid">
-              {t.capabilities.items.map((item) => (
+              {lt.capabilities.items.map((item) => (
                 <article key={item.title} className="landing-feature-card">
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
@@ -248,30 +211,30 @@ export function LandingPage() {
         <section id="use-cases" className="landing-section landing-section-panel reveal-on-scroll reveal-delay-1">
           <div className="landing-container landing-split">
             <aside className="landing-pill-list" aria-label="Use case categories">
-              {t.useCases.labels.map((label) => (
+              {lt.useCases.labels.map((label) => (
                 <span key={label} className="landing-pill">
                   {label}
                 </span>
               ))}
             </aside>
             <div className="landing-panel">
-              <h2>{t.useCases.title}</h2>
-              <p>{t.useCases.body}</p>
+              <h2>{lt.useCases.title}</h2>
+              <p>{lt.useCases.body}</p>
             </div>
           </div>
         </section>
 
         <section id="integrations" className="landing-section reveal-on-scroll reveal-delay-2">
           <div className="landing-container">
-            <h2>{t.integrations.title}</h2>
-            <div className="landing-integrations-marquee" aria-label={t.integrations.aria}>
+            <h2>{lt.integrations.title}</h2>
+            <div className="landing-integrations-marquee" aria-label={lt.integrations.aria}>
               <div className="landing-integrations-track">
-                {t.integrations.items.map((name) => (
+                {lt.integrations.items.map((name) => (
                   <span key={`a-${name}`} className="landing-integration-chip">
                     {name}
                   </span>
                 ))}
-                {t.integrations.items.map((name) => (
+                {lt.integrations.items.map((name) => (
                   <span key={`b-${name}`} className="landing-integration-chip">
                     {name}
                   </span>
@@ -283,7 +246,7 @@ export function LandingPage() {
 
         <section className="landing-section reveal-on-scroll reveal-delay-2">
           <div className="landing-container landing-proof-grid">
-            {t.proof.map((item) => (
+            {lt.proof.map((item) => (
               <article key={item.label} className="landing-proof-card">
                 <p className="landing-proof-label">{item.label}</p>
                 <strong>{item.title}</strong>

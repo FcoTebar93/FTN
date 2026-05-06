@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { loginWithPassword } from "../../auth/session";
+import { useUiText } from "../../i18n";
 
 type LoginPageProps = {
   onSuccess: () => void;
@@ -7,6 +8,7 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
+  const { t } = useUiText();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +24,9 @@ export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("401") || msg.toLowerCase().includes("invalid")) {
-        setError("Usuario o contraseña incorrectos.");
+        setError(t.auth.badCredentials);
       } else {
-        setError(msg || "No se pudo iniciar sesión.");
+        setError(msg || t.auth.loginFailed);
       }
     } finally {
       setSubmitting(false);
@@ -36,16 +38,16 @@ export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
       <div className="login-card">
         <header className="login-header">
           <h1 className="login-title">FTN</h1>
-          <p className="login-subtitle">Inicia sesión para continuar</p>
+          <p className="login-subtitle">{t.auth.signInToContinue}</p>
         </header>
         <p className="login-back-wrap">
           <a className="login-back-link" href="/">
-            Volver
+            {t.common.back}
           </a>
         </p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
-            <span className="login-label">Usuario</span>
+            <span className="login-label">{t.auth.username}</span>
             <input
               className="login-input"
               type="text"
@@ -58,7 +60,7 @@ export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
             />
           </label>
           <label className="login-field">
-            <span className="login-label">Contraseña</span>
+            <span className="login-label">{t.auth.password}</span>
             <input
               className="login-input"
               type="password"
@@ -72,12 +74,12 @@ export function LoginPage({ onSuccess, registrationEnabled }: LoginPageProps) {
           </label>
           {error ? <p className="login-error">{error}</p> : null}
           <button className="login-submit" type="submit" disabled={submitting}>
-            {submitting ? "Entrando…" : "Entrar"}
+            {submitting ? t.auth.entering : t.auth.enter}
           </button>
           {registrationEnabled ? (
             <p className="login-footer">
               <a className="login-link" href="/register">
-                Crear cuenta
+                {t.auth.createAccount}
               </a>
             </p>
           ) : null}

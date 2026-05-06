@@ -1,4 +1,6 @@
 import { logout } from "../../auth/session";
+import { useUiText } from "../../i18n";
+import { LanguageToggleButton } from "../../i18n/LanguageToggleButton";
 
 type SessionToolbarProps = {
   onLogout: () => void;
@@ -6,23 +8,25 @@ type SessionToolbarProps = {
 };
 
 export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
+  const { t } = useUiText();
   return (
     <div className="session-toolbar">
       <div className="session-toolbar-left">
         <span className="session-toolbar-brand">FTN</span>
+        <LanguageToggleButton className="lang-toggle-btn" />
         {userLabel ? <span className="session-toolbar-user">@{userLabel}</span> : null}
         <a className="session-toolbar-link" href="/runs">
-          Runs
+          {t.nav.runs}
         </a>
         <a className="session-toolbar-link" href="/designer">
-          Designer
+          {t.nav.designer}
         </a>
         <a className="session-toolbar-link" href="/credentials">
-          Credenciales
+          {t.nav.credentials}
         </a>
       </div>
       <button type="button" className="session-toolbar-logout" onClick={() => { logout(); onLogout(); }}>
-        Cerrar sesión
+        {t.nav.logout}
       </button>
     </div>
   );

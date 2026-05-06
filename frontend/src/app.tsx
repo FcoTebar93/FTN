@@ -13,8 +13,10 @@ import { fetchAuthStatus, getCurrentSessionSubject } from "./auth/session";
 import type { AuthStatus } from "./auth/session";
 import { API_BASE_URL, getAccessToken } from "./config";
 import { onUnauthorized } from "./api/client";
+import { useUiText } from "./i18n";
 
 export function App() {
+  const { t } = useUiText();
   const [boot, setBoot] = useState<"loading" | "ready">("loading");
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -80,7 +82,7 @@ export function App() {
   if (boot === "loading") {
     return (
       <div className="app app-boot">
-        <p className="app-boot-text">Cargando…</p>
+        <p className="app-boot-text">{t.common.loading}</p>
       </div>
     );
   }
@@ -92,11 +94,11 @@ export function App() {
           <div className="login-card">
             <header className="login-header">
               <h1 className="login-title">FTN</h1>
-              <p className="login-subtitle">El registro no está habilitado en este entorno.</p>
+              <p className="login-subtitle">{t.app.registrationDisabled}</p>
             </header>
             <p className="login-footer">
               <a className="login-link" href="/">
-                Volver al inicio
+                {t.errors.backHome}
               </a>
             </p>
           </div>
@@ -107,7 +109,7 @@ export function App() {
       window.location.replace("/");
       return (
         <div className="app app-boot">
-          <p className="app-boot-text">Redirigiendo…</p>
+          <p className="app-boot-text">{t.common.redirecting}</p>
         </div>
       );
     }
@@ -126,7 +128,7 @@ export function App() {
       window.location.replace("/runs");
       return (
         <div className="app app-boot">
-          <p className="app-boot-text">Redirigiendo…</p>
+          <p className="app-boot-text">{t.common.redirecting}</p>
         </div>
       );
     }
@@ -141,14 +143,14 @@ export function App() {
   const isPublicLanding = path === "/";
 
   if (showLogin && knownProtectedPath) {
-    return <NotFoundPage description="No existe o no tienes permisos para acceder a este recurso protegido." />;
+    return <NotFoundPage description={t.app.protectedNotFound} />;
   }
 
   const wrapped = (children: ComponentChildren) => (
     <div className="app">
       {statusError ? (
         <p className="app-status-warning" role="status">
-          No se pudo comprobar /auth/status: {statusError}
+          {t.app.authStatusFailed} {statusError}
         </p>
       ) : null}
       {hasSession ? <SessionToolbar onLogout={handleLogout} userLabel={getCurrentSessionSubject()} /> : null}
