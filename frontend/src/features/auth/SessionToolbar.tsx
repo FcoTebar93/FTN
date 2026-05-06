@@ -13,7 +13,6 @@ export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
     <div className="session-toolbar">
       <div className="session-toolbar-left">
         <span className="session-toolbar-brand">FTN</span>
-        <LanguageToggleButton className="lang-toggle-btn" />
         {userLabel ? <span className="session-toolbar-user">@{userLabel}</span> : null}
         <a className="session-toolbar-link" href="/runs">
           {t.nav.runs}
@@ -24,6 +23,7 @@ export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
         <a className="session-toolbar-link" href="/credentials">
           {t.nav.credentials}
         </a>
+        <LanguageToggleButton className="session-lang-toggle" />
       </div>
       <button type="button" className="session-toolbar-logout" onClick={() => { logout(); onLogout(); }}>
         {t.nav.logout}

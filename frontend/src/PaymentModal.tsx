@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { authHeaders } from "./config";
+import { useUiText } from "./i18n";
 
 type PaymentModalProps = {
   backendBaseUrl: string;
@@ -13,6 +14,7 @@ type CheckoutResponse = {
 type Status = "idle" | "loading" | "error";
 
 export function PaymentModal({ backendBaseUrl }: PaymentModalProps) {
+  const { t } = useUiText();
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +28,7 @@ export function PaymentModal({ backendBaseUrl }: PaymentModalProps) {
 
     if (!workflowId || !runId || !email || !priceCents) {
       setStatus("error");
-      setError("Faltan parámetros en la URL para iniciar el pago.");
+      setError(t.payment.missingParams);
       return;
     }
 
@@ -57,7 +59,7 @@ export function PaymentModal({ backendBaseUrl }: PaymentModalProps) {
 
         const data: CheckoutResponse = await res.json();
         if (!data.url) {
-          throw new Error("La respuesta no contiene una URL de pago.");
+          throw new Error(t.payment.missingUrl);
         }
 
         window.location.href = data.url;
@@ -75,15 +77,15 @@ export function PaymentModal({ backendBaseUrl }: PaymentModalProps) {
       <div className="payment-modal">
         {status === "loading" && (
           <>
-            <h2>Procesando tu pago…</h2>
-            <p>Te redirigiremos a la pasarela en unos segundos.</p>
+            <h2>{t.payment.processingTitle}</h2>
+            <p>{t.payment.processingBody}</p>
           </>
         )}
         {status === "error" && (
           <>
-            <h2>Ha ocurrido un error</h2>
-            <p>{error ?? "No se ha podido iniciar el pago."}</p>
-            <button onClick={() => window.location.reload()}>Reintentar</button>
+            <h2>{t.payment.errorTitle}</h2>
+            <p>{error ?? t.payment.cannotStart}</p>
+            <button onClick={() => window.location.reload()}>{t.payment.retry}</button>
           </>
         )}
       </div>

@@ -1384,6 +1384,29 @@
     line-height: 1;
   }
 
+  .session-lang-toggle {
+    width: 40px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: #fff;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif;
+    margin-left: 12px;
+  }
+
+  .session-lang-toggle:hover {
+    transform: translateY(-1px);
+    border-color: rgba(249, 115, 22, 0.55);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.12);
+  }
+
   .landing-btn {
     text-decoration: none;
     border-radius: 8px;

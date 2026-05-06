@@ -1,4 +1,5 @@
 import type { WorkflowSummary, WorkflowStatus } from "../../api/types";
+import { useUiText } from "../../i18n";
 
 interface Props {
     workflows: WorkflowSummary[] | null;
@@ -15,15 +16,16 @@ interface Props {
 }
 
 export function WorkflowsList({ workflows, loading, error, selected, onSelect, statusFilter, onStatusFilterChange, searchQuery, onSearchQueryChange, page, onPageChange }: Props) {
+  const { t } = useUiText();
   if (loading){
-    return <div class="panel">Cargando workflows…</div>;
+    return <div class="panel">{t.workflows.loadingList}</div>;
   } 
   if (error){
     return <div class="panel panel-error">Error: {error.message}</div>;
   }
 
   const filterOptions: { value: WorkflowStatus | ""; label: string }[] = [
-    { value: "", label: "Todos" },
+    { value: "", label: t.workflows.filterAll },
     { value: "running", label: "Running" },
     { value: "completed", label: "Completed" },
     { value: "failed", label: "Failed" },
@@ -44,7 +46,7 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
 
   return (
     <div class="panel">
-      <h2 class="panel-title">Workflows</h2>
+      <h2 class="panel-title">{t.workflows.title}</h2>
       <div class="workflow-filter">
         {filterOptions.map(({ value, label }) => (
           <button
@@ -61,18 +63,18 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
         <input
           type="text"
           class="workflow-search-input"
-          placeholder="Buscar por nombre, id…"
+          placeholder={t.workflows.searchPlaceholder}
           value={searchQuery}
           onInput={(e) => onSearchQueryChange((e.target as HTMLInputElement).value)}
         />
       </div>
       {(!workflows || workflows.length === 0) ? (
         <p class="workflow-list-empty">
-          {statusFilter ? `No hay workflows con estado "${statusFilter}".` : "No hay workflows aún."}
+          {statusFilter ? t.workflows.emptyWithStatus(statusFilter) : t.workflows.empty}
         </p>
       ) : filteredWorkflows.length === 0 ? (
         <p class="workflow-list-empty">
-          Ningún workflow coincide con la búsqueda.
+          {t.workflows.noneMatchSearch}
         </p>
       ) : (
         <ul class="workflow-list">
@@ -88,12 +90,18 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
                 <div class="workflow-name">{w.name}</div>
                 <div class={`workflow-status status-${w.status}`}>{w.status}</div>
                 <div class="workflow-meta">
-                  <span>{w.startedAt ?? "sin fecha"}</span>
+                  <span>{w.startedAt ?? t.workflows.noDate}</span>
                   {typeof w.pendingSignalWaits === "number" && w.pendingSignalWaits > 0 ? (
-                    <span> · señales: {w.pendingSignalWaits}</span>
+                    <span>
+                      {" · "}
+                      {t.workflows.signals}: {w.pendingSignalWaits}
+                    </span>
                   ) : null}
                   {typeof w.retryAttempts === "number" && w.retryAttempts > 0 ? (
-                    <span> · retries: {w.retryAttempts}</span>
+                    <span>
+                      {" · "}
+                      {t.workflows.retries}: {w.retryAttempts}
+                    </span>
                   ) : null}
                 </div>
               </li>

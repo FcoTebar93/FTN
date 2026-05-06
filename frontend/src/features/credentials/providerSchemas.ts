@@ -1,4 +1,5 @@
 export type CredentialProvider = "stripe" | "notifications" | "crm" | "twilio" | "kyc";
+import type { Locale } from "../../i18n";
 
 export type CredentialFieldLocation = "config" | "secrets";
 export type CredentialFieldType = "text" | "password" | "url" | "email" | "tel";
@@ -35,12 +36,18 @@ const isHttpUrl = (value: string): boolean => {
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSchema> = {
+function buildProviderSchemas(locale: Locale): Record<CredentialProvider, CredentialProviderSchema> {
+  const isEs = locale === "es";
+  return {
   stripe: {
     provider: "stripe",
     title: "Stripe",
-    description: "Configura la clave secreta para pagos y checkout.",
-    requirements: ["`stripeSecretKey` obligatoria", "Debe empezar por sk_test_ o sk_live_"],
+    description: isEs
+      ? "Configura la clave secreta para pagos y checkout."
+      : "Configure the secret key for payments and checkout.",
+    requirements: isEs
+      ? ["`stripeSecretKey` obligatoria", "Debe empezar por sk_test_ o sk_live_"]
+      : ["`stripeSecretKey` is required", "Must start with sk_test_ or sk_live_"],
     fields: [
       {
         key: "stripeSecretKey",
@@ -53,15 +60,19 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         validate: (value) =>
           value && /^sk_(test|live)_/.test(value)
             ? null
-            : "Debe empezar por sk_test_ o sk_live_.",
+            : isEs
+              ? "Debe empezar por sk_test_ o sk_live_."
+              : "Must start with sk_test_ or sk_live_.",
       },
     ],
   },
   twilio: {
     provider: "twilio",
     title: "Twilio SMS",
-    description: "Credenciales para envío de SMS reales.",
-    requirements: ["`accountSid`, `authToken` y `fromNumber`", "SID debe empezar por AC..."],
+    description: isEs ? "Credenciales para envío de SMS reales." : "Credentials for real SMS delivery.",
+    requirements: isEs
+      ? ["`accountSid`, `authToken` y `fromNumber`", "SID debe empezar por AC..."]
+      : ["`accountSid`, `authToken` and `fromNumber`", "SID must start with AC..."],
     fields: [
       {
         key: "accountSid",
@@ -72,7 +83,11 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         placeholder: "ACxxxxxxxxxxxx",
         required: true,
         validate: (value) =>
-          value && /^AC[a-zA-Z0-9]{10,}$/.test(value) ? null : "Debe empezar por AC...",
+          value && /^AC[a-zA-Z0-9]{10,}$/.test(value)
+            ? null
+            : isEs
+              ? "Debe empezar por AC..."
+              : "Must start with AC...",
       },
       {
         key: "authToken",
@@ -81,7 +96,8 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         type: "password",
         aliases: ["twilioAuthToken"],
         required: true,
-        validate: (value) => (value.length >= 10 ? null : "Debe tener al menos 10 caracteres."),
+        validate: (value) =>
+          value.length >= 10 ? null : isEs ? "Debe tener al menos 10 caracteres." : "Must be at least 10 characters.",
       },
       {
         key: "fromNumber",
@@ -94,15 +110,19 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         validate: (value) =>
           value && /^\+?[0-9]{6,}$/.test(value)
             ? null
-            : "Debe ser un teléfono válido (solo números y opcional +).",
+            : isEs
+              ? "Debe ser un teléfono válido (solo números y opcional +)."
+              : "Must be a valid phone number (digits and optional +).",
       },
     ],
   },
   kyc: {
     provider: "kyc",
     title: "KYC Provider",
-    description: "Proveedor externo de verificación de identidad.",
-    requirements: ["`providerUrl` y `providerToken` obligatorios", "URL debe ser http(s) válida"],
+    description: isEs ? "Proveedor externo de verificación de identidad." : "External identity verification provider.",
+    requirements: isEs
+      ? ["`providerUrl` y `providerToken` obligatorios", "URL debe ser http(s) válida"]
+      : ["`providerUrl` and `providerToken` are required", "URL must be a valid http(s) URL"],
     fields: [
       {
         key: "providerUrl",
@@ -111,7 +131,7 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         type: "url",
         placeholder: "https://api.kyc-provider.com/verify",
         required: true,
-        validate: (value) => (isHttpUrl(value) ? null : "Debe ser una URL http(s) válida."),
+        validate: (value) => (isHttpUrl(value) ? null : isEs ? "Debe ser una URL http(s) válida." : "Must be a valid http(s) URL."),
       },
       {
         key: "providerToken",
@@ -120,15 +140,17 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         type: "password",
         aliases: ["token"],
         required: true,
-        validate: (value) => (value ? null : "Token obligatorio."),
+        validate: (value) => (value ? null : isEs ? "Token obligatorio." : "Token is required."),
       },
     ],
   },
   notifications: {
     provider: "notifications",
     title: "Email / Slack",
-    description: "Puedes configurar SendGrid, Slack o ambos.",
-    requirements: ["SendGrid: `sendgridApiKey` + `emailFrom`", "O Slack: `slackWebhookUrl`"],
+    description: isEs ? "Puedes configurar SendGrid, Slack o ambos." : "You can configure SendGrid, Slack, or both.",
+    requirements: isEs
+      ? ["SendGrid: `sendgridApiKey` + `emailFrom`", "O Slack: `slackWebhookUrl`"]
+      : ["SendGrid: `sendgridApiKey` + `emailFrom`", "Or Slack: `slackWebhookUrl`"],
     fields: [
       {
         key: "sendgridApiKey",
@@ -138,9 +160,9 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         type: "password",
         placeholder: "SG....",
         validate: (value, all) => {
-          if (!value && !all.slackWebhookUrl) return "Configura SendGrid o Slack.";
+          if (!value && !all.slackWebhookUrl) return isEs ? "Configura SendGrid o Slack." : "Configure SendGrid or Slack.";
           if (!value) return null;
-          return /^SG\./.test(value) ? null : "Debe empezar por SG.";
+          return /^SG\./.test(value) ? null : isEs ? "Debe empezar por SG." : "Must start with SG.";
         },
       },
       {
@@ -152,7 +174,11 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         placeholder: "no-reply@tu-dominio.com",
         validate: (value, all) => {
           if (!all.sendgridApiKey) return null;
-          return value && emailRegex.test(value) ? null : "Email emisor inválido.";
+          return value && emailRegex.test(value)
+            ? null
+            : isEs
+              ? "Email emisor inválido."
+              : "Invalid sender email.";
         },
       },
       {
@@ -162,11 +188,13 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
         type: "password",
         placeholder: "https://hooks.slack.com/services/...",
         validate: (value, all) => {
-          if (!value && !all.sendgridApiKey) return "Configura SendGrid o Slack.";
+          if (!value && !all.sendgridApiKey) return isEs ? "Configura SendGrid o Slack." : "Configure SendGrid or Slack.";
           if (!value) return null;
           return /^https:\/\/hooks\.slack\.com\//.test(value)
             ? null
-            : "Webhook inválido: debe ser hooks.slack.com.";
+            : isEs
+              ? "Webhook inválido: debe ser hooks.slack.com."
+              : "Invalid webhook: must be hooks.slack.com.";
         },
       },
     ],
@@ -174,20 +202,32 @@ export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSche
   crm: {
     provider: "crm",
     title: "CRM",
-    description: "Actualmente CRM no usa credenciales de proveedor en este entorno.",
+    description: isEs
+      ? "Actualmente CRM no usa credenciales de proveedor en este entorno."
+      : "CRM currently does not use provider credentials in this environment.",
     fields: [],
     advancedJsonEnabled: true,
   },
-};
+  };
+}
+
+export const PROVIDER_SCHEMAS: Record<CredentialProvider, CredentialProviderSchema> = buildProviderSchemas("es");
+export function getProviderSchemas(locale: Locale): Record<CredentialProvider, CredentialProviderSchema> {
+  return buildProviderSchemas(locale);
+}
 
 export const PROVIDERS_ORDER: CredentialProvider[] = ["stripe", "notifications", "crm", "twilio", "kyc"];
 
-export function getFieldErrors(schema: CredentialProviderSchema, values: Record<string, string>): Record<string, string> {
+export function getFieldErrors(
+  schema: CredentialProviderSchema,
+  values: Record<string, string>,
+  locale: Locale = "es"
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const field of schema.fields) {
     const value = (values[field.key] ?? "").trim();
     if (field.required && !value) {
-      result[field.key] = "Campo obligatorio.";
+      result[field.key] = locale === "es" ? "Campo obligatorio." : "Required field.";
       continue;
     }
     if (field.validate) {

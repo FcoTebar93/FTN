@@ -12,6 +12,7 @@ import {
 import { TIMEZONES, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { WORKFLOW_TEMPLATES, type DesignerTemplate } from "./templates";
+import { useUiText } from "../../i18n";
 
 const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
   id: "",
@@ -28,6 +29,7 @@ const EMPTY_WORKFLOW: DesignerStoredWorkflow = {
 };
 
 export function DesignerPage() {
+  const { t } = useUiText();
   type Mode = "list" | "edit";
 
   const [activities, setActivities] = useState<ActivityCatalogItem[]>([]);
@@ -92,7 +94,7 @@ export function DesignerPage() {
     if (!tpl) return;
     const missing = missingActivitiesForTemplate(tpl);
     if (missing.length > 0) {
-      setTemplateError(`La plantilla "${tpl.label}" requiere activities no registradas: ${missing.join(", ")}`);
+      setTemplateError(t.designer.templateRequires(tpl.label, missing.join(", ")));
       return;
     }
     const wf = tpl.build();
@@ -265,32 +267,35 @@ export function DesignerPage() {
       <div class="sidebar">
         <div class="panel">
           <h2 class="panel-title">Designer · Workflows JSON</h2>
-          {loadingActivities && <p class="detail-muted">Cargando catálogo de activities…</p>}
+          <h2 class="panel-title">{t.designer.title}</h2>
+          {loadingActivities && <p class="detail-muted">{t.designer.loadingActivities}</p>}
           {activitiesError && <p class="panel panel-error">Activities: {activitiesError.message}</p>}
           {templateError && <p class="panel panel-error">{templateError}</p>}
           <div class="integration-status">
-            <div class="integration-status-title">Estado de integraciones</div>
+            <div class="integration-status-title">{t.designer.integrationsStatus}</div>
             {integrationsStatusError ? (
-              <p class="detail-muted">No se pudo cargar estado: {integrationsStatusError.message}</p>
+              <p class="detail-muted">
+                {t.designer.integrationsStatusLoadFailed} {integrationsStatusError.message}
+              </p>
             ) : integrationsStatus.length === 0 ? (
-              <p class="detail-muted">Sin datos de estado.</p>
+              <p class="detail-muted">{t.designer.integrationsStatusEmpty}</p>
             ) : (
               <ul class="integration-status-list">
                 {integrationsStatus.map((s) => (
                   <li key={s.key} class={`integration-status-item ${s.configured ? "ok" : "missing"}`}>
                     <span>{s.label}</span>
-                    <span>{s.configured ? `OK (${s.source})` : "Falta"}</span>
+                    <span>{s.configured ? `OK (${s.source})` : t.designer.missing}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <button type="button" class="workflow-filter-btn" onClick={handleNew}>
-            + Nuevo workflow
+            {t.designer.newWorkflow}
           </button>
           {WORKFLOW_TEMPLATES.length > 0 && (
             <div class="form-row" style={{ marginTop: "8px" }}>
-              <label>Plantillas</label>
+              <label>{t.designer.templates}</label>
               <select
                 onInput={(e) => {
                   const v = (e.target as HTMLSelectElement).value;
@@ -300,7 +305,7 @@ export function DesignerPage() {
                   }
                 }}
               >
-                <option value="">(crear desde plantilla…)</option>
+                <option value="">{t.designer.createFromTemplate}</option>
                 {WORKFLOW_TEMPLATES.map((tpl) => {
                   const missing = missingActivitiesForTemplate(tpl);
                   const ok = missing.length === 0;
@@ -314,14 +319,16 @@ export function DesignerPage() {
             </div>
           )}
           <p class="detail-muted" style={{ marginTop: "6px" }}>
-            Una plantilla solo se aplica si sus activities requeridas están registradas en este entorno.
+            {t.designer.templatesRequireRegistered}
           </p>
           {loadingList ? (
-            <p class="detail-muted">Cargando…</p>
+            <p class="detail-muted">{t.designer.loading}</p>
           ) : errorList ? (
-            <p class="panel panel-error">Error: {errorList.message}</p>
+            <p class="panel panel-error">
+              {t.designer.errorPrefix} {errorList.message}
+            </p>
           ) : workflows.length === 0 ? (
-            <p class="workflow-list-empty">No hay workflows definidos aún.</p>
+            <p class="workflow-list-empty">{t.designer.noWorkflowsYet}</p>
           ) : (
             <ul class="workflow-list">
               {workflows.map((w) => (
@@ -340,12 +347,12 @@ export function DesignerPage() {
                   </div>
                   {w.lastScheduledRunAt ? (
                     <div class="detail-muted" style={{ fontSize: "11px", marginTop: "2px" }}>
-                      Última ejecución: {new Date(w.lastScheduledRunAt).toLocaleString()}
+                      {t.designer.lastRun} {new Date(w.lastScheduledRunAt).toLocaleString()}
                     </div>
                   ) : null}
                   {w.lastScheduledError ? (
                     <div class="panel panel-error" style={{ marginTop: "6px", fontSize: "11px" }}>
-                      Último error: {w.lastScheduledError}
+                      {t.designer.lastError} {w.lastScheduledError}
                     </div>
                   ) : null}
                 </li>
@@ -358,13 +365,17 @@ export function DesignerPage() {
       <div class="content">
         {mode === "edit" ? (
           <div class="panel">
-            <h2 class="panel-title">Editar workflow</h2>
-            {loadingCurrent && <p class="detail-muted">Cargando…</p>}
-            {errorCurrent && <p class="panel panel-error">Error: {errorCurrent.message}</p>}
+            <h2 class="panel-title">{t.designer.editWorkflow}</h2>
+            {loadingCurrent && <p class="detail-muted">{t.designer.loading}</p>}
+            {errorCurrent && (
+              <p class="panel panel-error">
+                {t.designer.errorPrefix} {errorCurrent.message}
+              </p>
+            )}
             {current && (
               <>
                 <section class="workflow-section workflow-section--meta">
-                  <h3>Meta</h3>
+                  <h3>{t.designer.meta}</h3>
                   <div class="form-row">
                     <label>Id</label>
                     <input
@@ -429,7 +440,7 @@ export function DesignerPage() {
                 </section>
 
                 <section class="workflow-section workflow-section--meta">
-                  <h3>Ejecución</h3>
+                  <h3>{t.designer.execution}</h3>
                   <p class="detail-muted">
                     Instantánea: se lanza al guardar por primera vez. Diaria / semanal: el servidor comprueba cada
                     minuto (intervalo configurable) la hora en la zona indicada.
@@ -470,7 +481,7 @@ export function DesignerPage() {
                     >
                       <option value="instant">Instantánea (al crear)</option>
                       <option value="daily">Diaria</option>
-                      <option value="weekly">Semanal (días concretos)</option>
+                      <option value="weekly">{t.designer.weeklyConcrete}</option>
                     </select>
                   </div>
                   <div class="form-row">
@@ -596,12 +607,12 @@ export function DesignerPage() {
                           JSON.parse(t);
                           setSchedInputJsonError(null);
                         } catch {
-                          setSchedInputJsonError("JSON inválido");
+                          setSchedInputJsonError(t.designer.jsonInvalid);
                         }
                       }}
                     />
                     {schedInputJsonError && <p class="panel-error">{schedInputJsonError}</p>}
-                    <p class="detail-muted">Se usa en la ejecución instantánea al crear y en cada run programado.</p>
+                    <p class="detail-muted">{t.designer.usedForInstantAndScheduled}</p>
                     <div class="form-row" style={{ marginTop: "8px" }}>
                       <button
                         type="button"
@@ -626,7 +637,7 @@ export function DesignerPage() {
                           try {
                             input = schedInputDraft.trim() === "" ? {} : JSON.parse(schedInputDraft);
                           } catch {
-                            setTestRunMessage("JSON de input inválido");
+                            setTestRunMessage(t.designer.inputJsonInvalid);
                             return;
                           }
                           setTestRunLoading(true);
@@ -640,7 +651,7 @@ export function DesignerPage() {
                           }
                         }}
                       >
-                        {testRunLoading ? "Iniciando…" : "Ejecutar prueba (run)"}
+                        {testRunLoading ? t.designer.starting : t.designer.runTest}
                       </button>
                       {testRunMessage && <span class="detail-muted" style={{ marginLeft: "8px" }}>{testRunMessage}</span>}
                     </div>
@@ -648,12 +659,12 @@ export function DesignerPage() {
                 </section>
 
                 <section class="workflow-section">
-                  <h3>Steps</h3>
+                  <h3>{t.designer.steps}</h3>
                   <button type="button" class="workflow-filter-btn" onClick={handleAddStep}>
-                    + Añadir step
+                    {t.designer.addStep}
                   </button>
                   {current.steps.length === 0 ? (
-                    <p class="detail-muted">Añade al menos un step para este workflow.</p>
+                    <p class="detail-muted">{t.designer.needAtLeastOneStep}</p>
                   ) : (
                     <>
                       <div class="form-row">
@@ -694,7 +705,7 @@ export function DesignerPage() {
                                 }
                               />
                               <button type="button" onClick={() => handleRemoveStep(step.id)}>
-                                Eliminar
+                                {t.designer.delete}
                               </button>
                             </div>
                             <div class="form-row">
@@ -1123,7 +1134,7 @@ export function DesignerPage() {
 
                 <section class="workflow-section">
                   <h3>Vista previa JSON</h3>
-                  <p class="detail-muted">Payload que se enviará al guardar (revisión rápida).</p>
+                  <p class="detail-muted">{t.designer.payloadPreview}</p>
                   <pre
                     class="detail-muted"
                     style={{
@@ -1142,7 +1153,7 @@ export function DesignerPage() {
 
                 <section class="workflow-section">
                   <button type="button" class="workflow-filter-btn" onClick={handleSave}>
-                    Guardar workflow
+                    {t.designer.saveWorkflow}
                   </button>
                   <button
                     type="button"
@@ -1152,7 +1163,7 @@ export function DesignerPage() {
                       setCurrent(null);
                     }}
                   >
-                    Cancelar
+                    {t.designer.cancel}
                   </button>
                 </section>
               </>
@@ -1161,7 +1172,7 @@ export function DesignerPage() {
         ) : (
           <div class="panel">
             <p class="detail-muted">
-              Elige un workflow a la izquierda o crea uno nuevo para editar su definición JSON.
+              {t.designer.chooseLeft}
             </p>
           </div>
         )}

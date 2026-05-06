@@ -1,5 +1,6 @@
 import { useState, useMemo } from "preact/hooks";
 import type { WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
+import { useUiText } from "../../i18n";
 
 type TabId = "estado" | "eventos" | "steps";
 
@@ -25,23 +26,24 @@ function payloadSummary(payload: unknown): string {
 }
 
 export function WorkflowDetail({ selected, state, events, steps, loading, error, onRefresh, onCancel }: Props) {
+  const { t } = useUiText();
   const [activeTab, setActiveTab] = useState<TabId>("estado");
   const [showStateJson, setShowStateJson] = useState(false);
   const [expandedPayloadIds, setExpandedPayloadIds] = useState<Record<string, boolean>>({});
   const [isCancelling, setIsCancelling] = useState(false);
 
   if (!selected) {
-    return <div class="panel">Selecciona un workflow para ver el detalle.</div>;
+    return <div class="panel">{t.workflows.selectOne}</div>;
   }
 
-  if (loading) return <div class="panel">Cargando detalle…</div>;
+  if (loading) return <div class="panel">{t.workflows.loadingDetail}</div>;
   if (error) return <div class="panel panel-error">Error: {error.message}</div>;
-  if (!state) return <div class="panel">No se ha encontrado el estado.</div>;
+  if (!state) return <div class="panel">{t.workflows.stateNotFound}</div>;
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "estado", label: "Estado" },
-    { id: "eventos", label: "Eventos" },
-    { id: "steps", label: "Steps" },
+    { id: "estado", label: t.workflows.tabState },
+    { id: "eventos", label: t.workflows.tabEvents },
+    { id: "steps", label: t.workflows.tabSteps },
   ];
 
   const sortedEvents = useMemo(() => {
@@ -60,7 +62,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
       </h2>
       <div class="workflow-detail-header">
         <button type="button" class="workflow-filter-btn" style={{ marginRight: "8px" }} onClick={onRefresh}>
-          Refrescar
+          {t.workflows.refresh}
         </button>
         {state.status === "running" && onCancel && (
           <button
@@ -69,7 +71,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
             style={{ marginRight: "8px" }}
             disabled={isCancelling}
             onClick={async () => {
-              const reason = window.prompt("Motivo de cancelación (opcional):", "");
+              const reason = window.prompt(t.workflows.cancelPrompt, "");
               setIsCancelling(true);
               try {
                 await onCancel(reason ?? undefined);
@@ -78,7 +80,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
               }
             }}
           >
-            {isCancelling ? "Cancelando…" : "Cancelar run"}
+            {isCancelling ? t.workflows.cancelling : t.workflows.cancelRun}
           </button>
         )}
         <button
@@ -101,20 +103,46 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
             URL.revokeObjectURL(a.href);
           }}
         >
-          Exportar JSON
+          {t.workflows.exportJson}
         </button>
         <span class={`workflow-status status-${state.status}`}>{state.status}</span>
-        <span>Comenzado: {state.startedAt ?? "N/A"}</span>
-        {state.completedAt && <span>Completado: {state.completedAt}</span>}
-        {state.failedAt && <span>Falló: {state.failedAt}</span>}
-        {state.failureReason && <span>Razón: {state.failureReason}</span>}
-        {state.cancelledAt && <span>Cancelado: {state.cancelledAt}</span>}
-        {state.cancellationReason && <span>Motivo cancelación: {state.cancellationReason}</span>}
-        {state.cancellationRequestedBy && <span>Solicitado por: {state.cancellationRequestedBy}</span>}
+        <span>
+          {t.workflows.started}: {state.startedAt ?? "N/A"}
+        </span>
+        {state.completedAt && (
+          <span>
+            {t.workflows.completed}: {state.completedAt}
+          </span>
+        )}
+        {state.failedAt && (
+          <span>
+            {t.workflows.failed}: {state.failedAt}
+          </span>
+        )}
+        {state.failureReason && (
+          <span>
+            {t.workflows.reason}: {state.failureReason}
+          </span>
+        )}
+        {state.cancelledAt && (
+          <span>
+            {t.workflows.cancelled}: {state.cancelledAt}
+          </span>
+        )}
+        {state.cancellationReason && (
+          <span>
+            {t.workflows.cancelReason}: {state.cancellationReason}
+          </span>
+        )}
+        {state.cancellationRequestedBy && (
+          <span>
+            {t.workflows.requestedBy}: {state.cancellationRequestedBy}
+          </span>
+        )}
         {state.status === "running" && (
           <span class="workflow-live-pill">
             <span class="workflow-live-dot" />
-            Actualizando cada 4 s
+            {t.workflows.liveEvery}
           </span>
         )}
       </div>
@@ -135,24 +163,29 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
       <div class="tab-panel">
       {activeTab === "estado" && (
           <section class="workflow-section">
-            <h3>Resumen</h3>
+            <h3>{t.workflows.summary}</h3>
             <ul class="detail-list">
-              <li>Versión: {state.version}</li>
               <li>
-                Diagnóstico: pendientes={state.pendingActivities.length + state.pendingTimers.length + (state.pendingSignalWaits?.length ?? 0)}
+                {t.workflows.version}: {state.version}
+              </li>
+              <li>
+                {t.workflows.diagnostics}: pendientes=
+                {state.pendingActivities.length + state.pendingTimers.length + (state.pendingSignalWaits?.length ?? 0)}
                 {" · "}
                 retries={(events ?? []).filter((e) => e.type === "RetryAttemptStarted").length}
               </li>
               {events && events.length > 0 && (
-                <li>Último evento: {events[events.length - 1]!.type}</li>
+                <li>
+                  {t.workflows.lastEvent}: {events[events.length - 1]!.type}
+                </li>
               )}
               {state.result !== undefined && (
                 <li>Resultado: <code class="inline-code">{payloadSummary(state.result)}</code></li>
               )}
             </ul>
-            <h3>Actividades pendientes</h3>
+            <h3>{t.workflows.pendingActivities}</h3>
             {state.pendingActivities.length === 0 ? (
-              <p class="detail-muted">No hay actividades pendientes en este momento.</p>
+              <p class="detail-muted">{t.workflows.noPendingActivities}</p>
             ) : (
               <ul class="detail-list">
                 {state.pendingActivities.map((a) => (
@@ -164,9 +197,9 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
               ))}
               </ul>
             )}
-            <h3>Actividades completadas</h3>
+            <h3>{t.workflows.completedActivities}</h3>
             {state.completedActivities.length === 0 ? (
-              <p class="detail-muted">Todavía no se ha completado ninguna actividad.</p>
+              <p class="detail-muted">{t.workflows.noCompletedActivities}</p>
             ) : (
               <ul class="detail-list">
                 {state.completedActivities.map((a) => (
@@ -178,13 +211,15 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
               ))}
               </ul>
             )}
-            <h3>Timers pendientes</h3>
+            <h3>{t.workflows.pendingTimers}</h3>
             {state.pendingTimers.length === 0 ? (
-              <p class="detail-muted">No hay timers programados.</p>
+              <p class="detail-muted">{t.workflows.noPendingTimers}</p>
             ) : (
               <ul class="detail-list">
                 {state.pendingTimers.map((t, i) => (
-                  <li key={i}>Despierta: {t.wakeAt}</li>
+                  <li key={i}>
+                    {t.workflows.wakeAt}: {t.wakeAt}
+                  </li>
                 ))}
               </ul>
             )}
@@ -194,7 +229,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
                 class="btn-toggle-json"
                 onClick={() => setShowStateJson((v) => !v)}
               >
-                {showStateJson ? "Ocultar JSON" : "Ver JSON completo"}
+                {showStateJson ? t.workflows.hideJson : t.workflows.showJson}
               </button>
               {showStateJson && (
                 <pre class="state-json-block">{JSON.stringify(state, null, 2)}</pre>
@@ -205,9 +240,9 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
 
         {activeTab === "eventos" && (
           <section class="workflow-section">
-            <h3>Eventos</h3>
+            <h3>{t.workflows.eventsTitle}</h3>
             {sortedEvents.length === 0 ? (
-              <p class="detail-muted">Aún no se han registrado eventos para este run. Cuando el workflow avance, los verás aquí en orden cronológico.</p>
+              <p class="detail-muted">{t.workflows.noEventsYet}</p>
             ) : (
               <ul class="events-list events-list--expandable">
                 {sortedEvents.map((ev) => {
@@ -249,9 +284,9 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
 
 {activeTab === "steps" && (
           <section class="workflow-section">
-            <h3>Steps</h3>
+            <h3>{t.workflows.stepsTitle}</h3>
             {!steps || steps.length === 0 ? (
-              <p class="detail-muted">Este workflow todavía no ha creado ningún step registrado en el motor.</p>
+              <p class="detail-muted">{t.workflows.noStepsYet}</p>
             ) : (
               <div class="steps-table-wrap">
                 <table class="steps-table">

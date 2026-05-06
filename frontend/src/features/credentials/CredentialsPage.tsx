@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { getCredential, getIntegrationsStatus, listCredentials, saveCredential } from "../../api/credentials";
 import type { CredentialSummary, IntegrationStatusItem } from "../../api/types";
+import { useUiText } from "../../i18n";
 import {
   PROVIDERS_ORDER,
-  PROVIDER_SCHEMAS,
+  getProviderSchemas,
   countMissingRequiredFields,
   getFieldErrors,
   type CredentialProvider,
@@ -13,6 +14,7 @@ type FieldValues = Record<string, string>;
 type FieldChecklistItem = { key: string; label: string; status: "ok" | "error" | "pending"; message: string };
 
 export function CredentialsPage() {
+  const { t, locale } = useUiText();
   const [items, setItems] = useState<CredentialSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +28,11 @@ export function CredentialsPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, IntegrationStatusItem>>({});
 
+  const providerSchemas = useMemo(() => getProviderSchemas(locale), [locale]);
   const current = useMemo(() => items.find((x) => x.provider === provider), [items, provider]);
-  const schema = PROVIDER_SCHEMAS[provider];
+  const schema = providerSchemas[provider];
 
-  const fieldErrors = useMemo(() => getFieldErrors(schema, fieldValues), [fieldValues, schema]);
+  const fieldErrors = useMemo(() => getFieldErrors(schema, fieldValues, locale), [fieldValues, schema, locale]);
   const missingRequiredCount = useMemo(() => countMissingRequiredFields(schema, fieldValues), [fieldValues, schema]);
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   const fieldChecklist = useMemo<FieldChecklistItem[]>(() => {
@@ -43,14 +46,14 @@ export function CredentialsPage() {
             key: field.key,
             label: field.label,
             status: "pending",
-            message: "Pendiente (obligatorio)",
+            message: t.credentials.pendingRequired,
           };
         }
         return {
           key: field.key,
           label: field.label,
           status: "pending",
-          message: "Opcional",
+          message: t.credentials.optional,
         };
       }
       if (err) {
@@ -65,7 +68,7 @@ export function CredentialsPage() {
         key: field.key,
         label: field.label,
         status: "ok",
-        message: "Correcto",
+        message: t.credentials.ok,
       };
     });
   }, [fieldErrors, fieldValues, schema.fields]);
@@ -151,12 +154,12 @@ export function CredentialsPage() {
           throw new Error("secrets debe ser un objeto JSON");
         }
       } catch (e) {
-        setSaveMsg(`JSON inválido: ${(e as Error).message}`);
+        setSaveMsg(`${t.credentials.jsonInvalidPrefix} ${(e as Error).message}`);
         return;
       }
     } else {
       if (hasFieldErrors) {
-        setSaveMsg("Hay errores en el formulario. Revísalos antes de guardar.");
+        setSaveMsg(t.credentials.hasFormErrors);
         return;
       }
       for (const field of schema.fields) {
@@ -174,9 +177,9 @@ export function CredentialsPage() {
     try {
       await saveCredential(provider, { config, secrets });
       await refresh();
-      setSaveMsg("Credenciales guardadas.");
+      setSaveMsg(t.credentials.saved);
     } catch (e) {
-      setSaveMsg(`Error al guardar: ${(e as Error).message}`);
+      setSaveMsg(`${t.credentials.saveErrorPrefix} ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -185,16 +188,16 @@ export function CredentialsPage() {
   return (
     <main className="credentials-page">
       <header className="credentials-header">
-        <h1>Credenciales de integraciones</h1>
-        <p>Guarda configuración y secretos cifrados para Stripe, CRM, Twilio y KYC.</p>
+        <h1>{t.credentials.title}</h1>
+        <p>{t.credentials.subtitle}</p>
       </header>
 
       {error ? <p className="credentials-error">Error: {error}</p> : null}
 
       <section className="credentials-grid">
         <aside className="credentials-list">
-          <h2>Providers</h2>
-          {loading ? <p>Cargando...</p> : null}
+          <h2>{t.credentials.providers}</h2>
+          {loading ? <p>{t.credentials.loading}</p> : null}
           {PROVIDERS_ORDER.map((p) => {
             const item = items.find((x) => x.provider === p);
             const st = statusMap[p];
@@ -222,19 +225,24 @@ export function CredentialsPage() {
               ))}
             </ul>
           ) : null}
-          <p>Última actualización: {current?.updatedAt ? new Date(current.updatedAt).toLocaleString() : "nunca"}</p>
+          <p>
+            {t.credentials.lastUpdated}:{" "}
+            {current?.updatedAt ? new Date(current.updatedAt).toLocaleString() : t.credentials.never}
+          </p>
           {!advancedMode && missingRequiredCount > 0 ? (
             <p className="credentials-warning">
-              Faltan {missingRequiredCount} campo(s) obligatorio(s) para completar este provider.
+              {t.credentials.missingRequired(missingRequiredCount)}
             </p>
           ) : null}
           {statusMap[provider] && !statusMap[provider].configured ? (
             <p className="credentials-error">
-              Validación: {statusMap[provider].details ?? "Configuración incompleta"}
+              {t.credentials.validation}: {statusMap[provider].details ?? t.credentials.incompleteConfig}
             </p>
           ) : null}
           {!advancedMode && missingRequiredCount === 0 ? (
-            <p className="credentials-draft-source">Source esperado (borrador): {draftExpectedSource}</p>
+            <p className="credentials-draft-source">
+              {t.credentials.expectedSource}: {draftExpectedSource}
+            </p>
           ) : null}
           {!advancedMode && missingRequiredCount === 0 && fieldChecklist.length > 0 ? (
             <ul className="credentials-checklist">
@@ -289,7 +297,7 @@ export function CredentialsPage() {
                             }))
                           }
                         >
-                          {showSecrets[field.key] ? "Ocultar" : "Mostrar"}
+                          {showSecrets[field.key] ? t.credentials.hide : t.credentials.show}
                         </button>
                       ) : null}
                     </div>
@@ -302,7 +310,7 @@ export function CredentialsPage() {
           ) : null}
           {!advancedMode && schema.fields.length === 0 ? (
             <p className="detail-muted-box">
-              Este provider no tiene formulario guiado aún. Puedes usar modo avanzado JSON.
+              {t.credentials.noGuidedForm}
             </p>
           ) : null}
           <label className="credentials-advanced-toggle">
@@ -311,26 +319,26 @@ export function CredentialsPage() {
               checked={advancedMode}
               onChange={(e) => setAdvancedMode((e.target as HTMLInputElement).checked)}
             />
-            Modo avanzado (JSON)
+            {t.credentials.advancedMode}
           </label>
           {advancedMode ? (
             <>
               <label>
-                Config (JSON)
+                {t.credentials.configJson}
                 <textarea value={advancedConfigDraft} onInput={(e) => setAdvancedConfigDraft((e.target as HTMLTextAreaElement).value)} rows={8} />
               </label>
               <label>
-                Secrets (JSON cifrado en backend)
+                {t.credentials.secretsJson}
                 <textarea value={advancedSecretsDraft} onInput={(e) => setAdvancedSecretsDraft((e.target as HTMLTextAreaElement).value)} rows={8} />
               </label>
             </>
           ) : null}
           <div className="credentials-actions">
             <button type="button" onClick={() => refresh()} disabled={loading}>
-              Recargar
+              {t.credentials.reload}
             </button>
             <button type="button" onClick={() => handleSave()} disabled={saving || (!advancedMode && hasFieldErrors)}>
-              {saving ? "Guardando..." : "Guardar"}
+              {saving ? t.credentials.saving : t.credentials.save}
             </button>
           </div>
           {saveMsg ? <p>{saveMsg}</p> : null}

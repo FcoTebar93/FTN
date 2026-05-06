@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { getCatalogWorkflows, startWorkflow, getWorkflowState, sendWorkflowSignal } from "../../api/workflows";
 import type { CatalogWorkflow } from "../../api/types";
 import type { WorkflowState } from "../../api/types";
+import { useUiText } from "../../i18n";
 
 function stringifyInput(v: unknown): string {
   try {
@@ -12,6 +13,7 @@ function stringifyInput(v: unknown): string {
 }
 
 export function WorkflowsCatalogPage() {
+  const { t } = useUiText();
   const [items, setItems] = useState<CatalogWorkflow[]>([]);
   const [selected, setSelected] = useState<CatalogWorkflow | null>(null);
   const [inputJson, setInputJson] = useState<string>("{}");
@@ -65,7 +67,7 @@ export function WorkflowsCatalogPage() {
     try {
       input = inputJson.trim() === "" ? {} : JSON.parse(inputJson);
     } catch (e) {
-      setError(new Error("Input JSON inválido"));
+      setError(new Error(t.catalog.inputInvalid));
       return;
     }
     setLoading(true);
@@ -86,11 +88,11 @@ export function WorkflowsCatalogPage() {
     try {
       data = signalDataJson.trim() === "" ? undefined : JSON.parse(signalDataJson);
     } catch {
-      setError(new Error("Signal data JSON inválido"));
+      setError(new Error(t.catalog.signalDataInvalid));
       return;
     }
     if (!signalName.trim()) {
-      setError(new Error("Indica signalName"));
+      setError(new Error(t.catalog.signalNameRequired));
       return;
     }
     setLoading(true);
@@ -110,7 +112,7 @@ export function WorkflowsCatalogPage() {
     <div class="app-layout">
       <div class="sidebar">
         <div class="panel">
-          <h2 class="panel-title">Workflows</h2>
+          <h2 class="panel-title">{t.catalog.title}</h2>
           {error && <p class="panel panel-error">Error: {error.message}</p>}
           <ul class="workflow-list">
             {items.map((wf) => (
@@ -133,16 +135,18 @@ export function WorkflowsCatalogPage() {
       <div class="content">
         <div class="panel">
           {!selected ? (
-            <p class="detail-muted">Elige un workflow para ver el contrato, validar input y lanzarlo.</p>
+            <p class="detail-muted">{t.catalog.chooseOne}</p>
           ) : (
             <>
               <h2 class="panel-title">{selected.displayName || selected.name}</h2>
               {selected.description && <p class="detail-muted">{selected.description}</p>}
 
               <section class="workflow-section">
-                <h3>Input (JSON)</h3>
+                <h3>{t.catalog.inputJsonTitle}</h3>
                 <p class="detail-muted">
-                  Debe cumplir el <code>inputSchema</code> del servidor. Usa un ejemplo si existe.
+                  {t.catalog.inputJsonHelp.replace("inputSchema", "")}
+                  <code>inputSchema</code>
+                  {t.catalog.inputJsonHelp.includes("inputSchema") ? "" : null}
                 </p>
                 {selected.examples && selected.examples.length > 0 && (
                   <div class="workflow-section" style={{ marginBottom: "0.5rem" }}>
@@ -154,7 +158,7 @@ export function WorkflowsCatalogPage() {
                         style={{ marginRight: "0.5rem", marginBottom: "0.25rem" }}
                         onClick={() => setInputJson(stringifyInput(ex.input))}
                       >
-                        Cargar ejemplo {i + 1}
+                        {t.catalog.loadExample(i + 1)}
                         {ex.note ? ` (${ex.note})` : ""}
                       </button>
                     ))}
@@ -178,7 +182,7 @@ export function WorkflowsCatalogPage() {
 
               <section class="workflow-section">
                 <button type="button" class="workflow-filter-btn" disabled={loading} onClick={handleLaunch}>
-                  {loading ? "Lanzando..." : "Lanzar workflow"}
+                  {loading ? t.catalog.launching : t.catalog.launch}
                 </button>
                 {lastRun && (
                   <p class="detail-muted" style={{ marginTop: "0.75rem" }}>
@@ -189,7 +193,7 @@ export function WorkflowsCatalogPage() {
 
               {lastRun && (
                 <section class="workflow-section">
-                  <h3>Estado (polling 2s)</h3>
+                  <h3>{t.catalog.statePolling}</h3>
                   {liveState ? (
                     <pre
                       class="detail-muted"
@@ -206,16 +210,16 @@ export function WorkflowsCatalogPage() {
                       {JSON.stringify(liveState, null, 2)}
                     </pre>
                   ) : (
-                    <p class="detail-muted">Cargando estado…</p>
+                    <p class="detail-muted">{t.catalog.loadingState}</p>
                   )}
                 </section>
               )}
 
               {lastRun && liveState && (liveState.pendingSignalWaits?.length ?? 0) > 0 && (
                 <section class="workflow-section">
-                  <h3>Enviar señal</h3>
+                  <h3>{t.catalog.sendSignal}</h3>
                   <p class="detail-muted">
-                    Pendientes:{" "}
+                    {t.catalog.pendingSignals}:{" "}
                     {(liveState.pendingSignalWaits ?? []).map((w) => w.signalName).join(", ") || "—"}
                   </p>
                   <input
@@ -238,7 +242,7 @@ export function WorkflowsCatalogPage() {
                     disabled={loading}
                     onClick={handleSendSignal}
                   >
-                    Enviar señal
+                    {t.catalog.send}
                   </button>
                 </section>
               )}
