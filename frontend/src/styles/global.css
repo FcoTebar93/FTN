@@ -1318,6 +1318,12 @@
     font-weight: 400;
   }
 
+  .landing-brand-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
   .landing-links {
     display: flex;
     gap: 20px;
@@ -1336,6 +1342,16 @@
   .landing-nav-actions {
     display: flex;
     gap: 12px;
+  }
+
+  .landing-lang-toggle {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 18px;
+    line-height: 1;
   }
 
   .landing-btn {
