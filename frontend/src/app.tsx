@@ -66,8 +66,12 @@ export function App() {
   }
 
   function handleLogout(): void {
-    setShowLogin(true);
+    // Evita mostrar 404 en rutas protegidas tras logout.
+    setShowLogin(false);
     setHasSession(false);
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
   }
 
   const url = new URL(window.location.href);
