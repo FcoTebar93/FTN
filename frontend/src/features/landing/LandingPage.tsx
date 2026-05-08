@@ -1,5 +1,5 @@
 import heroFtnImage from "../../../../ftn.png";
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useUiText } from "../../i18n";
 import { LanguageToggleButton } from "../../i18n/LanguageToggleButton";
 
@@ -120,9 +120,42 @@ const landingText = {
   },
 } as const;
 
+const sectionFlow = [
+  { id: "hero", selector: ".landing-hero", label: "Inicio", icon: "hero" },
+  { id: "capabilities", selector: "#capabilities", label: "Capacidades", icon: "capabilities" },
+  { id: "use-cases", selector: "#use-cases", label: "Casos", icon: "useCases" },
+  { id: "integrations", selector: "#integrations", label: "Integraciones", icon: "integrations" },
+  { id: "proof", selector: ".landing-proof-grid", label: "Valor", icon: "proof" },
+] as const;
+
+type FlowIconName = (typeof sectionFlow)[number]["icon"];
+
+const flowIconPaths: Record<FlowIconName, string> = {
+  hero: "M4 12h10M14 8l6 4-6 4",
+  capabilities: "M4 6h16M4 12h16M4 18h10",
+  useCases: "M5 7h14v10H5zM9 11h6",
+  integrations: "M6 8h12M6 16h12M12 8v8",
+  proof: "M6 12l4 4 8-8",
+};
+
+function FlowNode({ label, icon, top }: { label: string; icon: FlowIconName; top: number }) {
+  return (
+    <span className="landing-flow-point" style={{ top: `${top}px` }}>
+      <span className="landing-flow-node-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" focusable="false">
+          <path d={flowIconPaths[icon]} />
+        </svg>
+      </span>
+      <span className="landing-flow-node-label">{label}</span>
+    </span>
+  );
+}
+
 export function LandingPage() {
   const { locale, setLocale, t } = useUiText();
   const lt = landingText[locale];
+  const landingRef = useRef<HTMLDivElement>(null);
+  const [pointPositions, setPointPositions] = useState<number[]>([]);
 
   useEffect(() => {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>(".reveal-on-scroll"));
@@ -148,8 +181,85 @@ export function LandingPage() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const landing = landingRef.current;
+    if (!landing) return;
+
+    const updateScrollProgress = () => {
+      const start = landing.offsetTop;
+      const maxScrollable = Math.max(landing.offsetHeight - window.innerHeight, 1);
+      const progress = (window.scrollY - start) / maxScrollable;
+      const clamped = Math.min(1, Math.max(0, progress));
+      landing.style.setProperty("--landing-progress", clamped.toFixed(4));
+    };
+
+    updateScrollProgress();
+    window.addEventListener("scroll", updateScrollProgress, { passive: true });
+    window.addEventListener("resize", updateScrollProgress);
+
+    const nodes = Array.from(landing.querySelectorAll<HTMLElement>(".landing-flow-point"));
+    const targets = sectionFlow
+      .map(({ selector }, index) => ({ target: landing.querySelector(selector), node: nodes[index] }))
+      .filter((item): item is { target: Element; node: HTMLElement } => Boolean(item.target && item.node));
+
+    const markerObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const matched = targets.find((item) => item.target === entry.target);
+          if (!matched) continue;
+          if (entry.isIntersecting) matched.node.classList.add("is-revealed");
+          matched.node.classList.toggle("is-active", entry.isIntersecting);
+        }
+      },
+      { threshold: 0.45, rootMargin: "-18% 0px -40% 0px" }
+    );
+
+    for (const pair of targets) markerObserver.observe(pair.target);
+
+    return () => {
+      window.removeEventListener("scroll", updateScrollProgress);
+      window.removeEventListener("resize", updateScrollProgress);
+      markerObserver.disconnect();
+      landing.style.removeProperty("--landing-progress");
+    };
+  }, []);
+
+  useEffect(() => {
+    const landing = landingRef.current;
+    if (!landing) return;
+
+    const measurePoints = () => {
+      const next = sectionFlow.map(({ selector }) => {
+        const target = landing.querySelector<HTMLElement>(selector);
+        if (!target) return 0;
+        return target.offsetTop + target.offsetHeight * 0.5;
+      });
+      setPointPositions(next);
+    };
+
+    measurePoints();
+    window.addEventListener("resize", measurePoints);
+    return () => window.removeEventListener("resize", measurePoints);
+  }, []);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={landingRef}>
+      <div className="landing-flow-progress" aria-hidden="true">
+        <div className="landing-flow-progress-rail">
+          <div className="landing-flow-progress-line" />
+          <div className="landing-flow-progress-fill" />
+          <div className="landing-flow-points">
+            {sectionFlow.map((section, index) => (
+              <FlowNode
+                key={section.id}
+                label={section.label}
+                icon={section.icon}
+                top={pointPositions[index] ?? 0}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
       <header className="landing-nav">
         <div className="landing-nav-inner">
           <div className="landing-brand-wrap">
