@@ -211,6 +211,69 @@ describePg("InMemoryWorkflowRuntime con stores Postgres", () => {
     assert.equal(events.filter((e) => e.type === "WorkflowCompleted").length, 1);
   });
 
+  it("cierre concurrente sobre run listo para completar: un único terminal y estado consistente", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new PostgresEventStore(pool);
+    const snapshotStore = new PostgresSnapshotStore(pool);
+    const taskQueue = new InMemoryTaskQueue();
+
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 50 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "pg-race-terminal",
+      input: {},
+      definition: async (ftn) => {
+        const payload = await ftn.signal<{ ok: boolean }>("go");
+        return { done: payload.ok };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const streamBefore = await eventStore.loadEvents(workflowId, runId, 0);
+    const lastVersion = streamBefore[streamBefore.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, lastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "go", data: { ok: true } },
+      },
+    ]);
+
+    const attempts = 8;
+    const results = await Promise.allSettled(
+      Array.from({ length: attempts }, () => runtime.runWorkflowTick(workflowId, runId))
+    );
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+    assert.equal(fulfilled.length + rejected.length, attempts);
+    assert.ok(fulfilled.length >= 1);
+
+    for (const result of rejected) {
+      if (result.status === "rejected") {
+        assert.ok(result.reason instanceof ConcurrencyError);
+      }
+    }
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.equal(events.filter((event) => event.type === "WorkflowCompleted").length, 1);
+    assert.equal(events.filter((event) => event.type === "WorkflowFailed").length, 0);
+    assert.equal(events.filter((event) => event.type === "WorkflowCancelled").length, 0);
+
+    const state = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.deepEqual(state!.result, { done: true });
+  });
+
   it("reanuda con nueva instancia y snapshot usando la definición registrada en catálogo (Postgres)", async () => {
     const workflowName = `pg-snapshot-recovery-${Date.now()}`;
     registerWorkflow<{ offset: number }, { total: number }>({
