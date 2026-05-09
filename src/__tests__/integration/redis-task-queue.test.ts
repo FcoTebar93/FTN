@@ -72,4 +72,34 @@ describeRedis("RedisTaskQueue (REDIS_URL)", () => {
     assert.equal(lease!.task.id, task.id);
     await q.completeTask(lease!.leaseId);
   });
+
+  it("recoverStaleProcessing no duplica tareas si ya existen en la cola principal", async () => {
+    const prefix = `ftn:test:recover-dedup-${Date.now()}:`;
+    const q = new RedisTaskQueue(redis, { keyPrefix: prefix });
+
+    const task: WorkflowTask = {
+      id: `wf-orphan-dedup-${Date.now()}`,
+      type: "workflow",
+      workflowId: "w-orphan-dedup",
+      runId: "r-orphan-dedup",
+      createdAt: new Date().toISOString(),
+      scheduledAt: new Date().toISOString(),
+      workerType: "workflow",
+      targetQueue: "workflows",
+    };
+    const json = JSON.stringify(task);
+    await redis.rpush(`${prefix}queue:workflows:processing`, json);
+    await redis.rpush(`${prefix}queue:workflows`, json);
+
+    const recovered = await q.recoverStaleProcessing("workflows", 60_000);
+    assert.equal(recovered, 1);
+
+    const mainItems = await redis.lrange(`${prefix}queue:workflows`, 0, -1);
+    assert.equal(mainItems.length, 1);
+
+    const lease = await q.leaseNextTask("worker-1", "workflows", 10_000);
+    assert.ok(lease);
+    assert.equal(lease!.task.id, task.id);
+    await q.completeTask(lease!.leaseId);
+  });
 });

@@ -39,6 +39,57 @@ export class RedisTaskQueue implements TaskQueue {
     return `${this.prefix()}lease:bytask:${taskId}`;
   }
 
+  private async moveProcessingTaskToMainQueue(params: {
+    queueName: string;
+    taskJson: string;
+    leaseIdRef?: string;
+    taskId: string;
+  }): Promise<boolean> {
+    const processing = this.processingKey(params.queueName);
+    const main = this.queueKey(params.queueName);
+    const leaseByTask = this.leaseByTaskKey(params.taskId);
+    const leaseData = params.leaseIdRef ? this.leaseDataKey(params.leaseIdRef) : "";
+
+    const moved = await this.redis.eval(
+      `
+      local processing = KEYS[1]
+      local main = KEYS[2]
+      local leaseByTask = KEYS[3]
+      local leaseData = KEYS[4]
+      local taskJson = ARGV[1]
+      local clearLease = ARGV[2]
+
+      local removed = redis.call("LREM", processing, 1, taskJson)
+      if removed == 0 then
+        return 0
+      end
+
+      local existsMain = redis.call("LPOS", main, taskJson)
+      if not existsMain then
+        redis.call("RPUSH", main, taskJson)
+      end
+
+      if clearLease == "1" then
+        if leaseData ~= "" then
+          redis.call("DEL", leaseData)
+        end
+        redis.call("DEL", leaseByTask)
+      end
+
+      return 1
+      `,
+      4,
+      processing,
+      main,
+      leaseByTask,
+      leaseData,
+      params.taskJson,
+      params.leaseIdRef ? "1" : "0"
+    );
+
+    return Number(moved) === 1;
+  }
+
   async enqueue(task: Task): Promise<void> {
     await this.redis.rpush(this.queueKey(task.targetQueue), JSON.stringify(task));
   }
@@ -107,11 +158,12 @@ export class RedisTaskQueue implements TaskQueue {
     const stored = JSON.parse(leaseRaw) as LeaseStored;
     const task = JSON.parse(stored.taskJson) as Task;
 
-    const pipeline = this.redis.pipeline();
-    pipeline.lrem(this.processingKey(task.targetQueue), 1, stored.taskJson);
-    pipeline.rpush(this.queueKey(task.targetQueue), stored.taskJson);
-    pipeline.del(this.leaseDataKey(leaseId), this.leaseByTaskKey(taskId));
-    await pipeline.exec();
+    await this.moveProcessingTaskToMainQueue({
+      queueName: task.targetQueue,
+      taskJson: stored.taskJson,
+      leaseIdRef: leaseId,
+      taskId,
+    });
   }
 
   async recoverStaleProcessing(queueName: string, maxAgeMs: number): Promise<number> {
@@ -140,12 +192,15 @@ export class RedisTaskQueue implements TaskQueue {
       }
 
       if (shouldRecover) {
-        await this.redis.lrem(pkey, 1, taskJson);
-        await this.redis.rpush(this.queueKey(queueName), taskJson);
-        if (leaseIdRef) {
-          await this.redis.del(this.leaseDataKey(leaseIdRef), this.leaseByTaskKey(task.id));
+        const moved = await this.moveProcessingTaskToMainQueue({
+          queueName,
+          taskJson,
+          leaseIdRef: leaseIdRef ?? undefined,
+          taskId: task.id,
+        });
+        if (moved) {
+          recovered += 1;
         }
-        recovered += 1;
       }
     }
 
