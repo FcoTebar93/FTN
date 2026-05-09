@@ -288,6 +288,8 @@ describe("InMemoryWorkflowRuntime", () => {
     const timerLease = await taskQueue.leaseNextTask("w", "timers", 1);
     assert.ok(timerLease);
     assert.equal((timerLease.task as TimerTask).correlationId, "corr-timer-1");
+    assert.equal((timerLease.task as TimerTask).timerKey.includes(`timer-${workflowId}-${runId}-`), true);
+    assert.equal(typeof (timerLease.task as TimerTask).sourceEventVersion, "number");
     await taskQueue.completeTask(timerLease.leaseId);
   });
 

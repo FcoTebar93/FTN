@@ -11,9 +11,10 @@ import { InMemoryActivityRegistry } from "../modules/activity-registry/inmemory-
 import { ActivityWorker } from "../workers/activity-worker";
 import { DefaultActivityRuntime } from "../modules/activity-runtime";
 import type { WorkflowRuntime } from "../modules/workflow-runtime";
-import type { ActivityTask, WorkflowTask } from "../shared/tasks";
+import type { ActivityTask, TimerTask, WorkflowTask } from "../shared/tasks";
 import { ConcurrencyError } from "../modules/event-store";
 import type { Logger } from "../infra/logger";
+import { buildTimerTask } from "../shared/task-factories";
 
 const silentLogger: Logger = {
   debug() {},
@@ -203,6 +204,45 @@ describe("InMemoryWorkflowWorker", () => {
     assert.equal(wfLease.task.workflowId, workflowId);
     assert.equal(wfLease.task.runId, runId);
     await taskQueue.completeTask(wfLease.leaseId);
+  });
+
+  it("timer duplicado con mismo timerKey encola un solo WorkflowTask", async () => {
+    const { taskQueue } = inMemoryStack();
+
+    const timerA: TimerTask = buildTimerTask({
+      id: "timer-wf-dedup-run-dedup-5",
+      workflowId: "wf-dedup",
+      runId: "run-dedup",
+      wakeAt: new Date(Date.now() - 10).toISOString(),
+      timerKey: "timer-wf-dedup-run-dedup-5",
+      sourceEventVersion: 5,
+      targetQueue: "timers",
+    });
+    const timerB: TimerTask = { ...timerA };
+
+    await taskQueue.enqueue(timerA);
+    await taskQueue.enqueue(timerB);
+
+    const timerWorker = new InMemoryTimerWorker({
+      taskQueue,
+      queueName: "timers",
+      workflowQueueName: "workflows",
+      pollIntervalMs: 10,
+      log: silentLogger,
+    });
+
+    await timerWorker.runOnce();
+    await timerWorker.runOnce();
+
+    const wf1 = await taskQueue.leaseNextTask("wf-w-1", "workflows", 1000);
+    const wf2 = await taskQueue.leaseNextTask("wf-w-2", "workflows", 1000);
+
+    assert.ok(wf1);
+    assert.equal(wf1.task.type, "workflow");
+    assert.equal(wf1.task.id.includes(timerA.timerKey), true);
+    assert.equal(wf2, null);
+
+    await taskQueue.completeTask(wf1.leaseId);
   });
 
   it("reencola con retryCount si runWorkflowTick falla por ConcurrencyError", async () => {
