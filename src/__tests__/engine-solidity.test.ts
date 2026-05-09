@@ -5,6 +5,7 @@ import { InMemoryEventStore } from "../infra/inmemory-event-store";
 import { InMemorySnapshotStore } from "../infra/inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "../infra/inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "../infra/inmemory-workflow-runtime";
+import { InMemoryTimerWorker } from "../infra/inmemory-timer-worker";
 import { ConcurrencyError } from "../modules/event-store";
 import { registerWorkflow } from "../app/workflows";
 
@@ -27,6 +28,28 @@ function seededBool(seed: number, index: number): boolean {
   const n = (seed * 1664525 + 1013904223 + index * 1103515245) >>> 0;
   return (n & 1) === 0;
 }
+
+async function assertReplayConsistency(params: {
+  engine: DefaultWorkflowEngine;
+  eventStore: InMemoryEventStore;
+  runtime: InMemoryWorkflowRuntime;
+  workflowId: string;
+  runId: string;
+}) {
+  const { engine, eventStore, runtime, workflowId, runId } = params;
+  const loaded = await runtime.loadCurrentState(workflowId, runId);
+  const stream = await eventStore.loadEvents(workflowId, runId, 0);
+  const replayed = engine.replay(workflowId, runId, stream);
+  assert.ok(loaded);
+  assert.deepEqual(loaded, replayed.state);
+}
+
+const silentLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
 
 class RecordingEventStore extends InMemoryEventStore {
   readonly loadFromVersions: number[] = [];
@@ -259,5 +282,151 @@ describe("Solidez del motor (concurrencia lógica + snapshot/replay)", () => {
 
     assert.equal(childStarts.length, 1);
     assert.equal(childPollTimers.length, 1);
+  });
+
+  it("determinismo extremo: retry + child + signal mantiene equivalencia snapshot/replay", async () => {
+    const childWorkflowName = `det-child-${Date.now()}`;
+    const parentWorkflowName = `det-parent-${Date.now()}`;
+    let parentRetryCalls = 0;
+    registerWorkflow({
+      name: childWorkflowName,
+      version: "v1",
+      displayName: "Determinism child",
+      definition: async (ftn) => {
+        const payload = await ftn.signal<{ base: number }>("child-go");
+        return { value: payload.base * 2 };
+      },
+    });
+    registerWorkflow({
+      name: parentWorkflowName,
+      version: "v1",
+      displayName: "Determinism parent",
+      definition: async (ftn) => {
+        await ftn.retry(
+          { maxAttempts: 2, backOffMs: 1 },
+          async () => {
+            parentRetryCalls += 1;
+            if (parentRetryCalls === 1) {
+              throw new Error("fail-once");
+            }
+            return "ok";
+          }
+        );
+        const child = await ftn.child<{ seed: number }, { value: number }>(childWorkflowName, { seed: 21 });
+        const approval = await ftn.signal<{ delta: number }>("parent-approval");
+        return { total: child.value + approval.delta };
+      },
+    });
+
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 2 },
+    });
+    const timerWorker = new InMemoryTimerWorker({
+      taskQueue,
+      queueName: "timers",
+      workflowQueueName: "workflows",
+      pollIntervalMs: 1,
+      log: silentLogger,
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: parentWorkflowName,
+      workflowVersion: "v1",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.retry(
+          { maxAttempts: 2, backOffMs: 1 },
+          async () => {
+            parentRetryCalls += 1;
+            if (parentRetryCalls === 1) throw new Error("fail-once");
+            return "ok";
+          }
+        );
+        const child = await ftn.child<{ seed: number }, { value: number }>(childWorkflowName, { seed: 21 });
+        const approval = await ftn.signal<{ delta: number }>("parent-approval");
+        return { total: child.value + approval.delta };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    await assertReplayConsistency({ engine, eventStore, runtime, workflowId, runId });
+
+    for (let i = 0; i < 20; i++) {
+      await timerWorker.runOnce();
+      const maybeTask = await taskQueue.leaseNextTask("wf-1", "workflows", 1);
+      if (maybeTask) {
+        await taskQueue.completeTask(maybeTask.leaseId);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    await runtime.runWorkflowTick(workflowId, runId);
+    await assertReplayConsistency({ engine, eventStore, runtime, workflowId, runId });
+
+    const parentEventsAfterChildStart = await eventStore.loadEvents(workflowId, runId, 0);
+    const childStarted = parentEventsAfterChildStart.find(
+      (event): event is Extract<(typeof parentEventsAfterChildStart)[number], { type: "ChildWorkflowStarted" }> =>
+        event.type === "ChildWorkflowStarted"
+    );
+    assert.ok(childStarted);
+    const childWorkflowId = childStarted.payload.childWorkflowId;
+    const childRunId = childStarted.payload.childRunId;
+
+    await runtime.runWorkflowTick(childWorkflowId, childRunId);
+    await assertReplayConsistency({
+      engine,
+      eventStore,
+      runtime,
+      workflowId: childWorkflowId,
+      runId: childRunId,
+    });
+
+    const childEvents = await eventStore.loadEvents(childWorkflowId, childRunId, 0);
+    const childLastVersion = childEvents[childEvents.length - 1]!.version;
+    await eventStore.appendEvents(childWorkflowId, childRunId, childLastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId: childWorkflowId,
+        runId: childRunId,
+        payload: { signalName: "child-go", data: { base: 20 } },
+      },
+    ]);
+    await runtime.runWorkflowTick(childWorkflowId, childRunId);
+    await assertReplayConsistency({
+      engine,
+      eventStore,
+      runtime,
+      workflowId: childWorkflowId,
+      runId: childRunId,
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    await assertReplayConsistency({ engine, eventStore, runtime, workflowId, runId });
+
+    const parentEventsBeforeFinal = await eventStore.loadEvents(workflowId, runId, 0);
+    const parentLastVersion = parentEventsBeforeFinal[parentEventsBeforeFinal.length - 1]!.version;
+    await eventStore.appendEvents(workflowId, runId, parentLastVersion, [
+      {
+        type: "SignalReceived",
+        workflowId,
+        runId,
+        payload: { signalName: "parent-approval", data: { delta: 2 } },
+      },
+    ]);
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const finalState = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(finalState);
+    assert.equal(finalState.status, "completed");
+    assert.deepEqual(finalState.result, { total: 42 });
+    await assertReplayConsistency({ engine, eventStore, runtime, workflowId, runId });
   });
 });
