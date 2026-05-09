@@ -27,6 +27,15 @@ function seededBool(seed: number, index: number): boolean {
   return (n & 1) === 0;
 }
 
+class RecordingEventStore extends InMemoryEventStore {
+  readonly loadFromVersions: number[] = [];
+
+  async loadEvents(workflowId: string, runId: string, fromVersion?: number) {
+    this.loadFromVersions.push(fromVersion ?? 0);
+    return super.loadEvents(workflowId, runId, fromVersion);
+  }
+}
+
 describe("Solidez del motor (concurrencia lógica + snapshot/replay)", () => {
   it("dos runWorkflowTick en paralelo: solo uno hace append; el otro recibe ConcurrencyError", async () => {
     const { runtime, eventStore } = stack(50);
@@ -127,5 +136,50 @@ describe("Solidez del motor (concurrencia lógica + snapshot/replay)", () => {
       const replayed = engine.replay(workflowId, runId, allEvents);
       assert.deepEqual(stateFromLoad, replayed.state);
     }
+  });
+
+  it("loadCurrentState rehidrata usando snapshot.version como frontera de replay", async () => {
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new RecordingEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const taskQueue = new InMemoryTaskQueue();
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue,
+      config: { snapshotInterval: 3 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "snapshot-boundary-check",
+      input: {},
+      definition: async (ftn) => {
+        let sum = 0;
+        for (let i = 0; i < 6; i++) {
+          sum += await ftn.conditional(
+            () => true,
+            async () => 1,
+            async () => 0
+          );
+        }
+        return { sum };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    const latestSnapshot = await snapshotStore.loadLatestSnapshot(workflowId, runId);
+    assert.ok(latestSnapshot, "se esperaba snapshot tras superar snapshotInterval");
+
+    eventStore.loadFromVersions.length = 0;
+    const state = await runtime.loadCurrentState(workflowId, runId);
+
+    assert.ok(state);
+    assert.equal(state!.status, "completed");
+    assert.equal(eventStore.loadFromVersions[0], latestSnapshot!.version);
+
+    const allEvents = await eventStore.loadEvents(workflowId, runId, 0);
+    const fullReplay = engine.replay(workflowId, runId, allEvents);
+    assert.deepEqual(state, fullReplay.state);
   });
 });

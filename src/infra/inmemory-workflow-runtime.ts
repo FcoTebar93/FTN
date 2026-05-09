@@ -24,6 +24,18 @@ import {
 
 type WorkflowKey = string;
 
+type RehydrationInput = {
+    workflowId: WorkflowId;
+    runId: RunId;
+    correlationId?: string;
+};
+type RehydrationResult = {
+    snapshotVersion: Version;
+    events: WorkflowEvent[];
+    state: WorkflowState;
+    lastEventVersion: Version;
+};
+
 type StoredDefinition = {
     name: string;
     definition: WorkflowDefinition<unknown, unknown>;
@@ -89,6 +101,38 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         observeWorkflowRunDuration(Date.now() - startedAtMs);
     }
 
+    private async rehydrateFromSnapshotBoundary(input: RehydrationInput): Promise<RehydrationResult | null> {
+        const { workflowId, runId, correlationId } = input;
+        const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
+        const snapshotVersion: Version = snapshot?.version ?? 0;
+        const rehydrationStartedAt = Date.now();
+
+        if (snapshot) {
+            incSnapshotLoaded();
+            this.log?.debug("workflow-runtime.snapshotLoaded", {
+                workflowId,
+                runId,
+                snapshotVersion,
+                correlationId,
+            });
+        }
+
+        const events = await this.eventStore.loadEvents(workflowId, runId, snapshotVersion);
+        if (!snapshot && events.length === 0) {
+            return null;
+        }
+
+        const rehydrated = this.engine.replay(workflowId, runId, events, snapshot?.state);
+        observeWorkflowRehydration(Date.now() - rehydrationStartedAt, events.length);
+
+        return {
+            snapshotVersion,
+            events,
+            state: rehydrated.state,
+            lastEventVersion: rehydrated.lastEventVersion,
+        };
+    }
+
     private resolveDefinitionEntry(
         workflowId: WorkflowId,
         runId: RunId,
@@ -145,37 +189,11 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         workflowId: WorkflowId,
         runId: RunId
       ): Promise<WorkflowState | null> {
-        const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
-        const fromVersion: Version = snapshot?.version ?? 0;
-        const rehydrationStartedAt = Date.now();
+        const rehydrated = await this.rehydrateFromSnapshotBoundary({ workflowId, runId });
+        if (!rehydrated) {
+            return null;
+        }
 
-        if (snapshot) {
-          incSnapshotLoaded();
-          this.log?.debug("workflow-runtime.snapshotLoaded", {
-            workflowId,
-            runId,
-            snapshotVersion: snapshot.version,
-          });
-        }
-      
-        const events: WorkflowEvent[] = await this.eventStore.loadEvents(
-          workflowId,
-          runId,
-          fromVersion
-        );
-      
-        if (!snapshot && events.length === 0) {
-          return null;
-        }
-      
-        const rehydrated = this.engine.replay(
-          workflowId,
-          runId,
-          events,
-          snapshot?.state
-        );
-        observeWorkflowRehydration(Date.now() - rehydrationStartedAt, events.length);
-      
         return rehydrated.state;
     }
 
@@ -230,40 +248,19 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
       options?: { correlationId?: string }
     ): Promise<WorkflowTickResult> {
       const correlationId = options?.correlationId;
-      const snapshot = await this.snapshotStore.loadLatestSnapshot(workflowId, runId);
-      const fromVersion: Version | undefined = snapshot?.version;
-      const rehydrationStartedAt = Date.now();
-
-      if (snapshot) {
-        incSnapshotLoaded();
-        this.log?.debug("workflow-runtime.snapshotLoaded", {
-          workflowId,
-          runId,
-          snapshotVersion: snapshot.version,
-          correlationId,
-        });
-      }
-    
-      const events: WorkflowEvent[] = await this.eventStore.loadEvents(
+      const rehydrated = await this.rehydrateFromSnapshotBoundary({
         workflowId,
         runId,
-        fromVersion ?? 0
-      );
-    
-      if (!snapshot && events.length === 0) {
+        correlationId,
+      });
+
+      if (!rehydrated) {
         throw new Error(
           `No events or snapshot found for workflow ${workflowId}/${runId}`
         );
       }
-    
-      const rehydrated = this.engine.replay(
-        workflowId,
-        runId,
-        events,
-        snapshot?.state
-      );
-      observeWorkflowRehydration(Date.now() - rehydrationStartedAt, events.length);
-    
+
+      const snapshotBaseVersion = rehydrated.snapshotVersion;
       let currentState = rehydrated.state;
       let lastEventVersion = rehydrated.lastEventVersion;
 
@@ -891,7 +888,6 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         appended = [...appended, persistedCompleted];
       }
     
-      const snapshotBaseVersion = snapshot?.version ?? 0;
       const eventsSinceSnapshot = lastEventVersion - snapshotBaseVersion;
       let snapshotCreated = false;
     
