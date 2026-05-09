@@ -15,6 +15,8 @@ interface InMemoryTimerWorkerDeps {
 }
 
 export class InMemoryTimerWorker {
+    private readonly dispatchedTimerKeys = new Set<string>();
+
     constructor(private readonly deps: InMemoryTimerWorkerDeps) {}
 
     async runOnce(): Promise<void> {
@@ -41,6 +43,8 @@ export class InMemoryTimerWorker {
             workflowId: timerTask.workflowId,
             runId: timerTask.runId,
             wakeAt: timerTask.wakeAt,
+            timerKey: timerTask.timerKey,
+            sourceEventVersion: timerTask.sourceEventVersion,
             correlationId: timerTask.correlationId,
         });
         const now = new Date();
@@ -50,20 +54,31 @@ export class InMemoryTimerWorker {
             await this.deps.taskQueue.completeTask(lease.leaseId);
             await this.deps.taskQueue.enqueue({
                 ...timerTask,
-                id: `timer-${timerTask.workflowId}-${timerTask.runId}-${Date.now()}`,
                 scheduledAt: timerTask.wakeAt,
             });
             return;
         }
 
+        if (this.dispatchedTimerKeys.has(timerTask.timerKey)) {
+            this.deps.log.debug("timer-worker.duplicateTimerIgnored", {
+                workflowId: timerTask.workflowId,
+                runId: timerTask.runId,
+                timerKey: timerTask.timerKey,
+                correlationId: timerTask.correlationId,
+            });
+            await this.deps.taskQueue.completeTask(lease.leaseId);
+            return;
+        }
+
         const wfTask = buildWorkflowTask({
-            id: `wf-task-${timerTask.workflowId}-${timerTask.runId}-${Date.now()}`,
+            id: `wf-task-${timerTask.workflowId}-${timerTask.runId}-${timerTask.timerKey}`,
             workflowId: timerTask.workflowId,
             runId: timerTask.runId,
             targetQueue: this.deps.workflowQueueName,
             correlationId: timerTask.correlationId,
         });
 
+        this.dispatchedTimerKeys.add(timerTask.timerKey);
         await this.deps.taskQueue.enqueue(wfTask);
         await this.deps.taskQueue.completeTask(lease.leaseId);
     }

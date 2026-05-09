@@ -864,11 +864,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
 
           if (ev.type === "TimerScheduled") {
             const { wakeAt } = ev.payload;
+            const timerKey = `timer-${ev.workflowId}-${ev.runId}-${ev.version}`;
             timerTasks.push(buildTimerTask({
-              id: `timer-${ev.workflowId}-${ev.runId}-${ev.version}`,
+              id: timerKey,
               workflowId: ev.workflowId,
               runId: ev.runId,
               wakeAt,
+              timerKey,
+              sourceEventVersion: ev.version,
               targetQueue: "timers",
               createdAt: ev.startedAt,
               scheduledAt: ev.startedAt,

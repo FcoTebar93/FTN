@@ -1,4 +1,4 @@
-import type { WorkflowId, RunId, ActivityId, WorkerId } from "./types";
+import type { WorkflowId, RunId, ActivityId, WorkerId, Version } from "./types";
 import type { ActivityTask as ActivityPayload } from "./activity-types";
 
 export type TaskType = "workflow" | "activity" | "timer";
@@ -34,6 +34,8 @@ export interface TimerTask extends BaseTask {
     workflowId: WorkflowId;
     runId: RunId;
     wakeAt: string;
+    timerKey: string;
+    sourceEventVersion?: Version;
 }
 
 export type Task = WorkflowTask | ActivityTask | TimerTask;

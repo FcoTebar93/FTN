@@ -16,6 +16,8 @@ interface BuildTimerTaskInput {
   workflowId: string;
   runId: string;
   wakeAt: string;
+  timerKey: string;
+  sourceEventVersion?: number;
   targetQueue: string;
   correlationId?: string;
   createdAt?: string;
@@ -46,6 +48,8 @@ export function buildTimerTask(input: BuildTimerTaskInput): TimerTask {
     workflowId: input.workflowId,
     runId: input.runId,
     wakeAt: input.wakeAt,
+    timerKey: input.timerKey,
+    ...(input.sourceEventVersion !== undefined ? { sourceEventVersion: input.sourceEventVersion } : {}),
     createdAt: input.createdAt ?? now,
     scheduledAt: input.scheduledAt ?? now,
     workerType: "workflow",
