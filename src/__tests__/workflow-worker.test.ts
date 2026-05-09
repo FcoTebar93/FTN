@@ -305,6 +305,73 @@ describe("InMemoryWorkflowWorker", () => {
     assert.equal(next, null);
   });
 
+  it("conflictos repetidos de concurrencia: termina en dead-letter al agotar intentos", async () => {
+    const { taskQueue } = inMemoryStack();
+    const workflowId = "wf-race-dlq";
+    const runId = "run-race-dlq";
+    await taskQueue.enqueue(makeWorkflowTask(workflowId, runId));
+
+    let calls = 0;
+    const runtime: WorkflowRuntime = {
+      async runWorkflowTick() {
+        calls += 1;
+        throw new ConcurrencyError({
+          workflowId,
+          runId,
+          expectedVersion: 1,
+          actualVersion: 2,
+          context: {
+            source: "test-runtime",
+            operation: "runWorkflowTick",
+          },
+        });
+      },
+      async loadCurrentState() {
+        return null;
+      },
+      async startWorkflow() {
+        throw new Error("not implemented");
+      },
+    } as WorkflowRuntime;
+
+    const deadLetters: Array<{ reason: string; taskId: string; error: string }> = [];
+    const worker = new InMemoryWorkflowWorker({
+      workerId: "workflow-worker-race-dlq",
+      taskQueue,
+      runtime,
+      log: silentLogger,
+      onDeadLetter: (entry) => {
+        deadLetters.push({
+          reason: entry.reason,
+          taskId: entry.taskId,
+          error: entry.error,
+        });
+      },
+      config: {
+        queueName: "workflows",
+        leaseTimeoutMs: 10_000,
+        pollIntervalMs: 10,
+        concurrencyRetryBaseDelayMs: 0,
+        concurrencyRetryMaxDelayMs: 0,
+        concurrencyRetryJitterRatio: 0,
+        concurrencyRetryMaxAttempts: 2,
+      },
+    });
+
+    await worker.runOnce();
+    await worker.runOnce();
+    await worker.runOnce();
+
+    assert.equal(calls, 3);
+    assert.equal(deadLetters.length, 1);
+    assert.equal(deadLetters[0]!.reason, "concurrency_retry_exhausted");
+    assert.equal(deadLetters[0]!.taskId.includes(`wf-task-${workflowId}-${runId}`), true);
+    assert.equal(deadLetters[0]!.error.includes("Concurrency retry exhausted"), true);
+
+    const queued = await taskQueue.leaseNextTask("workflow-worker-race-dlq-2", "workflows", 1000);
+    assert.equal(queued, null);
+  });
+
   it("envía tarea a dead-letter cuando runWorkflowTick falla con error no concurrencia", async () => {
     const { taskQueue } = inMemoryStack();
     const workflowId = "wf-dead";
