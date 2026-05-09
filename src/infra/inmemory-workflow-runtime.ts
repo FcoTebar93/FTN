@@ -8,6 +8,7 @@ import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
 import { buildTimerTask, buildWorkflowTask } from "../shared/task-factories";
 import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
+import { ConcurrencyError } from "../modules/event-store";
 import type { Logger } from "./logger";
 import {
     addEventAppends,
@@ -800,14 +801,18 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             newDomainEvents
           );
         } catch (error) {
-          if (error instanceof Error && error.name === "ConcurrencyError") {
+          if (error instanceof ConcurrencyError) {
             incConcurrencyConflict();
             this.log?.warn("workflow-runtime.optimisticLockConflict", {
               workflowId,
               runId,
               correlationId,
-              expectedVersion: lastEventVersion,
+              expectedVersion: error.expectedVersion,
+              actualVersion: error.actualVersion,
               newEventCount: newDomainEvents.length,
+              streamKey: error.streamKey,
+              source: error.context.source,
+              operation: error.context.operation,
             });
           }
           throw error;

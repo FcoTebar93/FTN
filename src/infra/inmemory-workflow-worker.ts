@@ -112,6 +112,11 @@ export class InMemoryWorkflowWorker {
                     maxAttempts,
                     delayMs,
                     correlationId: task.correlationId,
+                    expectedVersion: error.expectedVersion,
+                    actualVersion: error.actualVersion,
+                    streamKey: error.streamKey,
+                    source: error.context.source,
+                    operation: error.context.operation,
                 });
 
                 await this.sleep(delayMs);

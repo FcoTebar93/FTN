@@ -60,6 +60,11 @@ describePg("PostgresEventStore concurrencia (optimistic locking)", () => {
       assert.equal(r.status, "rejected");
       if (r.status === "rejected") {
         assert.ok(r.reason instanceof ConcurrencyError, "rechazos deben ser ConcurrencyError");
+        assert.equal(r.reason.streamKey, `${workflowId}:${runId}`);
+        assert.equal(r.reason.context.source, "postgres-event-store");
+        assert.equal(r.reason.context.operation, "appendEvents");
+        assert.equal(r.reason.expectedVersion, 1);
+        assert.equal(typeof r.reason.actualVersion, "number");
       }
     }
 

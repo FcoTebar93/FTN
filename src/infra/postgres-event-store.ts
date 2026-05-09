@@ -51,6 +51,10 @@ export class PostgresEventStore implements EventStore {
           runId,
           expectedVersion,
           actualVersion: currentVersion,
+          context: {
+            source: "postgres-event-store",
+            operation: "appendEvents",
+          },
         });
       }
 

@@ -34,7 +34,11 @@ export class InMemoryEventStore implements EventStore {
                 workflowId,
                 runId,
                 expectedVersion,
-                actualVersion: currentVersion
+                actualVersion: currentVersion,
+                context: {
+                    source: "inmemory-event-store",
+                    operation: "appendEvents",
+                },
             });
         }
 
