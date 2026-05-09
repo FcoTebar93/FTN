@@ -4,9 +4,20 @@ import Redis from "ioredis";
 
 import { RedisTaskQueue } from "../../infra/redis-task-queue";
 import type { WorkflowTask } from "../../shared/tasks";
+import { DefaultWorkflowEngine } from "../../core/default-engine";
+import { InMemoryEventStore } from "../../infra/inmemory-event-store";
+import { InMemorySnapshotStore } from "../../infra/inmemory-snapshot-store";
+import { InMemoryWorkflowRuntime } from "../../infra/inmemory-workflow-runtime";
+import { InMemoryTimerWorker } from "../../infra/inmemory-timer-worker";
 
 const redisUrl = process.env.REDIS_URL?.trim();
 const describeRedis = redisUrl ? describe : describe.skip;
+const silentLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
 
 describeRedis("RedisTaskQueue (REDIS_URL)", () => {
   let redis: Redis;
@@ -101,5 +112,62 @@ describeRedis("RedisTaskQueue (REDIS_URL)", () => {
     assert.ok(lease);
     assert.equal(lease!.task.id, task.id);
     await q.completeTask(lease!.leaseId);
+  });
+
+  it("recovery tras reinicio: timer huérfano en processing se recupera y completa el workflow una sola vez", async () => {
+    const prefix = `ftn:test:timer-recovery-${Date.now()}:`;
+    const q = new RedisTaskQueue(redis, { keyPrefix: prefix });
+    const engine = new DefaultWorkflowEngine();
+    const eventStore = new InMemoryEventStore();
+    const snapshotStore = new InMemorySnapshotStore();
+    const runtime = new InMemoryWorkflowRuntime({
+      engine,
+      eventStore,
+      snapshotStore,
+      taskQueue: q,
+      config: { snapshotInterval: 50 },
+    });
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "redis-timer-recovery",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.sleep(0);
+        return { ok: true };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const leasedTimer = await q.leaseNextTask("timer-crashed-worker", "timers", 10_000);
+    assert.ok(leasedTimer);
+    assert.equal(leasedTimer!.task.type, "timer");
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const recoveredCount = await q.recoverStaleProcessing("timers", 0);
+    assert.equal(recoveredCount, 1);
+
+    const timerWorkerAfterRestart = new InMemoryTimerWorker({
+      taskQueue: q,
+      queueName: "timers",
+      workflowQueueName: "workflows",
+      pollIntervalMs: 10,
+      log: silentLogger,
+    });
+    await timerWorkerAfterRestart.runOnce();
+
+    const wfLease = await q.leaseNextTask("workflow-worker-after-restart", "workflows", 10_000);
+    assert.ok(wfLease);
+    assert.equal(wfLease!.task.type, "workflow");
+    await runtime.runWorkflowTick(workflowId, runId);
+    await q.completeTask(wfLease!.leaseId);
+
+    const finalState = await runtime.loadCurrentState(workflowId, runId);
+    assert.ok(finalState);
+    assert.equal(finalState!.status, "completed");
+    assert.deepEqual(finalState!.result, { ok: true });
+
+    const stream = await eventStore.loadEvents(workflowId, runId, 0);
+    assert.equal(stream.filter((event) => event.type === "WorkflowCompleted").length, 1);
   });
 });
