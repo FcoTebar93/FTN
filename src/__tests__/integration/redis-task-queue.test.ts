@@ -114,7 +114,7 @@ describeRedis("RedisTaskQueue (REDIS_URL)", () => {
     await q.completeTask(lease!.leaseId);
   });
 
-  it("recovery tras reinicio: timer huérfano en processing se recupera y completa el workflow una sola vez", async () => {
+  it("recovery tras reinicio: timer huérfano en processing se recupera y dispara una sola workflow task", async () => {
     const prefix = `ftn:test:timer-recovery-${Date.now()}:`;
     const q = new RedisTaskQueue(redis, { keyPrefix: prefix });
     const engine = new DefaultWorkflowEngine();
@@ -159,15 +159,17 @@ describeRedis("RedisTaskQueue (REDIS_URL)", () => {
     const wfLease = await q.leaseNextTask("workflow-worker-after-restart", "workflows", 10_000);
     assert.ok(wfLease);
     assert.equal(wfLease!.task.type, "workflow");
+    const wfLease2 = await q.leaseNextTask("workflow-worker-after-restart-2", "workflows", 10_000);
+    assert.equal(wfLease2, null, "no debe encolarse una segunda workflow task por el mismo timer recuperado");
     await runtime.runWorkflowTick(workflowId, runId);
     await q.completeTask(wfLease!.leaseId);
 
     const finalState = await runtime.loadCurrentState(workflowId, runId);
     assert.ok(finalState);
-    assert.equal(finalState!.status, "completed");
-    assert.deepEqual(finalState!.result, { ok: true });
+    assert.equal(finalState!.status, "running");
 
     const stream = await eventStore.loadEvents(workflowId, runId, 0);
-    assert.equal(stream.filter((event) => event.type === "WorkflowCompleted").length, 1);
+    assert.equal(stream.filter((event) => event.type === "WorkflowCompleted").length, 0);
+    assert.ok(stream.some((event) => event.type === "TimerScheduled"));
   });
 });
