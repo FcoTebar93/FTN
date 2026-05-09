@@ -6,6 +6,7 @@ import { InMemorySnapshotStore } from "../infra/inmemory-snapshot-store";
 import { InMemoryTaskQueue } from "../infra/inmemory-task-queue";
 import { InMemoryWorkflowRuntime } from "../infra/inmemory-workflow-runtime";
 import { ConcurrencyError } from "../modules/event-store";
+import { registerWorkflow } from "../app/workflows";
 
 function stack(snapshotInterval: number) {
   const engine = new DefaultWorkflowEngine();
@@ -181,5 +182,82 @@ describe("Solidez del motor (concurrencia lógica + snapshot/replay)", () => {
     const allEvents = await eventStore.loadEvents(workflowId, runId, 0);
     const fullReplay = engine.replay(workflowId, runId, allEvents);
     assert.deepEqual(state, fullReplay.state);
+  });
+
+  it("ticks repetidos sin señales nuevas no duplican SignalWaitStarted", async () => {
+    const { runtime, eventStore } = stack(50);
+
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: "signal-idempotent",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.signal("approval");
+        return { ok: true };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const events = await eventStore.loadEvents(workflowId, runId, 0);
+    const waits = events.filter(
+      (event) =>
+        event.type === "SignalWaitStarted" &&
+        event.payload.signalName === "approval" &&
+        event.payload.ordinal === 0
+    );
+
+    assert.equal(waits.length, 1);
+  });
+
+  it("child workflow en espera no duplica timer de polling ni ChildWorkflowStarted", async () => {
+    const childWorkflowName = `child-suspend-${Date.now()}`;
+    const parentWorkflowName = `parent-child-${Date.now()}`;
+
+    registerWorkflow({
+      name: childWorkflowName,
+      version: "v1",
+      displayName: "Child suspend test",
+      definition: async (ftn) => {
+        await ftn.signal("child-ready");
+        return { child: "done" };
+      },
+    });
+
+    registerWorkflow({
+      name: parentWorkflowName,
+      version: "v1",
+      displayName: "Parent child test",
+      definition: async (ftn) => {
+        await ftn.child(childWorkflowName, {});
+        return { parent: "done" };
+      },
+    });
+
+    const { runtime, eventStore } = stack(50);
+    const { workflowId, runId } = await runtime.startWorkflow({
+      workflowName: parentWorkflowName,
+      workflowVersion: "v1",
+      input: {},
+      definition: async (ftn) => {
+        await ftn.child(childWorkflowName, {});
+        return { parent: "done" };
+      },
+    });
+
+    await runtime.runWorkflowTick(workflowId, runId);
+    await runtime.runWorkflowTick(workflowId, runId);
+
+    const parentEvents = await eventStore.loadEvents(workflowId, runId, 0);
+    const childStarts = parentEvents.filter((event) => event.type === "ChildWorkflowStarted");
+    const childPollTimers = parentEvents.filter(
+      (event) =>
+        event.type === "TimerScheduled" &&
+        event.payload.retryBackoff?.stepId === "child-0" &&
+        event.payload.retryBackoff?.afterAttempt === 0
+    );
+
+    assert.equal(childStarts.length, 1);
+    assert.equal(childPollTimers.length, 1);
   });
 });

@@ -344,6 +344,38 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
           );
         });
 
+      const hasSignalWaitRecorded = (signalName: string, ordinal: number): boolean =>
+        fullHistory.some(
+          (e) =>
+            e.type === "SignalWaitStarted" &&
+            e.payload.signalName === signalName &&
+            e.payload.ordinal === ordinal
+        ) ||
+        newDomainEvents.some((raw) => {
+          const e = raw as WorkflowEvent;
+          return (
+            e.type === "SignalWaitStarted" &&
+            e.payload.signalName === signalName &&
+            e.payload.ordinal === ordinal
+          );
+        });
+
+      const hasTimerScheduledRecorded = (stepId: StepId, afterAttempt: number): boolean =>
+        fullHistory.some(
+          (e) =>
+            e.type === "TimerScheduled" &&
+            e.payload.retryBackoff?.stepId === stepId &&
+            e.payload.retryBackoff?.afterAttempt === afterAttempt
+        ) ||
+        newDomainEvents.some((raw) => {
+          const e = raw as WorkflowEvent;
+          return (
+            e.type === "TimerScheduled" &&
+            e.payload.retryBackoff?.stepId === stepId &&
+            e.payload.retryBackoff?.afterAttempt === afterAttempt
+          );
+        });
+
       const childStarts = fullHistory.filter(
         (e): e is Extract<WorkflowEvent, { type: "ChildWorkflowStarted" }> => e.type === "ChildWorkflowStarted"
       );
@@ -547,15 +579,17 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               }
               if (options.backOffMs && options.backOffMs > 0) {
                 const wakeAt = new Date(Date.now() + options.backOffMs).toISOString();
-                newDomainEvents.push({
-                  type: "TimerScheduled",
-                  workflowId,
-                  runId,
-                  payload: {
-                    wakeAt,
-                    retryBackoff: { stepId, afterAttempt: attempt },
-                  },
-                });
+                if (!hasTimerScheduledRecorded(stepId, attempt)) {
+                  newDomainEvents.push({
+                    type: "TimerScheduled",
+                    workflowId,
+                    runId,
+                    payload: {
+                      wakeAt,
+                      retryBackoff: { stepId, afterAttempt: attempt },
+                    },
+                  });
+                }
                 throw new WorkflowSuspendedError();
               }
             }
@@ -583,12 +617,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             signalOrdinalByName.set(name, ordinal + 1);
             return Promise.resolve(ev.payload.data as TData);
           }
-          newDomainEvents.push({
-            type: "SignalWaitStarted",
-            workflowId,
-            runId,
-            payload: { signalName: name, ordinal },
-          });
+          if (!hasSignalWaitRecorded(name, ordinal)) {
+            newDomainEvents.push({
+              type: "SignalWaitStarted",
+              workflowId,
+              runId,
+              payload: { signalName: name, ordinal },
+            });
+          }
           throw new WorkflowSuspendedError();
         },
         forEach: async <TItem, TResult = void>(
@@ -700,12 +736,14 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
             });
           }
 
-          newDomainEvents.push({
-            type: "TimerScheduled",
-            workflowId,
-            runId,
-            payload: { wakeAt: new Date().toISOString(), retryBackoff: { stepId, afterAttempt: 0 } },
-          });
+          if (!hasTimerScheduledRecorded(stepId, 0)) {
+            newDomainEvents.push({
+              type: "TimerScheduled",
+              workflowId,
+              runId,
+              payload: { wakeAt: new Date().toISOString(), retryBackoff: { stepId, afterAttempt: 0 } },
+            });
+          }
           throw new WorkflowSuspendedError();
         },
         workflowId: function (): WorkflowId {
