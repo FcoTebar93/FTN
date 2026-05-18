@@ -479,9 +479,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               (a) => a.id === handle.id
             );
             if (!completed) {
-              throw new Error(
-                `Activity ${handle.id} is not completed yet; join must be called after completion`
-              );
+              throw new WorkflowSuspendedError();
             }
             results.push(completed.result as TResult);
           }
