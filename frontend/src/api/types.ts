@@ -114,6 +114,11 @@ export interface JsonSchema {
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
+  enum?: unknown[];
+  format?: string;
+  minimum?: number;
+  maximum?: number;
+  default?: unknown;
 }
 
 export type DesignerWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;

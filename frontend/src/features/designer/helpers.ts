@@ -18,22 +18,4 @@ export function scheduleSummary(s?: DesignerExecutionSchedule): string {
   return `Semanal ${formatHM(s.hour, s.minute)} · ${s.weekdays.length} día(s)`;
 }
 
-function defaultValueBySchemaType(type?: string | string[]): unknown {
-  const t = Array.isArray(type) ? type[0] : type;
-  if (t === "number" || t === "integer") return 0;
-  if (t === "boolean") return false;
-  if (t === "array") return [];
-  if (t === "object") return {};
-  return "";
-}
-
-export function buildDefaultInputFromSchema(schema?: unknown): Record<string, unknown> {
-  if (!schema || typeof schema !== "object") return {};
-  const s = schema as { type?: string | string[]; properties?: Record<string, { type?: string | string[] }> };
-  if (s.type !== "object" || !s.properties) return {};
-  const defaults: Record<string, unknown> = {};
-  for (const [key, prop] of Object.entries(s.properties)) {
-    defaults[key] = defaultValueBySchemaType(prop?.type);
-  }
-  return defaults;
-}
+export { buildDefaultInputFromSchema } from "../../shared/json-schema-input";

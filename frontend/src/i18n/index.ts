@@ -162,7 +162,15 @@ export const uiText = {
     },
     catalog: {
       title: "Ejecutar workflow",
-      chooseOne: "Elige un workflow, rellena el input JSON y lánzalo.",
+      chooseOne: "Elige un workflow, rellena los datos y lánzalo.",
+      inputFormTitle: "Datos de entrada",
+      inputFormHelp: "Rellena los campos obligatorios (*). Usa «Modo avanzado» para editar JSON directamente.",
+      advancedJsonMode: "Modo avanzado (JSON)",
+      formMode: "Formulario",
+      fieldRequired: (field: string) => `${field} es obligatorio.`,
+      fieldEmail: (field: string) => `${field} debe ser un email válido.`,
+      fieldNumber: (field: string) => `${field} debe ser un número.`,
+      fieldMinimum: (field: string) => `${field} no cumple el mínimo permitido.`,
       inputInvalid: "Input JSON inválido",
       signalDataInvalid: "Signal data JSON inválido",
       signalNameRequired: "Indica signalName",
@@ -357,7 +365,15 @@ export const uiText = {
     },
     catalog: {
       title: "Run workflow",
-      chooseOne: "Choose a workflow, fill in the JSON input, and launch it.",
+      chooseOne: "Choose a workflow, fill in the input, and launch it.",
+      inputFormTitle: "Input",
+      inputFormHelp: "Fill in required fields (*). Use «Advanced mode» to edit raw JSON.",
+      advancedJsonMode: "Advanced mode (JSON)",
+      formMode: "Form",
+      fieldRequired: (field: string) => `${field} is required.`,
+      fieldEmail: (field: string) => `${field} must be a valid email.`,
+      fieldNumber: (field: string) => `${field} must be a number.`,
+      fieldMinimum: (field: string) => `${field} is below the minimum allowed.`,
       inputInvalid: "Invalid input JSON",
       signalDataInvalid: "Invalid signal data JSON",
       signalNameRequired: "Provide signalName",
@@ -456,4 +472,3 @@ export function useUiText() {
   const t = uiText[locale];
   return { locale, setLocale, t };
 }
-

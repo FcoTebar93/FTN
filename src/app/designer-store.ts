@@ -24,6 +24,10 @@ function memKey(subject: string, id: string): string {
 function registerOne(subject: string, w: StoredWorkflow): void {
   const normalized = normalizeStoredWorkflow(w);
   const definition = buildWorkflowDefinitionFromStored(normalized);
+  const examples =
+    normalized.scheduledInput !== undefined
+      ? [{ input: normalized.scheduledInput, note: "Por defecto (Designer)" }]
+      : undefined;
   registerWorkflow({
     name: getDesignerRuntimeName(subject, normalized.id),
     version: normalized.version,
@@ -32,6 +36,7 @@ function registerOne(subject: string, w: StoredWorkflow): void {
     tags: normalized.tags ?? [],
     inputSchema: normalized.inputSchema,
     resultSchema: normalized.resultSchema,
+    examples,
     definition,
   });
 }
