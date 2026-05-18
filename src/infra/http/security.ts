@@ -85,6 +85,10 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "POST" && pathWithoutQuery === "/auth/refresh") {
     return true;
   }
+  // Checkout público: enlace /pagar del email (workflowId + runId en metadata) sin sesión FTN.
+  if (method === "POST" && pathWithoutQuery === "/pay/checkout") {
+    return true;
+  }
   if (method === "GET" && pathWithoutQuery === "/metrics") {
     return true;
   }

@@ -86,6 +86,10 @@ test("GET /docs y /swagger son rutas públicas", () => {
   assert.equal(isPublicPath("GET", "/swagger"), true);
 });
 
+test("POST /pay/checkout es ruta pública (enlace /pagar sin sesión FTN)", () => {
+  assert.equal(isPublicPath("POST", "/pay/checkout"), true);
+});
+
 function baseConfig(over: Partial<ApiSecurityConfig> = {}): ApiSecurityConfig {
   return {
     corsOrigins: ["http://localhost:5173"],
