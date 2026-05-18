@@ -38,6 +38,29 @@ export async function buildIntegrationsConfig(
     str(notificationsCredential?.config?.emailFrom) ??
     str(notificationsCredential?.config?.from) ??
     str(config.emailFrom);
+  const smtpHost =
+    str(notificationsCredential?.config?.smtpHost) ??
+    str(notificationsCredential?.secrets?.smtpHost) ??
+    str(config.smtpHost);
+  const smtpPortRaw =
+    str(notificationsCredential?.config?.smtpPort) ?? str(config.smtpPort?.toString());
+  const smtpPort = smtpPortRaw ? Number.parseInt(smtpPortRaw, 10) : config.smtpPort;
+  const smtpSecureRaw = str(notificationsCredential?.config?.smtpSecure);
+  const smtpSecure =
+    smtpSecureRaw === "true" || smtpSecureRaw === "1"
+      ? true
+      : smtpSecureRaw === "false" || smtpSecureRaw === "0"
+        ? false
+        : config.smtpSecure;
+  const smtpUser =
+    str(notificationsCredential?.secrets?.smtpUser) ??
+    str(notificationsCredential?.config?.smtpUser) ??
+    str(config.smtpUser);
+  const smtpPassRaw =
+    str(notificationsCredential?.secrets?.smtpPass) ??
+    str(notificationsCredential?.secrets?.smtpPassword) ??
+    str(config.smtpPass);
+  const smtpPass = smtpPassRaw?.replace(/\s+/g, "");
   const slackWebhookUrl =
     str(notificationsCredential?.secrets?.slackWebhookUrl) ??
     str(notificationsCredential?.config?.slackWebhookUrl) ??
@@ -81,6 +104,11 @@ export async function buildIntegrationsConfig(
       enabled: true,
       sendgridApiKey,
       emailFrom,
+      smtpHost,
+      smtpPort: Number.isFinite(smtpPort) && smtpPort! > 0 ? smtpPort : undefined,
+      smtpSecure,
+      smtpUser,
+      smtpPass,
       slackWebhookUrl,
       twilioAccountSid,
       twilioAuthToken,

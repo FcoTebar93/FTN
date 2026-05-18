@@ -1,6 +1,7 @@
 import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
+import { canRegisterSendEmail } from "./email-transport";
 import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
 import { sendWebhookActivityDefinition } from "./send-webhook-activity";
@@ -10,6 +11,11 @@ import { registerDefinitions } from "../helpers";
 export interface NotificationsConfig extends IntegrationModuleConfig {
   sendgridApiKey?: string;
   emailFrom?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
   slackWebhookUrl?: string;
   twilioAccountSid?: string;
   twilioAuthToken?: string;
@@ -23,7 +29,7 @@ export const NotificationsModule: IntegrationModule = {
 
     const defs: AnyActivityDefinition[] = [];
 
-    if (config.sendgridApiKey && config.emailFrom) {
+    if (canRegisterSendEmail(config)) {
       defs.push(sendEmailActivityDefinition(config) as AnyActivityDefinition);
     }
 

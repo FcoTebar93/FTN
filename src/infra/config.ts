@@ -11,6 +11,18 @@ function parseBoolean(value: string | undefined): boolean {
   return value === "1" || value === "true";
 }
 
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  return undefined;
+}
+
+function parseSmtpPort(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function parseIntMin(value: string | undefined, fallback: number, min: number): number {
   const parsed = Number.parseInt(value ?? String(fallback), 10);
   return Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
@@ -45,6 +57,11 @@ export interface AppConfig {
   stripeWebhookSecret?: string;
   sendgridApiKey?: string;
   emailFrom?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
   slackWebhookUrl?: string;
   twilioAccountSid?: string;
   twilioAuthToken?: string;
@@ -94,6 +111,11 @@ export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
     stripeWebhookSecret: toTrimmed(env.STRIPE_WEBHOOK_SECRET),
     sendgridApiKey: toTrimmed(env.SENDGRID_API_KEY),
     emailFrom: toTrimmed(env.EMAIL_FROM ?? env.SMTP_FROM),
+    smtpHost: toTrimmed(env.SMTP_HOST),
+    smtpPort: parseSmtpPort(env.SMTP_PORT),
+    smtpSecure: parseOptionalBoolean(env.SMTP_SECURE),
+    smtpUser: toTrimmed(env.SMTP_USER),
+    smtpPass: toTrimmed(env.SMTP_PASS ?? env.SMTP_PASSWORD)?.replace(/\s+/g, ""),
     slackWebhookUrl: toTrimmed(env.SLACK_WEBHOOK_URL),
     twilioAccountSid: toTrimmed(env.TWILIO_ACCOUNT_SID),
     twilioAuthToken: toTrimmed(env.TWILIO_AUTH_TOKEN),
