@@ -350,4 +350,92 @@ export const WORKFLOW_TEMPLATES: DesignerTemplate[] = [
       entryStepId: "step-http",
     }),
   },
+  {
+    id: "signup-payment-hybrid-qr",
+    label: "Alta + pago híbrido (QR + /pagar)",
+    description:
+      "Inserta usuario, genera QR y email con enlace /pagar usando {{ run.workflowId }} y {{ run.runId }}; espera señal payment-completed y actualiza stripe_session_id.",
+    requiredActivities: ["storage.dbExecute:v1", "documents.generateQrCode:v1", "notifications.sendEmail:v1"],
+    build: () => ({
+      id: "signup-payment-hybrid-qr",
+      version: "v1",
+      displayName: "Alta + pago híbrido (Designer)",
+      description: "Flujo demo alineado con paymentSignupWorkflow: DB + QR + email + señal + update.",
+      tags: ["payments", "designer", "hybrid", "signup"],
+      schedule: { type: "instant" },
+      scheduledInput: {
+        email: "user@example.com",
+        planName: "Pro",
+        priceCents: 9900,
+      },
+      inputSchema: {
+        type: "object",
+        required: ["email", "planName", "priceCents"],
+        properties: {
+          email: { type: "string", format: "email", description: "Email del usuario" },
+          planName: { type: "string", description: "Plan a contratar" },
+          priceCents: { type: "integer", minimum: 0, description: "Importe en céntimos" },
+        },
+        additionalProperties: false,
+      },
+      resultSchema: undefined,
+      steps: [
+        {
+          id: "insert-user",
+          kind: "activity",
+          name: "Registrar usuario (users)",
+          activityName: "storage.dbExecute:v1",
+          input: {
+            sql: "insert into users(email, stripe_session_id, created_at) values ($1, null, now()) on conflict (email) do nothing",
+            params: ["{{ input.email }}"],
+          },
+          next: "qr-pay",
+        } as any,
+        {
+          id: "qr-pay",
+          kind: "activity",
+          name: "QR con URL /pagar del run",
+          activityName: "documents.generateQrCode:v1",
+          input: {
+            data: "http://localhost:5173/pagar?workflowId={{ run.workflowId }}&runId={{ run.runId }}&email={{ input.email }}&planName={{ input.planName }}&priceCents={{ input.priceCents }}",
+            size: 256,
+            format: "png",
+          },
+          next: "email-pay",
+        } as any,
+        {
+          id: "email-pay",
+          kind: "activity",
+          name: "Email con QR y enlace",
+          activityName: "notifications.sendEmail:v1",
+          input: {
+            to: "{{ input.email }}",
+            subject: "Completa tu pago",
+            htmlBody:
+              "<p>Plan <strong>{{ input.planName }}</strong> ({{ input.priceCents }} céntimos).</p><p><img src=\"{{ steps.qr-pay }}\" alt=\"QR pago\" width=\"256\" height=\"256\"/></p><p><a href=\"http://localhost:5173/pagar?workflowId={{ run.workflowId }}&runId={{ run.runId }}&email={{ input.email }}&planName={{ input.planName }}&priceCents={{ input.priceCents }}\">Abrir pasarela de pago</a></p>",
+          },
+          next: "wait-payment",
+        } as any,
+        {
+          id: "wait-payment",
+          kind: "signal",
+          name: "Esperar pago completado",
+          signalName: "payment-completed",
+          next: "update-user",
+        } as any,
+        {
+          id: "update-user",
+          kind: "activity",
+          name: "Guardar sessionId Stripe",
+          activityName: "storage.dbExecute:v1",
+          input: {
+            sql: "update users set stripe_session_id = $2 where email = $1",
+            params: ["{{ input.email }}", "{{ steps.wait-payment.sessionId }}"],
+          },
+          next: null,
+        } as any,
+      ],
+      entryStepId: "insert-user",
+    }),
+  },
 ];

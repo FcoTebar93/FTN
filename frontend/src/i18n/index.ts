@@ -71,6 +71,7 @@ export const uiText = {
     },
     nav: {
       runs: "Runs",
+      catalog: "Catálogo",
       designer: "Designer",
       credentials: "Credenciales",
       logout: "Cerrar sesión",
@@ -160,7 +161,7 @@ export const uiText = {
       noStepsYet: "Este workflow todavía no ha creado ningún step registrado en el motor.",
     },
     catalog: {
-      title: "Workflows",
+      title: "Catálogo de workflows",
       chooseOne: "Elige un workflow para ver el contrato, validar input y lanzarlo.",
       inputInvalid: "Input JSON inválido",
       signalDataInvalid: "Signal data JSON inválido",
@@ -224,6 +225,8 @@ export const uiText = {
         `La plantilla "${label}" requiere activities no registradas: ${missing}`,
       templatesRequireRegistered:
         "Una plantilla solo se aplica si sus activities requeridas están registradas en este entorno.",
+      templateRunContextHint:
+        "En inputs de steps puedes usar {{ run.workflowId }} y {{ run.runId }} (equivalente a ftn.workflowId() / ftn.runId()) para URLs de retorno o enlaces a /pagar.",
       loading: "Cargando…",
       noWorkflowsYet: "No hay workflows definidos aún.",
       lastRun: "Última ejecución:",
@@ -264,6 +267,7 @@ export const uiText = {
     },
     nav: {
       runs: "Runs",
+      catalog: "Catalog",
       designer: "Designer",
       credentials: "Credentials",
       logout: "Sign out",
@@ -352,7 +356,7 @@ export const uiText = {
       noStepsYet: "This workflow hasn’t created any step records yet.",
     },
     catalog: {
-      title: "Workflows",
+      title: "Workflow catalog",
       chooseOne: "Choose a workflow to inspect the contract, validate input, and launch it.",
       inputInvalid: "Invalid input JSON",
       signalDataInvalid: "Invalid signal data JSON",
@@ -416,6 +420,8 @@ export const uiText = {
         `Template "${label}" requires unregistered activities: ${missing}`,
       templatesRequireRegistered:
         "A template is applied only if its required activities are registered in this environment.",
+      templateRunContextHint:
+        "In step inputs you can use {{ run.workflowId }} and {{ run.runId }} (same as ftn.workflowId() / ftn.runId()) for return URLs or links to /pagar.",
       loading: "Loading…",
       noWorkflowsYet: "No workflows defined yet.",
       lastRun: "Last run:",
