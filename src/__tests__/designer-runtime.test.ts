@@ -115,3 +115,32 @@ test("retry step ejecuta el activity referenciado vía ftn.retry", async () => {
   assert.deepEqual((out as { steps: Record<string, unknown> }).steps.a1, { ok: true });
   assert.deepEqual((out as { steps: Record<string, unknown> }).steps.r1, { ok: true });
 });
+
+test("plantillas resuelven run.workflowId y run.runId", async () => {
+  const stored: StoredWorkflow = {
+    id: "wf-run-ctx",
+    version: "v1",
+    displayName: "run-ctx",
+    steps: [
+      {
+        id: "a1",
+        kind: "activity",
+        activityName: "echo",
+        input: {
+          url: "http://localhost:5173/pagar?workflowId={{ run.workflowId }}&runId={{ run.runId }}",
+        },
+        next: null,
+      },
+    ],
+    entryStepId: "a1",
+  };
+
+  const { ftn, activityInputs } = createRecordingFtn();
+  const def = buildWorkflowDefinitionFromStored(stored);
+  await def(ftn, {});
+
+  assert.equal(activityInputs.length, 1);
+  assert.deepEqual(activityInputs[0], {
+    url: "http://localhost:5173/pagar?workflowId=wf-mock&runId=run-mock",
+  });
+});
