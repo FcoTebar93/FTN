@@ -186,6 +186,31 @@ CREATE TABLE IF NOT EXISTS ftn_audit_log (
 CREATE INDEX IF NOT EXISTS ftn_audit_log_occurred ON ftn_audit_log (occurred_at DESC);
 `,
   },
+  {
+    version: 10,
+    name: "demo_users_signup",
+    sql: `
+CREATE TABLE IF NOT EXISTS users (
+  email TEXT PRIMARY KEY,
+  stripe_session_id TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'users'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.users'::regclass AND contype = 'p'
+  ) THEN
+    ALTER TABLE users ADD PRIMARY KEY (email);
+  END IF;
+END $$;
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {

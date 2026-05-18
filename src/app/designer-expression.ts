@@ -1,6 +1,12 @@
+export interface DesignerRunContext {
+  workflowId: string;
+  runId: string;
+}
+
 export interface DesignerExecutionContext {
   input: unknown;
   stepResults: Record<string, unknown>;
+  run: DesignerRunContext;
 }
 
 function getByPath(root: unknown, path: string): unknown {
@@ -28,6 +34,8 @@ function resolveTemplateString(raw: string, ctx: DesignerExecutionContext): stri
       const [stepId, ...pathParts] = rest.split(".");
       const stepResult = ctx.stepResults[stepId];
       value = pathParts.length > 0 ? getByPath(stepResult, pathParts.join(".")) : stepResult;
+    } else if (trimmed.startsWith("run.")) {
+      value = getByPath(ctx.run, trimmed.slice("run.".length));
     } else {
       return `{{${expr}}}`;
     }
@@ -89,6 +97,9 @@ function getValueFromPath(path: string, ctx: DesignerExecutionContext): unknown 
     const [stepId, ...parts] = rest.split(".");
     const base = ctx.stepResults[stepId];
     return parts.length > 0 ? getByPath(base, parts.join(".")) : base;
+  }
+  if (trimmed.startsWith("run.")) {
+    return getByPath(ctx.run, trimmed.slice("run.".length));
   }
   return parseLiteral(trimmed);
 }

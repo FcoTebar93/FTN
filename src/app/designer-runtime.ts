@@ -23,6 +23,10 @@ export function buildWorkflowDefinitionFromStored(
     const ctx: ExecutionContext = {
       input,
       stepResults: {},
+      run: {
+        workflowId: ftn.workflowId(),
+        runId: ftn.runId(),
+      },
     };
 
     let currentId: string | null = stored.entryStepId;

@@ -139,31 +139,48 @@ export const paymentSignupWorkflow: WorkflowDefinition<PaymentSignupInput, Payme
     const wfId = ftn.workflowId();
     const runId = ftn.runId();
 
-    const url = new URL("/pagar", FRONTEND_BASE_URL);
-    url.searchParams.set("workflowId", wfId);
-    url.searchParams.set("runId", runId);
-    url.searchParams.set("email", input.email);
-    url.searchParams.set("planName", input.planName);
-    url.searchParams.set("priceCents", String(input.priceCents));
+    const checkoutUrl = new URL("/pagar", FRONTEND_BASE_URL);
+    checkoutUrl.searchParams.set("workflowId", wfId);
+    checkoutUrl.searchParams.set("runId", runId);
+    checkoutUrl.searchParams.set("email", input.email);
+    checkoutUrl.searchParams.set("planName", input.planName);
+    checkoutUrl.searchParams.set("priceCents", String(input.priceCents));
 
-    ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
-      data: url.toString(),
+    const registerHandle = ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
+      sql: `
+        insert into users(email, stripe_session_id, created_at)
+        values ($1, null, now())
+        on conflict (email) do nothing
+      `,
+      params: [input.email],
+    });
+    await ftn.join([registerHandle]);
+
+    const qrHandle = ftn.activity<GenerateQrCodeInput, string>("documents.generateQrCode:v1", {
+      data: checkoutUrl.toString(),
       size: 256,
       format: "png",
     });
+    const [qrDataUrl] = await ftn.join([qrHandle]);
 
-    ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
+    const emailHandle = ftn.activity<SendEmailInput, void>("notifications.sendEmail:v1", {
       to: input.email,
       subject: "Completa tu pago",
-      htmlBody: `<p>Completa tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} EUR).</p><p><a href="${url.toString()}">Abrir checkout</a></p>`,
+      htmlBody: `
+        <p>Completa tu pago del plan <strong>${input.planName}</strong> (${input.priceCents / 100} EUR).</p>
+        <p><img src="${qrDataUrl}" alt="QR pago" width="256" height="256" /></p>
+        <p><a href="${checkoutUrl.toString()}">Abrir pasarela de pago (Stripe)</a></p>
+      `,
     });
+    await ftn.join([emailHandle]);
 
     const payment = await ftn.signal<PaymentCompletedSignalData>("payment-completed");
 
-    ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
-      sql: "insert into users(email, stripe_session_id, created_at) values ($1, $2, now())",
+    const updateHandle = ftn.activity<DbExecuteInput, DbExecuteResult>("storage.dbExecute:v1", {
+      sql: "update users set stripe_session_id = $2 where email = $1",
       params: [input.email, payment.sessionId],
     });
+    await ftn.join([updateHandle]);
 
     return { email: input.email, sessionId: payment.sessionId };
 };
@@ -240,7 +257,7 @@ registerWorkflow<PaymentSignupInput, PaymentSignupResult>({
   name: "payment-signup",
   version: "v1",
   displayName: "Alta con pago",
-  description: "Genera QR de pago, envía email y espera señal de pago completado.",
+  description: "Registra usuario, envía email con QR hacia checkout Stripe y confirma el pago por señal/webhook.",
   tags: ["growth", "payments", "notifications"],
   examples: [
     { input: { email: "user@acme.com", planName: "Pro", priceCents: 9900 } },
