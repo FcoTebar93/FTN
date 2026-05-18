@@ -32,6 +32,25 @@ test("buildIntegrationsStatusForSubject detecta configuración desde env", async
   assert.equal(redis?.configured, false);
 });
 
+test("buildIntegrationsStatusForSubject detecta SMTP desde env", async () => {
+  const items = await buildIntegrationsStatusForSubject("demo", {
+    hasPostgres: false,
+    hasRedis: false,
+    getCredential: async () => undefined,
+    env: {
+      SMTP_HOST: "smtp.gmail.com",
+      SMTP_USER: "dev@gmail.com",
+      SMTP_PASS: "app-password",
+      EMAIL_FROM: "dev@gmail.com",
+    } as NodeJS.ProcessEnv,
+  });
+
+  const notifications = items.find((i) => i.key === "notifications");
+  assert.ok(notifications);
+  assert.equal(notifications!.configured, true);
+  assert.equal(notifications!.source, "env");
+});
+
 test("buildIntegrationsStatusForSubject detecta configuración desde credenciales", async () => {
   const items = await buildIntegrationsStatusForSubject("demo", {
     hasPostgres: false,
