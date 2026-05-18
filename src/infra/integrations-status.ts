@@ -102,30 +102,28 @@ export async function buildIntegrationsStatusForSubject(
       : "Faltan providerUrl y providerToken para KYC.";
 
   const credNotifications = await deps.getCredential(subject, "notifications");
-  const sendgridKey =
+  const sendgridKeyCred =
     str(obj(credNotifications?.secrets).sendgridApiKey) ??
     str(obj(credNotifications?.secrets).apiKey) ??
     str(obj(credNotifications?.config).sendgridApiKey);
-  const emailFrom =
-    str(obj(credNotifications?.config).emailFrom) ??
-    str(obj(credNotifications?.config).from) ??
-    str(env.EMAIL_FROM ?? env.SMTP_FROM);
-  const slackWebhook =
+  const sendgridKey = sendgridKeyCred ?? str(env.SENDGRID_API_KEY);
+  const emailFromCred =
+    str(obj(credNotifications?.config).emailFrom) ?? str(obj(credNotifications?.config).from);
+  const emailFromEnv = str(env.EMAIL_FROM ?? env.SMTP_FROM);
+  const emailFrom = emailFromCred ?? emailFromEnv;
+  const slackWebhookCred =
     str(obj(credNotifications?.secrets).slackWebhookUrl) ??
-    str(obj(credNotifications?.config).slackWebhookUrl) ??
-    str(env.SLACK_WEBHOOK_URL);
-  const smtpHost =
-    str(obj(credNotifications?.config).smtpHost) ??
-    str(obj(credNotifications?.secrets).smtpHost) ??
-    str(env.SMTP_HOST);
-  const smtpUser =
-    str(obj(credNotifications?.secrets).smtpUser) ??
-    str(obj(credNotifications?.config).smtpUser) ??
-    str(env.SMTP_USER);
-  const smtpPassRaw =
-    str(obj(credNotifications?.secrets).smtpPass) ??
-    str(obj(credNotifications?.secrets).smtpPassword) ??
-    str(env.SMTP_PASS ?? env.SMTP_PASSWORD);
+    str(obj(credNotifications?.config).slackWebhookUrl);
+  const slackWebhook = slackWebhookCred ?? str(env.SLACK_WEBHOOK_URL);
+  const smtpHostCred =
+    str(obj(credNotifications?.config).smtpHost) ?? str(obj(credNotifications?.secrets).smtpHost);
+  const smtpHost = smtpHostCred ?? str(env.SMTP_HOST);
+  const smtpUserCred =
+    str(obj(credNotifications?.secrets).smtpUser) ?? str(obj(credNotifications?.config).smtpUser);
+  const smtpUser = smtpUserCred ?? str(env.SMTP_USER);
+  const smtpPassCred =
+    str(obj(credNotifications?.secrets).smtpPass) ?? str(obj(credNotifications?.secrets).smtpPassword);
+  const smtpPassRaw = smtpPassCred ?? str(env.SMTP_PASS ?? env.SMTP_PASSWORD);
   const smtpPass = smtpPassRaw?.replace(/\s+/g, "");
   const sendgridEnv = Boolean(str(env.SENDGRID_API_KEY) && str(env.EMAIL_FROM ?? env.SMTP_FROM));
   const smtpEnv = Boolean(
@@ -143,19 +141,24 @@ export async function buildIntegrationsStatusForSubject(
     (slackWebhook && /^https:\/\/hooks\.slack\.com\//.test(slackWebhook)) || slackEnv
   );
   const notificationsConfigured = sendgridConfigured || smtpConfigured || slackConfigured;
-  const notificationsFromCredentials = Boolean(
-    (sendgridKey && emailFrom) ||
-      (smtpHost && smtpUser && smtpPass && emailFrom) ||
-      slackWebhook
+  const sendgridFromCred = Boolean(
+    sendgridKeyCred && /^SG\./.test(sendgridKeyCred) && emailFromCred && emailFromCred.includes("@")
   );
-  const notificationsSource: "credentials" | "env" | "none" = notificationsFromCredentials
-    ? "credentials"
-    : sendgridEnv || smtpEnv || slackEnv
-      ? "env"
-      : "none";
+  const smtpFromCred = Boolean(
+    smtpHostCred && smtpUserCred && smtpPassCred && emailFromCred && emailFromCred.includes("@")
+  );
+  const slackFromCred = Boolean(
+    slackWebhookCred && /^https:\/\/hooks\.slack\.com\//.test(slackWebhookCred)
+  );
+  const notificationsSource: "credentials" | "env" | "none" =
+    sendgridFromCred || smtpFromCred || slackFromCred
+      ? "credentials"
+      : sendgridEnv || smtpEnv || slackEnv
+        ? "env"
+        : "none";
   const notificationsDetails = notificationsConfigured
     ? undefined
-    : sendgridKey || emailFrom || slackWebhook || smtpHost || smtpUser
+    : sendgridKeyCred || emailFrom || slackWebhookCred || smtpHostCred || smtpUserCred
       ? "Formato inválido en notifications: SendGrid key debe empezar por SG., SMTP requiere host/user/pass, emailFrom debe ser email, slackWebhookUrl debe ser hooks.slack.com."
       : "Configura SendGrid (SENDGRID_API_KEY + EMAIL_FROM), SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM) o slackWebhookUrl.";
 
