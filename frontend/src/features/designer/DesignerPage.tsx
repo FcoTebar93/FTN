@@ -266,7 +266,6 @@ export function DesignerPage() {
     <div class="app-layout designer-page">
       <div class="sidebar">
         <div class="panel">
-          <h2 class="panel-title">Designer · Workflows JSON</h2>
           <h2 class="panel-title">{t.designer.title}</h2>
           {loadingActivities && <p class="detail-muted">{t.designer.loadingActivities}</p>}
           {activitiesError && <p class="panel panel-error">Activities: {activitiesError.message}</p>}

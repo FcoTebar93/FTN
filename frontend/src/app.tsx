@@ -63,6 +63,15 @@ export function App() {
     setHasSession(true);
     if (window.location.pathname === "/register") {
       window.history.replaceState({}, "", "/runs");
+      return;
+    }
+    if (window.location.pathname === "/login") {
+      const next = new URL(window.location.href).searchParams.get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        window.location.replace(next);
+        return;
+      }
+      window.location.replace("/runs");
     }
   }
 
@@ -71,14 +80,16 @@ export function App() {
     setShowLogin(false);
     setHasSession(false);
     if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      const next = encodeURIComponent(returnTo);
+      window.location.href = `/login?next=${next}`;
     }
   }
 
   const url = new URL(window.location.href);
   const path = url.pathname;
-  const knownProtectedPath =
-    path === "/pagar" ||
+  /** Rutas de operador que requieren sesión cuando authRequired. /pagar queda público (cliente final). */
+  const pathRequiresSession =
     path === "/runs" ||
     path === "/catalog" ||
     path.startsWith("/workflows") ||
@@ -131,7 +142,12 @@ export function App() {
 
   if (path === "/login") {
     if (getAccessToken()) {
-      window.location.replace("/runs");
+      const next = url.searchParams.get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        window.location.replace(next);
+      } else {
+        window.location.replace("/runs");
+      }
       return (
         <div className="app app-boot">
           <p className="app-boot-text">{t.common.redirecting}</p>
@@ -148,8 +164,13 @@ export function App() {
 
   const isPublicLanding = path === "/";
 
-  if (showLogin && knownProtectedPath) {
-    return <NotFoundPage description={t.app.protectedNotFound} />;
+  if (showLogin && pathRequiresSession) {
+    return (
+      <LoginPage
+        onSuccess={handleLoginSuccess}
+        registrationEnabled={Boolean(authStatus?.registrationEnabled)}
+      />
+    );
   }
 
   const wrapped = (children: ComponentChildren) => (
