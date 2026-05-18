@@ -1,6 +1,7 @@
 import sgMail from "@sendgrid/mail";
 import nodemailer from "nodemailer";
 
+import type { InlineImagePart } from "./inline-html-images";
 import type { NotificationsConfig } from "./index";
 import { assertEmailConfig, resolveEmailTransportKind } from "./email-config";
 
@@ -10,6 +11,7 @@ export interface OutboundEmail {
   subject: string;
   text: string;
   html?: string;
+  inlineImages?: InlineImagePart[];
 }
 
 export interface EmailTransport {
@@ -19,7 +21,6 @@ export interface EmailTransport {
 
 export function createEmailTransport(config: NotificationsConfig): EmailTransport {
   const kind = assertEmailConfig(config);
-  const from = config.emailFrom!;
 
   if (kind === "smtp") {
     const port = config.smtpPort ?? 587;
@@ -37,12 +38,21 @@ export function createEmailTransport(config: NotificationsConfig): EmailTranspor
     return {
       kind: "smtp",
       async send(message) {
+        const attachments =
+          message.inlineImages?.map((img) => ({
+            filename: img.filename,
+            content: img.content,
+            contentType: img.contentType,
+            cid: img.cid,
+          })) ?? [];
+
         await transporter.sendMail({
           from: message.from,
           to: message.to.join(", "),
           subject: message.subject,
           text: message.text,
           ...(message.html ? { html: message.html } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
         });
       },
     };
@@ -52,12 +62,22 @@ export function createEmailTransport(config: NotificationsConfig): EmailTranspor
   return {
     kind: "sendgrid",
     async send(message) {
+      const sgAttachments =
+        message.inlineImages?.map((img) => ({
+          content: img.content.toString("base64"),
+          filename: img.filename,
+          type: img.contentType,
+          disposition: "inline" as const,
+          content_id: img.cid,
+        })) ?? [];
+
       await sgMail.send({
         from: message.from,
         to: message.to,
         subject: message.subject,
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
+        ...(sgAttachments.length > 0 ? { attachments: sgAttachments } : {}),
       });
     },
   };
