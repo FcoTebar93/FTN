@@ -47,6 +47,9 @@ export function WorkflowsList({ workflows, loading, error, selected, onSelect, s
   return (
     <div class="panel">
       <h2 class="panel-title">{t.workflows.title}</h2>
+      <p class="detail-muted" style={{ marginTop: "0.25rem", marginBottom: "0.5rem" }}>
+        <a href="/catalog">{t.nav.catalog}</a>
+      </p>
       <div class="workflow-filter">
         {filterOptions.map(({ value, label }) => (
           <button

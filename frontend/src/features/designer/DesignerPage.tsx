@@ -321,6 +321,9 @@ export function DesignerPage() {
           <p class="detail-muted" style={{ marginTop: "6px" }}>
             {t.designer.templatesRequireRegistered}
           </p>
+          <p class="detail-muted" style={{ marginTop: "4px" }}>
+            {t.designer.templateRunContextHint}
+          </p>
           {loadingList ? (
             <p class="detail-muted">{t.designer.loading}</p>
           ) : errorList ? (

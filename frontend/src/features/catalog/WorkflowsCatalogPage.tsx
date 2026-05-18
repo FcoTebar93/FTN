@@ -113,6 +113,9 @@ export function WorkflowsCatalogPage() {
       <div class="sidebar">
         <div class="panel">
           <h2 class="panel-title">{t.catalog.title}</h2>
+          <p class="detail-muted" style={{ marginBottom: "0.75rem" }}>
+            <a href="/runs">{t.nav.runs}</a>
+          </p>
           {error && <p class="panel panel-error">Error: {error.message}</p>}
           <ul class="workflow-list">
             {items.map((wf) => (

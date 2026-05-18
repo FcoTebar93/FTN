@@ -17,6 +17,9 @@ export function SessionToolbar({ onLogout, userLabel }: SessionToolbarProps) {
         <a className="session-toolbar-link" href="/runs">
           {t.nav.runs}
         </a>
+        <a className="session-toolbar-link" href="/catalog">
+          {t.nav.catalog}
+        </a>
         <a className="session-toolbar-link" href="/designer">
           {t.nav.designer}
         </a>

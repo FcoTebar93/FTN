@@ -9,6 +9,7 @@ import { SessionToolbar } from "./features/auth/SessionToolbar";
 import { CredentialsPage } from "./features/credentials/CredentialsPage";
 import { LandingPage } from "./features/landing/LandingPage";
 import { NotFoundPage } from "./features/errors/NotFoundPage";
+import { WorkflowsCatalogPage } from "./features/catalog/WorkflowsCatalogPage";
 import { fetchAuthStatus, getCurrentSessionSubject } from "./auth/session";
 import type { AuthStatus } from "./auth/session";
 import { API_BASE_URL, getAccessToken } from "./config";
@@ -79,6 +80,7 @@ export function App() {
   const knownProtectedPath =
     path === "/pagar" ||
     path === "/runs" ||
+    path === "/catalog" ||
     path.startsWith("/workflows") ||
     path.startsWith("/designer") ||
     path.startsWith("/credentials");
@@ -176,6 +178,10 @@ export function App() {
 
   if (path.startsWith("/credentials")) {
     return wrapped(<CredentialsPage />);
+  }
+
+  if (path === "/catalog") {
+    return wrapped(<WorkflowsCatalogPage />);
   }
 
   if (path === "/runs" || path.startsWith("/workflows")) {
