@@ -1,8 +1,14 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import { getCatalogWorkflows, startWorkflow, getWorkflowState, sendWorkflowSignal } from "../../api/workflows";
 import type { CatalogWorkflow } from "../../api/types";
 import type { WorkflowState } from "../../api/types";
 import { useUiText } from "../../i18n";
+import { WorkflowInputForm } from "../shared/WorkflowInputForm";
+import {
+  isFormRenderableSchema,
+  mergeInputWithSchema,
+  validateFormInput,
+} from "../../shared/json-schema-input";
 
 function stringifyInput(v: unknown): string {
   try {
@@ -12,17 +18,30 @@ function stringifyInput(v: unknown): string {
   }
 }
 
+function resolveInitialInput(wf: CatalogWorkflow): Record<string, unknown> {
+  const example = wf.examples?.[0]?.input;
+  return mergeInputWithSchema(wf.inputSchema, example);
+}
+
 export function WorkflowsCatalogPage() {
   const { t } = useUiText();
   const [items, setItems] = useState<CatalogWorkflow[]>([]);
   const [selected, setSelected] = useState<CatalogWorkflow | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [inputJson, setInputJson] = useState<string>("{}");
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [lastRun, setLastRun] = useState<{ workflowId: string; runId: string; version: number } | null>(null);
   const [liveState, setLiveState] = useState<WorkflowState | null>(null);
   const [signalName, setSignalName] = useState("");
   const [signalDataJson, setSignalDataJson] = useState("{}");
+
+  const canUseForm = useMemo(
+    () => Boolean(selected?.inputSchema && isFormRenderableSchema(selected.inputSchema)),
+    [selected?.inputSchema]
+  );
 
   useEffect(() => {
     getCatalogWorkflows()
@@ -52,26 +71,85 @@ export function WorkflowsCatalogPage() {
     };
   }, [lastRun]);
 
+  function fieldErrorMessage(code: string, fieldLabel: string): string {
+    switch (code) {
+      case "required":
+        return t.catalog.fieldRequired(fieldLabel);
+      case "email":
+        return t.catalog.fieldEmail(fieldLabel);
+      case "number":
+        return t.catalog.fieldNumber(fieldLabel);
+      case "minimum":
+        return t.catalog.fieldMinimum(fieldLabel);
+      default:
+        return fieldLabel;
+    }
+  }
+
   function handleSelect(wf: CatalogWorkflow) {
     setSelected(wf);
     setError(null);
     setLastRun(null);
     setLiveState(null);
-    const ex = wf.examples?.[0]?.input;
-    setInputJson(stringifyInput(ex !== undefined ? ex : {}));
+    setFieldErrors({});
+    const initial = resolveInitialInput(wf);
+    const useForm = Boolean(wf.inputSchema && isFormRenderableSchema(wf.inputSchema));
+    setFormValues(initial);
+    setInputJson(stringifyInput(initial));
+    setAdvancedMode(!useForm);
+  }
+
+  function applyExample(input: unknown) {
+    if (!selected) return;
+    const merged = mergeInputWithSchema(selected.inputSchema, input);
+    setFormValues(merged);
+    setInputJson(stringifyInput(merged));
+    setFieldErrors({});
+  }
+
+  function toggleAdvancedMode(next: boolean) {
+    if (!selected) return;
+    if (next) {
+      setInputJson(stringifyInput(formValues));
+      setAdvancedMode(true);
+      return;
+    }
+    try {
+      const parsed = inputJson.trim() === "" ? {} : JSON.parse(inputJson);
+      const merged = mergeInputWithSchema(selected.inputSchema, parsed);
+      setFormValues(merged);
+      setFieldErrors({});
+      setAdvancedMode(false);
+    } catch {
+      setError(new Error(t.catalog.inputInvalid));
+    }
   }
 
   async function handleLaunch() {
     if (!selected) return;
     let input: unknown;
-    try {
-      input = inputJson.trim() === "" ? {} : JSON.parse(inputJson);
-    } catch (e) {
-      setError(new Error(t.catalog.inputInvalid));
-      return;
+
+    if (advancedMode || !canUseForm) {
+      try {
+        input = inputJson.trim() === "" ? {} : JSON.parse(inputJson);
+      } catch {
+        setError(new Error(t.catalog.inputInvalid));
+        return;
+      }
+    } else if (selected.inputSchema) {
+      const errors = validateFormInput(selected.inputSchema, formValues);
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        return;
+      }
+      input = formValues;
+    } else {
+      input = formValues;
     }
+
     setLoading(true);
     setError(null);
+    setFieldErrors({});
     try {
       const res = await startWorkflow(selected.name, input);
       setLastRun(res);
@@ -145,12 +223,27 @@ export function WorkflowsCatalogPage() {
               {selected.description && <p class="detail-muted">{selected.description}</p>}
 
               <section class="workflow-section">
-                <h3>{t.catalog.inputJsonTitle}</h3>
-                <p class="detail-muted">
-                  {t.catalog.inputJsonHelp.replace("inputSchema", "")}
-                  <code>inputSchema</code>
-                  {t.catalog.inputJsonHelp.includes("inputSchema") ? "" : null}
-                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <h3 style={{ margin: 0 }}>{advancedMode ? t.catalog.inputJsonTitle : t.catalog.inputFormTitle}</h3>
+                  {canUseForm ? (
+                    <button
+                      type="button"
+                      class="workflow-filter-btn"
+                      onClick={() => toggleAdvancedMode(!advancedMode)}
+                    >
+                      {advancedMode ? t.catalog.formMode : t.catalog.advancedJsonMode}
+                    </button>
+                  ) : null}
+                </div>
+                {!advancedMode && canUseForm && selected.inputSchema ? (
+                  <p class="detail-muted">{t.catalog.inputFormHelp}</p>
+                ) : (
+                  <p class="detail-muted">
+                    {t.catalog.inputJsonHelp.replace("inputSchema", "")}
+                    <code>inputSchema</code>
+                  </p>
+                )}
+
                 {selected.examples && selected.examples.length > 0 && (
                   <div class="workflow-section" style={{ marginBottom: "0.5rem" }}>
                     {selected.examples.map((ex, i) => (
@@ -159,7 +252,7 @@ export function WorkflowsCatalogPage() {
                         type="button"
                         class="workflow-filter-btn"
                         style={{ marginRight: "0.5rem", marginBottom: "0.25rem" }}
-                        onClick={() => setInputJson(stringifyInput(ex.input))}
+                        onClick={() => applyExample(ex.input)}
                       >
                         {t.catalog.loadExample(i + 1)}
                         {ex.note ? ` (${ex.note})` : ""}
@@ -167,20 +260,34 @@ export function WorkflowsCatalogPage() {
                     ))}
                   </div>
                 )}
-                <textarea
-                  class="workflow-filter-btn"
-                  style={{
-                    width: "100%",
-                    minHeight: "140px",
-                    fontFamily: "monospace",
-                    fontSize: "13px",
-                    padding: "8px",
-                    boxSizing: "border-box",
-                  }}
-                  value={inputJson}
-                  onInput={(e) => setInputJson((e.target as HTMLTextAreaElement).value)}
-                  spellcheck={false}
-                />
+
+                {!advancedMode && canUseForm && selected.inputSchema ? (
+                  <WorkflowInputForm
+                    schema={selected.inputSchema}
+                    values={formValues}
+                    onChange={(next) => {
+                      setFormValues(next);
+                      setFieldErrors({});
+                    }}
+                    fieldErrors={fieldErrors}
+                    errorMessage={fieldErrorMessage}
+                  />
+                ) : (
+                  <textarea
+                    class="workflow-filter-btn"
+                    style={{
+                      width: "100%",
+                      minHeight: "140px",
+                      fontFamily: "monospace",
+                      fontSize: "13px",
+                      padding: "8px",
+                      boxSizing: "border-box",
+                    }}
+                    value={inputJson}
+                    onInput={(e) => setInputJson((e.target as HTMLTextAreaElement).value)}
+                    spellcheck={false}
+                  />
+                )}
               </section>
 
               <section class="workflow-section">
