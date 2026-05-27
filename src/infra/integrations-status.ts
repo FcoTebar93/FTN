@@ -162,6 +162,27 @@ export async function buildIntegrationsStatusForSubject(
       ? "Formato inválido en notifications: SendGrid key debe empezar por SG., SMTP requiere host/user/pass, emailFrom debe ser email, slackWebhookUrl debe ser hooks.slack.com."
       : "Configura SendGrid (SENDGRID_API_KEY + EMAIL_FROM), SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM) o slackWebhookUrl.";
 
+  const credGoogleSheets = await deps.getCredential(subject, "google_sheets");
+  const googleSaCred =
+    obj(credGoogleSheets?.secrets).serviceAccountJson ??
+    obj(credGoogleSheets?.secrets).service_account_json;
+  const googleClientEmail =
+    str(obj(credGoogleSheets?.secrets).clientEmail) ?? str(obj(credGoogleSheets?.secrets).client_email);
+  const googlePrivateKey =
+    str(obj(credGoogleSheets?.secrets).privateKey) ?? str(obj(credGoogleSheets?.secrets).private_key);
+  const googleSaEnv = str(env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON);
+  const googleSheetsFromCred = Boolean(googleSaCred || (googleClientEmail && googlePrivateKey));
+  const googleSheetsFromEnv = Boolean(googleSaEnv);
+  const googleSheetsConfigured = googleSheetsFromCred || googleSheetsFromEnv;
+  const googleSheetsSource: "credentials" | "env" | "none" = googleSheetsFromCred
+    ? "credentials"
+    : googleSheetsFromEnv
+      ? "env"
+      : "none";
+  const googleSheetsDetails = googleSheetsConfigured
+    ? undefined
+    : "Configura credencial google_sheets (secrets.serviceAccountJson o clientEmail+privateKey) o GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON.";
+
   return [
     {
       key: "stripe",
@@ -202,6 +223,13 @@ export async function buildIntegrationsStatusForSubject(
       label: "Redis",
       configured: deps.hasRedis,
       source: deps.hasRedis ? "env" : "none",
+    },
+    {
+      key: "google_sheets",
+      label: "Google Sheets",
+      configured: googleSheetsConfigured,
+      source: googleSheetsSource,
+      details: googleSheetsDetails,
     },
   ];
 }

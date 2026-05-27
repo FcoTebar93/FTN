@@ -2,6 +2,7 @@ import type Redis from "ioredis";
 import type { Pool } from "pg";
 import type { IntegrationsConfig } from "../../modules/integrations";
 import { getCredential } from "../../app/credentials";
+import { resolveServiceAccountFromSecrets } from "../../modules/integrations/google-sheets/auth";
 import type { AppConfig } from "../config";
 
 interface BuildIntegrationsConfigInput {
@@ -20,6 +21,7 @@ export async function buildIntegrationsConfig(
   const stripeCredential = await getCredential(systemSubject, "stripe");
   const twilioCredential = await getCredential(systemSubject, "twilio");
   const kycCredential = await getCredential(systemSubject, "kyc");
+  const googleSheetsCredential = await getCredential(systemSubject, "google_sheets");
   const notificationsCredential = await getCredential(systemSubject, "notifications");
   const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
@@ -91,6 +93,18 @@ export async function buildIntegrationsConfig(
     str(kycCredential?.config?.providerToken) ??
     str(config.kycProviderToken);
 
+  const serviceAccountFromCredential = googleSheetsCredential?.secrets
+    ? resolveServiceAccountFromSecrets(googleSheetsCredential.secrets)
+    : undefined;
+  const serviceAccountFromEnv = config.googleSheetsServiceAccountJson
+    ? resolveServiceAccountFromSecrets({ serviceAccountJson: config.googleSheetsServiceAccountJson })
+    : undefined;
+  const googleSheetsServiceAccount = serviceAccountFromCredential ?? serviceAccountFromEnv;
+  const googleSheetsImpersonateEmail =
+    str(googleSheetsCredential?.config?.impersonateEmail) ??
+    str(googleSheetsCredential?.config?.delegatedUser) ??
+    str(config.googleSheetsImpersonateEmail);
+
   return {
     storage: {
       enabled: !!databaseUrl,
@@ -139,6 +153,17 @@ export async function buildIntegrationsConfig(
     messaging: {
       enabled: !!redisUrl,
       ...(redis ? { redis } : {}),
+    },
+    googleSheets: {
+      enabled: !config.ftnGoogleSheetsDisabled,
+      ...(googleSheetsServiceAccount
+        ? {
+            auth: {
+              serviceAccount: googleSheetsServiceAccount,
+              ...(googleSheetsImpersonateEmail ? { impersonateEmail: googleSheetsImpersonateEmail } : {}),
+            },
+          }
+        : {}),
     },
   };
 }

@@ -53,6 +53,9 @@ export interface AppConfig {
   ftnHttpDisabled: boolean;
   ftnHttpAllowPrivateUrls: boolean;
   ftnPaymentsDisabled: boolean;
+  ftnGoogleSheetsDisabled: boolean;
+  googleSheetsServiceAccountJson?: string;
+  googleSheetsImpersonateEmail?: string;
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
   sendgridApiKey?: string;
@@ -107,6 +110,9 @@ export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
     ftnHttpDisabled: parseBoolean(env.FTN_HTTP_DISABLED),
     ftnHttpAllowPrivateUrls: parseBoolean(env.FTN_HTTP_ALLOW_PRIVATE_URLS),
     ftnPaymentsDisabled: parseBoolean(env.FTN_PAYMENTS_DISABLED),
+    ftnGoogleSheetsDisabled: parseBoolean(env.FTN_GOOGLE_SHEETS_DISABLED),
+    googleSheetsServiceAccountJson: toTrimmed(env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON),
+    googleSheetsImpersonateEmail: toTrimmed(env.GOOGLE_SHEETS_IMPERSONATE_EMAIL),
     stripeSecretKey: toTrimmed(env.STRIPE_SECRET_KEY),
     stripeWebhookSecret: toTrimmed(env.STRIPE_WEBHOOK_SECRET),
     sendgridApiKey: toTrimmed(env.SENDGRID_API_KEY),
