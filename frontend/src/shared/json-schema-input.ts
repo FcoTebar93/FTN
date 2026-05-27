@@ -12,7 +12,6 @@ function isNestedPropertySchema(prop: JsonSchema): boolean {
   return t === "object" || t === "array";
 }
 
-/** Objeto plano con propiedades escalares: apto para formulario guiado. */
 export function isFormRenderableSchema(schema?: JsonSchema): boolean {
   if (!schema) return false;
   if (normalizeType(schema.type) !== "object") return false;

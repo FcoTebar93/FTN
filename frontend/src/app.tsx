@@ -88,7 +88,6 @@ export function App() {
 
   const url = new URL(window.location.href);
   const path = url.pathname;
-  /** Rutas de operador que requieren sesión cuando authRequired. /pagar queda público (cliente final). */
   const pathRequiresSession =
     path === "/runs" ||
     path === "/catalog" ||
