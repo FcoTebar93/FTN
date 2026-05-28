@@ -1,5 +1,6 @@
 import type { ApiSecurityConfig } from "./http/security";
 import { loadApiSecurityConfigFromEnv } from "./http/security";
+import type { SecretStoreBackend } from "./secret-store";
 
 function toTrimmed(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -26,6 +27,12 @@ function parseSmtpPort(value: string | undefined): number | undefined {
 function parseIntMin(value: string | undefined, fallback: number, min: number): number {
   const parsed = Number.parseInt(value ?? String(fallback), 10);
   return Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
+}
+
+function parseSecretStoreBackend(value: string | undefined): SecretStoreBackend {
+  const normalized = (value ?? "encrypted").trim().toLowerCase();
+  if (normalized === "vault") return "vault";
+  return "encrypted";
 }
 
 export interface AppConfig {
@@ -72,6 +79,13 @@ export interface AppConfig {
   kycProviderUrl?: string;
   kycProviderToken?: string;
   credentialsEncryptionKey?: string;
+  secretStoreBackend: SecretStoreBackend;
+  vaultAddress?: string;
+  vaultToken?: string;
+  vaultMount: string;
+  vaultPathPrefix: string;
+  vaultTimeoutMs: number;
+  vaultMigrateLegacy: boolean;
   logFormatJson: boolean;
   otelDisabled: boolean;
   otelServiceName: string;
@@ -129,6 +143,13 @@ export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
     kycProviderUrl: toTrimmed(env.KYC_PROVIDER_URL),
     kycProviderToken: toTrimmed(env.KYC_PROVIDER_TOKEN),
     credentialsEncryptionKey: toTrimmed(env.FTN_CREDENTIALS_ENCRYPTION_KEY),
+    secretStoreBackend: parseSecretStoreBackend(env.FTN_SECRET_STORE_BACKEND),
+    vaultAddress: toTrimmed(env.FTN_VAULT_ADDR),
+    vaultToken: toTrimmed(env.FTN_VAULT_TOKEN),
+    vaultMount: toTrimmed(env.FTN_VAULT_MOUNT) ?? "secret",
+    vaultPathPrefix: toTrimmed(env.FTN_VAULT_PATH_PREFIX) ?? "ftn/credentials",
+    vaultTimeoutMs: parseIntMin(env.FTN_VAULT_TIMEOUT_MS, 5000, 500),
+    vaultMigrateLegacy: parseBoolean(env.FTN_VAULT_MIGRATE_LEGACY),
     logFormatJson: (env.LOG_FORMAT ?? "").trim() === "json",
     otelDisabled: parseBoolean(env.FTN_OTEL_DISABLED),
     otelServiceName: toTrimmed(env.OTEL_SERVICE_NAME) ?? "ftn-workflow-engine",

@@ -211,6 +211,41 @@ BEGIN
 END $$;
 `,
   },
+  {
+    version: 11,
+    name: "credentials_secret_reference_model",
+    sql: `
+ALTER TABLE ftn_credentials
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE ftn_credentials
+  ADD COLUMN IF NOT EXISTS secret_ref TEXT NULL;
+
+ALTER TABLE ftn_credentials
+  ADD COLUMN IF NOT EXISTS secret_backend TEXT NULL;
+
+UPDATE ftn_credentials
+SET secret_ref = encrypted_secrets
+WHERE secret_ref IS NULL AND encrypted_secrets IS NOT NULL;
+
+UPDATE ftn_credentials
+SET secret_backend = CASE
+  WHEN COALESCE(secret_ref, encrypted_secrets) LIKE 'vault:%' THEN 'vault'
+  WHEN COALESCE(secret_ref, encrypted_secrets) IS NOT NULL THEN 'encrypted'
+  ELSE NULL
+END
+WHERE secret_backend IS NULL;
+
+ALTER TABLE ftn_credentials
+  DROP CONSTRAINT IF EXISTS ftn_credentials_secret_backend_check;
+
+ALTER TABLE ftn_credentials
+  ADD CONSTRAINT ftn_credentials_secret_backend_check
+  CHECK (secret_backend IS NULL OR secret_backend IN ('encrypted', 'vault'));
+
+CREATE INDEX IF NOT EXISTS ftn_credentials_secret_backend ON ftn_credentials (secret_backend);
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {

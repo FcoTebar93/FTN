@@ -9,9 +9,10 @@ import { getUserPasswordHash, insertUser } from "./users";
 import { normalizeAndValidateUsername, validatePlainPassword } from "./http/registration";
 import { hashPassword } from "./passwords";
 import { configureCredentialsEncryptionKey } from "./credentials";
+import { buildSecretStore, configureSecretStore } from "./secret-store";
 
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
-import { configureCredentialsStore, getCredential } from "../app/credentials";
+import { configureCredentialsStore, getCredential, migrateLegacyCredentialSecretsToVault } from "../app/credentials";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { initFtnTelemetry } from "./telemetry";
@@ -49,6 +50,16 @@ function logProductionEnvWarnings(log: Logger, env: NodeJS.ProcessEnv): void {
 async function main(): Promise<void> {
   const config = loadAppConfig(process.env);
   configureCredentialsEncryptionKey(config.credentialsEncryptionKey);
+  configureSecretStore(
+    buildSecretStore({
+      backend: config.secretStoreBackend,
+      vaultAddress: config.vaultAddress,
+      vaultToken: config.vaultToken,
+      vaultMount: config.vaultMount,
+      vaultPathPrefix: config.vaultPathPrefix,
+      vaultTimeoutMs: config.vaultTimeoutMs,
+    })
+  );
   const log = createLogger({ useJson: config.logFormatJson });
   initFtnTelemetry({
     disabled: config.otelDisabled,
@@ -63,6 +74,12 @@ async function main(): Promise<void> {
 
   configureDesignerStore(pool);
   configureCredentialsStore(pool);
+  if (config.secretStoreBackend === "vault" && config.vaultMigrateLegacy) {
+    const migratedCount = await migrateLegacyCredentialSecretsToVault();
+    if (migratedCount > 0) {
+      log.info("ftn.credentials.vault.migrated", { migratedCount });
+    }
+  }
 
   const { redis, redisTaskQueue, taskQueue, redisUrl } = bootstrapTaskQueue({
     log,
