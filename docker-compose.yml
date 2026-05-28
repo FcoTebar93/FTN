@@ -1,4 +1,21 @@
 services:
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: ftn-vault
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "${FTN_VAULT_DEV_ROOT_TOKEN:-dev-only-root-token-change-me}"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    command: ["vault", "server", "-dev"]
+    ports:
+      - "${FTN_VAULT_PORT:-58200}:8200"
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   postgres:
     image: postgres:16-alpine
     container_name: ftn-postgres
@@ -40,6 +57,11 @@ services:
       FTN_ENGINE_DATABASE_URL: postgres://ftn:ftn@postgres:5432/ftn
       DATABASE_URL: postgres://ftn:ftn@postgres:5432/ftn
       REDIS_URL: redis://redis:6379
+      FTN_SECRET_STORE_BACKEND: "${FTN_SECRET_STORE_BACKEND:-vault}"
+      FTN_VAULT_ADDR: "http://vault:8200"
+      FTN_VAULT_TOKEN: "${FTN_VAULT_DEV_ROOT_TOKEN:-dev-only-root-token-change-me}"
+      FTN_VAULT_MOUNT: "${FTN_VAULT_MOUNT:-secret}"
+      FTN_VAULT_PATH_PREFIX: "${FTN_VAULT_PATH_PREFIX:-ftn/credentials}"
       FTN_JWT_SECRET: change-this-in-real-env-32-chars-min
       FTN_AUTH_LOGIN_USERNAME: ftn
       FTN_AUTH_LOGIN_PASSWORD: super-secret-ftn-login
@@ -47,6 +69,8 @@ services:
       FTN_DEFAULT_USER_PASSWORD: demo-password-123
       FRONTEND_BASE_URL: http://localhost:${FTN_FRONTEND_PORT:-5173}
     depends_on:
+      vault:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
