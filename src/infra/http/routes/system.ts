@@ -21,6 +21,32 @@ function sendDeadLetterResult(res: http.ServerResponse, id: string, result: { ok
   sendJson(res, 202, { ok: true, id });
 }
 
+async function checkVaultHealth(): Promise<{ configured: boolean; ok?: boolean; error?: string }> {
+  const backend = (process.env.FTN_SECRET_STORE_BACKEND ?? "encrypted").trim().toLowerCase();
+  if (backend !== "vault") {
+    return { configured: false };
+  }
+  const addr = process.env.FTN_VAULT_ADDR?.trim();
+  if (!addr) {
+    return { configured: true, ok: false, error: "missing FTN_VAULT_ADDR" };
+  }
+  const token = process.env.FTN_VAULT_TOKEN?.trim();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(`${addr.replace(/\/+$/, "")}/v1/sys/health`, {
+      method: "GET",
+      headers: token ? { "X-Vault-Token": token } : {},
+      signal: controller.signal,
+    });
+    return { configured: true, ok: response.ok };
+  } catch (error) {
+    return { configured: true, ok: false, error: String(error) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function trySystemRoutes(
   ctx: FtnAppRouteContext,
   req: http.IncomingMessage,
@@ -78,6 +104,43 @@ export async function trySystemRoutes(
     }
     const ok = (!ctx.pool || checks.postgres === true) && (!ctx.redis || checks.redis === true);
     sendJson(res, ok ? 200 : 503, { status: ok ? "ready" : "not_ready", checks });
+    return true;
+  }
+
+  if (req.method === "GET" && rawPath === "/health/deps") {
+    const checks: {
+      postgres: { configured: boolean; ok?: boolean };
+      redis: { configured: boolean; ok?: boolean };
+      vault: { configured: boolean; ok?: boolean; error?: string };
+    } = {
+      postgres: { configured: Boolean(ctx.pool) },
+      redis: { configured: Boolean(ctx.redis) },
+      vault: { configured: false },
+    };
+
+    if (ctx.pool) {
+      try {
+        await ctx.pool.query("SELECT 1");
+        checks.postgres.ok = true;
+      } catch {
+        checks.postgres.ok = false;
+      }
+    }
+    if (ctx.redis) {
+      try {
+        await ctx.redis.ping();
+        checks.redis.ok = true;
+      } catch {
+        checks.redis.ok = false;
+      }
+    }
+    checks.vault = await checkVaultHealth();
+
+    const ok =
+      (!checks.postgres.configured || checks.postgres.ok === true) &&
+      (!checks.redis.configured || checks.redis.ok === true) &&
+      (!checks.vault.configured || checks.vault.ok === true);
+    sendJson(res, ok ? 200 : 503, { status: ok ? "ok" : "degraded", checks });
     return true;
   }
 

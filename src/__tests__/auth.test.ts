@@ -114,6 +114,7 @@ test("checkProtectedAccess: sin credenciales configuradas, allow", () => {
 test("checkProtectedAccess: health público", () => {
   const req = mockReq({});
   assert.equal(checkProtectedAccess(req, baseConfig({ apiKey: "k" }), "GET", "/health"), "allow");
+  assert.equal(checkProtectedAccess(req, baseConfig({ apiKey: "k" }), "GET", "/health/deps"), "allow");
 });
 
 test("RBAC: API key con scopes limitados no puede designer:write", () => {

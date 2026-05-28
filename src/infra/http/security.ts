@@ -67,7 +67,10 @@ export function loadApiSecurityConfigFromEnv(env: NodeJS.ProcessEnv): ApiSecurit
 }
 
 export function isPublicPath(method: string, pathWithoutQuery: string): boolean {
-  if (method === "GET" && (pathWithoutQuery === "/health" || pathWithoutQuery === "/ready")) {
+  if (
+    method === "GET" &&
+    (pathWithoutQuery === "/health" || pathWithoutQuery === "/ready" || pathWithoutQuery === "/health/deps")
+  ) {
     return true;
   }
   if (method === "POST" && pathWithoutQuery === "/stripe/webhook") {
