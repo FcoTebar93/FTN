@@ -8,6 +8,7 @@ export interface ActivityTask {
     attempt: number;
     scheduledAt: string;
     correlationId?: string;
+    credentialSubject?: string;
   }
   
   export interface ActivityResultSuccess {

@@ -10,6 +10,7 @@ export interface ActivityExecutionContext {
   log: (message: string, meta?: Record<string, unknown>) => void;
   idempotencyKey?: string;
   correlationId?: string;
+  credentialSubject?: string;
 }
 
 export interface ActivityDefinition<TInput, TResult> {
