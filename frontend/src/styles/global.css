@@ -1081,6 +1081,59 @@
   .designer-page .workflow-section:last-child .workflow-filter-btn:first-child:hover {
     filter: brightness(1.04);
   }
+  .designer-sidebar-heading {
+    margin: 16px 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .designer-wizard-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .designer-wizard-nav .workflow-filter-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: transparent;
+  }
+  .designer-template-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .author-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .author-timeline-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .author-timeline-marker {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    margin-top: 5px;
+    background: var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .author-timeline-item--ok .author-timeline-marker {
+    background: #16a34a;
+  }
+  .author-timeline-item--wait .author-timeline-marker {
+    background: #f59e0b;
+  }
+  .author-timeline-item--fail .author-timeline-marker {
+    background: #dc2626;
+  }
   .weekday-chips {
     display: flex;
     flex-wrap: wrap;
