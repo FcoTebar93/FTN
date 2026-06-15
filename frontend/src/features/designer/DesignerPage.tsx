@@ -18,6 +18,7 @@ import { TIMEZONES, TIMEZONE_LABELS, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { slugifyProcessName, uniqueProcessId } from "./slug";
 import { STEP_BLOCK_OPTIONS, stepDisplayLabel } from "./step-labels";
+import { credentialsPathForIntegration } from "../credentials/providerSchemas";
 import { useUiText } from "../../i18n";
 import type { DesignerTemplateSummary } from "../../api/types";
 
@@ -372,12 +373,25 @@ export function DesignerPage() {
               <p class="detail-muted">{t.designer.integrationsStatusEmpty}</p>
             ) : (
               <ul class="integration-status-list">
-                {integrationsStatus.map((s) => (
+                {integrationsStatus.map((s) => {
+                  const configureHref = !s.configured ? credentialsPathForIntegration(s.key) : undefined;
+                  return (
                   <li key={s.key} class={`integration-status-item ${s.configured ? "ok" : "missing"}`}>
                     <span>{s.label}</span>
-                    <span>{s.configured ? `OK (${s.source})` : t.designer.missing}</span>
+                    <span>
+                      {s.configured ? (
+                        `OK (${s.source})`
+                      ) : configureHref ? (
+                        <a class="integration-status-configure" href={configureHref}>
+                          {t.designer.configureIntegration}
+                        </a>
+                      ) : (
+                        t.designer.missing
+                      )}
+                    </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
