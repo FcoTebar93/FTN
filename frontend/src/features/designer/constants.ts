@@ -1,5 +1,14 @@
 import type { DesignerWeekday } from "../../api/types";
 
+export const TIMEZONE_LABELS: Record<string, string> = {
+  UTC: "UTC",
+  "Europe/Madrid": "Madrid (España)",
+  "Europe/London": "Londres",
+  "America/Argentina/Buenos_Aires": "Buenos Aires",
+  "America/Mexico_City": "Ciudad de México",
+  "America/New_York": "Nueva York",
+};
+
 export const TIMEZONES = [
   "UTC",
   "Europe/Madrid",
