@@ -1,4 +1,4 @@
-export type CredentialProvider = "stripe" | "notifications" | "crm" | "twilio" | "kyc";
+export type CredentialProvider = "stripe" | "notifications" | "crm" | "twilio" | "kyc" | "google_sheets";
 import type { Locale } from "../../i18n";
 
 export type CredentialFieldLocation = "config" | "secrets";
@@ -23,6 +23,7 @@ export interface CredentialProviderSchema {
   requirements?: string[];
   fields: CredentialFieldSchema[];
   advancedJsonEnabled?: boolean;
+  oauthConnect?: boolean;
 }
 
 const isHttpUrl = (value: string): boolean => {
@@ -208,6 +209,19 @@ function buildProviderSchemas(locale: Locale): Record<CredentialProvider, Creden
     fields: [],
     advancedJsonEnabled: true,
   },
+  google_sheets: {
+    provider: "google_sheets",
+    title: "Google Sheets",
+    description: isEs
+      ? "Conecta tu cuenta de Google para leer y escribir hojas de cálculo desde tus workflows."
+      : "Connect your Google account to read and write spreadsheets from your workflows.",
+    requirements: isEs
+      ? ["Cada usuario conecta su propia cuenta de Google", "No hace falta compartir la hoja con una service account"]
+      : ["Each user connects their own Google account", "No need to share the sheet with a service account"],
+    fields: [],
+    oauthConnect: true,
+    advancedJsonEnabled: true,
+  },
   };
 }
 
@@ -216,7 +230,22 @@ export function getProviderSchemas(locale: Locale): Record<CredentialProvider, C
   return buildProviderSchemas(locale);
 }
 
-export const PROVIDERS_ORDER: CredentialProvider[] = ["stripe", "notifications", "crm", "twilio", "kyc"];
+export const PROVIDERS_ORDER: CredentialProvider[] = ["stripe", "notifications", "google_sheets", "crm", "twilio", "kyc"];
+
+/** Integraciones del designer que se configuran en /credentials */
+export const INTEGRATION_CREDENTIAL_PROVIDER: Partial<Record<string, CredentialProvider>> = {
+  stripe: "stripe",
+  notifications: "notifications",
+  google_sheets: "google_sheets",
+  twilio: "twilio",
+  kyc: "kyc",
+};
+
+export function credentialsPathForIntegration(integrationKey: string): string | undefined {
+  const provider = INTEGRATION_CREDENTIAL_PROVIDER[integrationKey];
+  if (!provider) return undefined;
+  return `/credentials?provider=${encodeURIComponent(provider)}`;
+}
 
 export function getFieldErrors(
   schema: CredentialProviderSchema,

@@ -46,6 +46,23 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+export async function deleteJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  notifyAuthFailure(res);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP error! status: ${res.status}, message: ${res.statusText} - ${text}`);
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
+}
+
 export async function putJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "PUT",

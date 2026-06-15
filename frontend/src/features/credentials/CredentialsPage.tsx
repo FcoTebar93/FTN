@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { getCredential, getIntegrationsStatus, listCredentials, saveCredential } from "../../api/credentials";
+import { getCredential, getIntegrationsStatus, listCredentials, saveCredential, startGoogleSheetsOAuth, disconnectGoogleSheetsOAuth } from "../../api/credentials";
 import type { CredentialSummary, IntegrationStatusItem } from "../../api/types";
 import { useUiText } from "../../i18n";
 import {
@@ -26,6 +26,9 @@ export function CredentialsPage() {
   const [advancedSecretsDraft, setAdvancedSecretsDraft] = useState("{}");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [oauthConnecting, setOauthConnecting] = useState(false);
+  const [oauthDisconnecting, setOauthDisconnecting] = useState(false);
+  const [connectedEmail, setConnectedEmail] = useState<string | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, IntegrationStatusItem>>({});
 
   const providerSchemas = useMemo(() => getProviderSchemas(locale), [locale]);
@@ -99,6 +102,20 @@ export function CredentialsPage() {
 
   useEffect(() => {
     refresh().catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const queryProvider = params.get("provider");
+    if (queryProvider && PROVIDERS_ORDER.includes(queryProvider as CredentialProvider)) {
+      setProvider(queryProvider as CredentialProvider);
+    }
+    if (params.get("connected") === "1") {
+      setSaveMsg(t.credentials.googleConnected);
+      window.history.replaceState({}, "", "/credentials");
+    }
+    const oauthError = params.get("oauth_error");
+    if (oauthError) {
+      setSaveMsg(`${t.credentials.googleConnectErrorPrefix} ${oauthError}`);
+      window.history.replaceState({}, "", "/credentials");
+    }
   }, []);
 
   useEffect(() => {
@@ -126,6 +143,11 @@ export function CredentialsPage() {
         setFieldValues(next);
         setAdvancedConfigDraft(JSON.stringify(config, null, 2));
         setAdvancedSecretsDraft(JSON.stringify(secrets, null, 2));
+        const email =
+          typeof config.connectedEmail === "string" && config.connectedEmail.trim()
+            ? config.connectedEmail.trim()
+            : null;
+        setConnectedEmail(email);
       })
       .catch(() => {
         const empty: FieldValues = {};
@@ -135,6 +157,7 @@ export function CredentialsPage() {
         setFieldValues(empty);
         setAdvancedConfigDraft("{}");
         setAdvancedSecretsDraft("{}");
+        setConnectedEmail(null);
       });
   }, [provider, schema.fields]);
 
@@ -185,6 +208,35 @@ export function CredentialsPage() {
     }
   }
 
+  async function handleGoogleConnect() {
+    setSaveMsg(null);
+    setOauthConnecting(true);
+    try {
+      const { url } = await startGoogleSheetsOAuth();
+      window.location.href = url;
+    } catch (e) {
+      setSaveMsg(`${t.credentials.googleConnectErrorPrefix} ${(e as Error).message}`);
+      setOauthConnecting(false);
+    }
+  }
+
+  async function handleGoogleDisconnect() {
+    setSaveMsg(null);
+    setOauthDisconnecting(true);
+    try {
+      await disconnectGoogleSheetsOAuth();
+      setConnectedEmail(null);
+      await refresh();
+      setSaveMsg(t.credentials.googleDisconnected);
+    } catch (e) {
+      setSaveMsg(`${t.credentials.googleConnectErrorPrefix} ${(e as Error).message}`);
+    } finally {
+      setOauthDisconnecting(false);
+    }
+  }
+
+  const isOauthConnected = Boolean(schema.oauthConnect && (current?.hasSecrets || connectedEmail));
+
   return (
     <main className="credentials-page">
       <header className="credentials-header">
@@ -201,6 +253,16 @@ export function CredentialsPage() {
           {PROVIDERS_ORDER.map((p) => {
             const item = items.find((x) => x.provider === p);
             const st = statusMap[p];
+            const providerSchema = providerSchemas[p];
+            const statusLabel = st
+              ? st.configured
+                ? `ok (${st.source})`
+                : "pendiente"
+              : item?.hasSecrets
+                ? "conectado"
+                : p === "google_sheets"
+                  ? "sin conectar"
+                  : "sin secrets";
             return (
               <button
                 type="button"
@@ -208,8 +270,8 @@ export function CredentialsPage() {
                 className={`credentials-provider ${provider === p ? "is-active" : ""}`}
                 onClick={() => setProvider(p)}
               >
-                <span>{p}</span>
-                <span>{st ? (st.configured ? `ok (${st.source})` : "error") : item?.hasSecrets ? "secrets: ok" : "sin secrets"}</span>
+                <span>{providerSchema.title}</span>
+                <span>{statusLabel}</span>
               </button>
             );
           })}
@@ -256,6 +318,34 @@ export function CredentialsPage() {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {schema.oauthConnect && !advancedMode ? (
+            <div className="credentials-oauth-panel">
+              {isOauthConnected ? (
+                <>
+                  <p className="credentials-oauth-status">
+                    {t.credentials.googleConnectedAs(connectedEmail ?? t.credentials.googleConnectedUnknown)}
+                  </p>
+                  <div className="credentials-actions">
+                    <button type="button" onClick={() => handleGoogleConnect()} disabled={oauthConnecting}>
+                      {oauthConnecting ? t.credentials.googleConnecting : t.credentials.googleReconnect}
+                    </button>
+                    <button type="button" onClick={() => handleGoogleDisconnect()} disabled={oauthDisconnecting}>
+                      {oauthDisconnecting ? t.credentials.googleDisconnecting : t.credentials.googleDisconnect}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>{t.credentials.googleConnectHint}</p>
+                  <div className="credentials-actions">
+                    <button type="button" onClick={() => handleGoogleConnect()} disabled={oauthConnecting}>
+                      {oauthConnecting ? t.credentials.googleConnecting : t.credentials.googleConnect}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : null}
           {!advancedMode && schema.fields.length > 0 ? (
             <div className="credentials-form-grid">
@@ -337,9 +427,11 @@ export function CredentialsPage() {
             <button type="button" onClick={() => refresh()} disabled={loading}>
               {t.credentials.reload}
             </button>
-            <button type="button" onClick={() => handleSave()} disabled={saving || (!advancedMode && hasFieldErrors)}>
-              {saving ? t.credentials.saving : t.credentials.save}
-            </button>
+            {!schema.oauthConnect || advancedMode ? (
+              <button type="button" onClick={() => handleSave()} disabled={saving || (!advancedMode && hasFieldErrors)}>
+                {saving ? t.credentials.saving : t.credentials.save}
+              </button>
+            ) : null}
           </div>
           {saveMsg ? <p>{saveMsg}</p> : null}
         </section>

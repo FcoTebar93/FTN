@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PROVIDER_SCHEMAS, countMissingRequiredFields, getFieldErrors } from "./providerSchemas";
+import { PROVIDER_SCHEMAS, countMissingRequiredFields, getFieldErrors, credentialsPathForIntegration } from "./providerSchemas";
 
 describe("credentials provider schemas", () => {
   it("valida formato de stripeSecretKey", () => {
@@ -39,9 +39,20 @@ describe("credentials provider schemas", () => {
     expect(errors.sendgridApiKey).toBeDefined();
   });
 
+  it("incluye schema de google_sheets con OAuth", () => {
+    const gs = PROVIDER_SCHEMAS.google_sheets;
+    expect(gs.title).toBe("Google Sheets");
+    expect(gs.oauthConnect).toBe(true);
+  });
+
   it("valida URL en KYC", () => {
     const kyc = PROVIDER_SCHEMAS.kyc;
     expect(getFieldErrors(kyc, { providerUrl: "foo", providerToken: "x" }).providerUrl).toContain("URL");
     expect(getFieldErrors(kyc, { providerUrl: "https://kyc.local", providerToken: "x" }).providerUrl).toBeUndefined();
+  });
+
+  it("credentialsPathForIntegration enlaza google_sheets", () => {
+    expect(credentialsPathForIntegration("google_sheets")).toBe("/credentials?provider=google_sheets");
+    expect(credentialsPathForIntegration("postgres")).toBeUndefined();
   });
 });
