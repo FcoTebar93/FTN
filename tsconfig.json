@@ -5,6 +5,7 @@
         "lib": ["ES2022"],
         "moduleResolution": "NodeNext",
         "module": "NodeNext",
+        "resolveJsonModule": true,
         "outDir": "./dist",
         "rootDir": "./src"
     },
