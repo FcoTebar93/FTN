@@ -1,4 +1,4 @@
-import heroFtnImage from "../../../../ftn.png";
+import heroFtnImage from "../../assets/ftn.png";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useUiText } from "../../i18n";
 import { LanguageToggleButton } from "../../i18n/LanguageToggleButton";
