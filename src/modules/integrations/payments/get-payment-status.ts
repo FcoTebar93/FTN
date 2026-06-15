@@ -1,17 +1,9 @@
 import Stripe from "stripe";
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import type { GetPaymentStatusInput, GetPaymentStatusResult } from "./types";
-import type { PaymentsConfig } from "./index";
+import { resolveStripeSecretKey } from "../runtime";
 
-export function getPaymentStatusActivityDefinition(config: PaymentsConfig): ActivityDefinition<GetPaymentStatusInput, GetPaymentStatusResult> {
-  const { stripeSecretKey } = config;
-
-  if (!stripeSecretKey) {
-    throw new Error("Config inválida para payments.getPaymentStatus: falta stripeSecretKey");
-  }
-
-  const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
-
+export function getPaymentStatusActivityDefinition(): ActivityDefinition<GetPaymentStatusInput, GetPaymentStatusResult> {
   return {
     name: "payments.getPaymentStatus:v1",
     maxAttempts: 3,
@@ -26,8 +18,11 @@ export function getPaymentStatusActivityDefinition(config: PaymentsConfig): Acti
       },
       additionalProperties: false,
     },
-    
+
     async execute(input: GetPaymentStatusInput, ctx: ActivityExecutionContext): Promise<GetPaymentStatusResult> {
+      const stripeSecretKey = await resolveStripeSecretKey(ctx);
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
+
       ctx.log("Consultando estado de sesión de pago", { sessionId: input.sessionId });
 
       const session = await stripe.checkout.sessions.retrieve(input.sessionId);

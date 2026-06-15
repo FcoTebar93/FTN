@@ -1,9 +1,9 @@
 import type { ActivityDefinition, ActivityExecutionContext } from "../../../core/activities";
 import { executeHttpRequest } from "../http/client";
-import type { NotificationsConfig } from "./index";
+import { integrationsConfigForActivity } from "../runtime";
 import type { SendSmsInput, SendSmsResult } from "./types";
 
-export function sendSmsActivityDefinition(_config: NotificationsConfig): ActivityDefinition<SendSmsInput, SendSmsResult> {
+export function sendSmsActivityDefinition(): ActivityDefinition<SendSmsInput, SendSmsResult> {
   return {
     name: "notifications.sendSms:v1",
     maxAttempts: 3,
@@ -19,11 +19,12 @@ export function sendSmsActivityDefinition(_config: NotificationsConfig): Activit
       },
       additionalProperties: false,
     },
-    
+
     async execute(input: SendSmsInput, ctx: ActivityExecutionContext): Promise<SendSmsResult> {
-      const accountSid = _config.twilioAccountSid?.trim();
-      const authToken = _config.twilioAuthToken?.trim();
-      const from = _config.twilioFromNumber?.trim();
+      const notifications = (await integrationsConfigForActivity(ctx)).notifications;
+      const accountSid = notifications.twilioAccountSid?.trim();
+      const authToken = notifications.twilioAuthToken?.trim();
+      const from = notifications.twilioFromNumber?.trim();
 
       if (accountSid && authToken && from) {
         const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");

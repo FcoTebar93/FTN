@@ -21,12 +21,9 @@ export const PaymentsModule: IntegrationModule = {
     const defs: AnyActivityDefinition[] = [
       validateOrderActivityDefinition() as AnyActivityDefinition,
       chargePaymentActivityDefinition() as AnyActivityDefinition,
+      stripeCreateCheckoutSessionActivityDefinition() as AnyActivityDefinition,
+      getPaymentStatusActivityDefinition() as AnyActivityDefinition,
     ];
-
-    if (config.stripeSecretKey) {
-      defs.push(stripeCreateCheckoutSessionActivityDefinition(config) as AnyActivityDefinition);
-      defs.push(getPaymentStatusActivityDefinition(config) as AnyActivityDefinition);
-    }
 
     registerDefinitions(registry, defs);
   },

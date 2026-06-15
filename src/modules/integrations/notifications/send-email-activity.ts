@@ -2,16 +2,10 @@ import type { ActivityDefinition, ActivityExecutionContext } from "../../../core
 import { createEmailTransport } from "./email-transport";
 import { assertEmailConfig } from "./email-config";
 import { extractDataUrlImagesToCid } from "./inline-html-images";
-import type { NotificationsConfig } from "./index";
+import { integrationsConfigForActivity } from "../runtime";
 import type { SendEmailInput, SendEmailResult } from "./types";
 
-export function sendEmailActivityDefinition(
-  config: NotificationsConfig
-): ActivityDefinition<SendEmailInput, SendEmailResult> {
-  const transportKind = assertEmailConfig(config);
-  const emailFrom = config.emailFrom!;
-  const transport = createEmailTransport(config);
-
+export function sendEmailActivityDefinition(): ActivityDefinition<SendEmailInput, SendEmailResult> {
   return {
     name: "notifications.sendEmail:v1",
     maxAttempts: 3,
@@ -47,6 +41,11 @@ export function sendEmailActivityDefinition(
     },
 
     async execute(input: SendEmailInput, ctx: ActivityExecutionContext): Promise<SendEmailResult> {
+      const notifications = (await integrationsConfigForActivity(ctx)).notifications;
+      const transportKind = assertEmailConfig(notifications);
+      const emailFrom = notifications.emailFrom!;
+      const transport = createEmailTransport(notifications);
+
       ctx.log("Enviando email", { to: input.to, subject: input.subject, transport: transportKind });
 
       const to = Array.isArray(input.to) ? input.to : [input.to];

@@ -2,28 +2,29 @@ import type Redis from "ioredis";
 import type { Pool } from "pg";
 import type { IntegrationsConfig } from "../../modules/integrations";
 import { getCredential } from "../../app/credentials";
-import { resolveServiceAccountFromSecrets } from "../../modules/integrations/google-sheets/auth";
+import { buildGoogleSheetsAuthConfig } from "../../modules/integrations/google-sheets/auth";
 import type { AppConfig } from "../config";
 
-interface BuildIntegrationsConfigInput {
+export interface BuildIntegrationsConfigInput {
   config: AppConfig;
   pool: Pool | undefined;
   redis: Redis | undefined;
   redisUrl: string | undefined;
 }
 
-export async function buildIntegrationsConfig(
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+export async function buildIntegrationsConfigForSubject(
+  subject: string,
   input: BuildIntegrationsConfigInput
 ): Promise<IntegrationsConfig> {
   const { config, pool, redis, redisUrl } = input;
   const databaseUrl = config.databaseUrl;
-  const systemSubject = config.systemSubject;
-  const stripeCredential = await getCredential(systemSubject, "stripe");
-  const twilioCredential = await getCredential(systemSubject, "twilio");
-  const kycCredential = await getCredential(systemSubject, "kyc");
-  const googleSheetsCredential = await getCredential(systemSubject, "google_sheets");
-  const notificationsCredential = await getCredential(systemSubject, "notifications");
-  const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const stripeCredential = await getCredential(subject, "stripe");
+  const twilioCredential = await getCredential(subject, "twilio");
+  const kycCredential = await getCredential(subject, "kyc");
+  const googleSheetsCredential = await getCredential(subject, "google_sheets");
+  const notificationsCredential = await getCredential(subject, "notifications");
 
   const stripeSecretKey =
     str(stripeCredential?.secrets?.stripeSecretKey) ??
@@ -93,17 +94,18 @@ export async function buildIntegrationsConfig(
     str(kycCredential?.config?.providerToken) ??
     str(config.kycProviderToken);
 
-  const serviceAccountFromCredential = googleSheetsCredential?.secrets
-    ? resolveServiceAccountFromSecrets(googleSheetsCredential.secrets)
-    : undefined;
-  const serviceAccountFromEnv = config.googleSheetsServiceAccountJson
-    ? resolveServiceAccountFromSecrets({ serviceAccountJson: config.googleSheetsServiceAccountJson })
-    : undefined;
-  const googleSheetsServiceAccount = serviceAccountFromCredential ?? serviceAccountFromEnv;
-  const googleSheetsImpersonateEmail =
-    str(googleSheetsCredential?.config?.impersonateEmail) ??
-    str(googleSheetsCredential?.config?.delegatedUser) ??
-    str(config.googleSheetsImpersonateEmail);
+  const googleSheetsOauthRedirectUri =
+    config.googleSheetsOauthRedirectUri ??
+    `http://localhost:${config.port}/integrations/google-sheets/oauth/callback`;
+  const googleSheetsAuth = buildGoogleSheetsAuthConfig({
+    credentialSecrets: googleSheetsCredential?.secrets,
+    credentialConfig: googleSheetsCredential?.config,
+    serviceAccountJsonEnv: config.googleSheetsServiceAccountJson,
+    impersonateEmailEnv: config.googleSheetsImpersonateEmail,
+    oauthClientId: config.googleSheetsOauthClientId,
+    oauthClientSecret: config.googleSheetsOauthClientSecret,
+    oauthRedirectUri: googleSheetsOauthRedirectUri,
+  });
 
   return {
     storage: {
@@ -156,14 +158,12 @@ export async function buildIntegrationsConfig(
     },
     googleSheets: {
       enabled: !config.ftnGoogleSheetsDisabled,
-      ...(googleSheetsServiceAccount
-        ? {
-            auth: {
-              serviceAccount: googleSheetsServiceAccount,
-              ...(googleSheetsImpersonateEmail ? { impersonateEmail: googleSheetsImpersonateEmail } : {}),
-            },
-          }
-        : {}),
+      ...(googleSheetsAuth ? { auth: googleSheetsAuth } : {}),
     },
   };
+}
+
+/** Config de arranque (catálogo + fallback global). Usa subject `system` + env. */
+export async function buildIntegrationsConfig(input: BuildIntegrationsConfigInput): Promise<IntegrationsConfig> {
+  return buildIntegrationsConfigForSubject(input.config.systemSubject, input);
 }

@@ -1,7 +1,6 @@
 import type { IntegrationModule, IntegrationModuleConfig } from "../types";
 import type { ActivityRegistry } from "../../../core/activity-registry";
 import type { AnyActivityDefinition } from "../../../core/activities";
-import { canRegisterSendEmail } from "./email-transport";
 import { sendEmailActivityDefinition } from "./send-email-activity";
 import { sendSlackMessageActivityDefinition } from "./send-slack-message-activity";
 import { sendWebhookActivityDefinition } from "./send-webhook-activity";
@@ -27,18 +26,14 @@ export const NotificationsModule: IntegrationModule = {
   registerActivities(registry: ActivityRegistry, config: NotificationsConfig) {
     if (!config.enabled) return;
 
-    const defs: AnyActivityDefinition[] = [];
-
-    if (canRegisterSendEmail(config)) {
-      defs.push(sendEmailActivityDefinition(config) as AnyActivityDefinition);
-    }
+    const defs: AnyActivityDefinition[] = [sendEmailActivityDefinition() as AnyActivityDefinition];
 
     if (config.slackWebhookUrl) {
       defs.push(sendSlackMessageActivityDefinition(config) as AnyActivityDefinition);
     }
 
     defs.push(sendWebhookActivityDefinition(config) as AnyActivityDefinition);
-    defs.push(sendSmsActivityDefinition(config) as AnyActivityDefinition);
+    defs.push(sendSmsActivityDefinition() as AnyActivityDefinition);
 
     registerDefinitions(registry, defs);
   },
