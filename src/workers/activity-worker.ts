@@ -43,6 +43,7 @@ export class ActivityWorker {
       attempt: task.attempt,
       scheduledAt: new Date(task.scheduledAt),
       ...(task.correlationId ? { correlationId: task.correlationId } : {}),
+      ...(task.credentialSubject ? { credentialSubject: task.credentialSubject } : {}),
       log: (msg: string, meta?: Record<string, unknown>) => {
         console.log(`[activity:${def.name}] ${msg}`, {
           ...meta,

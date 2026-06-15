@@ -8,6 +8,7 @@ import type { ActivityTask as ActivityPayload } from "../shared/activity-types";
 import type { ActivityTask, Task, TimerTask } from "../shared/tasks";
 import { buildTimerTask, buildWorkflowTask } from "../shared/task-factories";
 import { getWorkflow, getWorkflowDescriptor } from "../app/workflows";
+import { resolveCredentialSubject } from "../app/credential-subject";
 import { ConcurrencyError } from "../modules/event-store";
 import type { Logger } from "./logger";
 import {
@@ -53,6 +54,13 @@ function generateRunId(): RunId {
 
 function makeWorkflowKey(workflowId: WorkflowId, runId: RunId): WorkflowKey {
     return `${workflowId}:${runId}`
+}
+
+function startedWorkflowName(fullHistory: WorkflowEvent[]): string | undefined {
+  const started = fullHistory.find(
+    (event): event is Extract<WorkflowEvent, { type: "WorkflowStarted" }> => event.type === "WorkflowStarted"
+  );
+  return started?.payload.name;
 }
 
 function generateActivityId(): ActivityId {
@@ -825,12 +833,16 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
         lastEventVersion = appended[appended.length - 1].version;
         const activityTasks: ActivityTask[] = [];
         const timerTasks: TimerTask[] = [];
+        const workflowNameForCredentials = defEntry?.name ?? startedWorkflowName(fullHistory);
 
         for (const ev of appended) {
           currentState = this.engine.applyEvent(currentState, ev);
 
           if (ev.type === "ActivityScheduled") {
             const { activityId, activityName, input } = ev.payload;
+            const credentialSubject = workflowNameForCredentials
+              ? resolveCredentialSubject(workflowNameForCredentials)
+              : undefined;
             const payload: ActivityPayload = {
               id: activityId,
               workflowId: ev.workflowId,
@@ -841,6 +853,7 @@ export class InMemoryWorkflowRuntime implements WorkflowRuntime {
               attempt: 1,
               scheduledAt: ev.startedAt,
               ...(correlationId ? { correlationId } : {}),
+              ...(credentialSubject ? { credentialSubject } : {}),
             };
 
             const task: ActivityTask = {
