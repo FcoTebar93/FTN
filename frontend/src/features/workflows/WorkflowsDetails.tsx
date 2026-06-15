@@ -1,8 +1,9 @@
 import { useState, useMemo } from "preact/hooks";
 import type { WorkflowState, WorkflowEvent, StepRecord } from "../../api/types";
-import { useUiText } from "../../i18n";
+import { useLocale, useUiText } from "../../i18n";
+import { authorRunSummary, buildAuthorTimeline, friendlyStatus } from "./run-friendly";
 
-type TabId = "estado" | "eventos" | "steps";
+type TabId = "resumen" | "pasos" | "tecnico";
 
 interface Props {
   selected: { workflowId: string; runId: string } | null;
@@ -25,9 +26,17 @@ function payloadSummary(payload: unknown): string {
   }
 }
 
+function stepDetail(step: StepRecord): string {
+  if (step.activityName) return step.activityName;
+  if (step.wakeAt) return step.wakeAt;
+  if (step.branchChosen) return step.branchChosen;
+  return "—";
+}
+
 export function WorkflowDetail({ selected, state, events, steps, loading, error, onRefresh, onCancel }: Props) {
   const { t } = useUiText();
-  const [activeTab, setActiveTab] = useState<TabId>("estado");
+  const [locale] = useLocale();
+  const [activeTab, setActiveTab] = useState<TabId>("resumen");
   const [showStateJson, setShowStateJson] = useState(false);
   const [expandedPayloadIds, setExpandedPayloadIds] = useState<Record<string, boolean>>({});
   const [isCancelling, setIsCancelling] = useState(false);
@@ -41,9 +50,9 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
   if (!state) return <div class="panel">{t.workflows.stateNotFound}</div>;
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "estado", label: t.workflows.tabState },
-    { id: "eventos", label: t.workflows.tabEvents },
-    { id: "steps", label: t.workflows.tabSteps },
+    { id: "resumen", label: t.workflows.tabSummary },
+    { id: "pasos", label: t.workflows.tabSteps },
+    { id: "tecnico", label: t.workflows.tabTechnical },
   ];
 
   const sortedEvents = useMemo(() => {
@@ -55,11 +64,23 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
     );
   }, [events]);
 
+  const timeline = useMemo(
+    () => buildAuthorTimeline(events, steps, locale),
+    [events, steps, locale]
+  );
+
+  const summaryLines = useMemo(() => authorRunSummary(state, locale), [state, locale]);
+
+  const displayTitle = state.id.includes("::")
+    ? state.id.split("::").slice(1).join("::")
+    : state.id;
+
   return (
     <div class="panel">
-      <h2 class="panel-title">
-        {state.id} / {state.runId}
-      </h2>
+      <h2 class="panel-title">{displayTitle}</h2>
+      <p class="detail-muted">
+        {state.startedAt ? new Date(state.startedAt).toLocaleString() : t.workflows.noDate}
+      </p>
       <div class="workflow-detail-header">
         <button type="button" class="workflow-filter-btn" style={{ marginRight: "8px" }} onClick={onRefresh}>
           {t.workflows.refresh}
@@ -83,62 +104,7 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
             {isCancelling ? t.workflows.cancelling : t.workflows.cancelRun}
           </button>
         )}
-        <button
-          type="button"
-          class="workflow-filter-btn"
-          style={{ marginRight: "8px" }}
-          onClick={() => {
-            const payload = {
-              state,
-              events: events ?? [],
-              steps: steps ?? [],
-              exportedAt: new Date().toISOString(),
-            };
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-            const a = document.createElement("a");
-            const safeId = `${state.id}-${state.runId}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
-            a.href = URL.createObjectURL(blob);
-            a.download = `ftn-run-${safeId}.json`;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          }}
-        >
-          {t.workflows.exportJson}
-        </button>
-        <span class={`workflow-status status-${state.status}`}>{state.status}</span>
-        <span>
-          {t.workflows.started}: {state.startedAt ?? "N/A"}
-        </span>
-        {state.completedAt && (
-          <span>
-            {t.workflows.completed}: {state.completedAt}
-          </span>
-        )}
-        {state.failedAt && (
-          <span>
-            {t.workflows.failed}: {state.failedAt}
-          </span>
-        )}
-        {state.failureReason && (
-          <span>
-            {t.workflows.reason}: {state.failureReason}
-          </span>
-        )}
-        {state.cancelledAt && (
-          <span>
-            {t.workflows.cancelled}: {state.cancelledAt}
-          </span>
-        )}
-        {state.cancellationReason && (
-          <span>
-            {t.workflows.cancelReason}: {state.cancellationReason}
-          </span>
-        )}
-        {state.cancellationRequestedBy && (
-          <span>
-            {t.workflows.requestedBy}: {state.cancellationRequestedBy}
-          </span>
-        )}
+        <span class={`workflow-status status-${state.status}`}>{friendlyStatus(state.status, locale)}</span>
         {state.status === "running" && (
           <span class="workflow-live-pill">
             <span class="workflow-live-dot" />
@@ -161,9 +127,100 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
       </div>
 
       <div class="tab-panel">
-      {activeTab === "estado" && (
+        {activeTab === "resumen" && (
           <section class="workflow-section">
             <h3>{t.workflows.summary}</h3>
+            <ul class="detail-list author-summary-list">
+              {summaryLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <h3>{t.workflows.timelineTitle}</h3>
+            {timeline.length === 0 ? (
+              <p class="detail-muted">{t.workflows.noTimelineYet}</p>
+            ) : (
+              <ul class="author-timeline">
+                {timeline.map((item, idx) => (
+                  <li key={`${item.label}-${idx}`} class={`author-timeline-item author-timeline-item--${item.tone}`}>
+                    <span class="author-timeline-marker" aria-hidden="true" />
+                    <div>
+                      {item.at ? <div class="detail-muted">{new Date(item.at).toLocaleString()}</div> : null}
+                      <div>{item.label}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {state.failureReason && (
+              <p class="panel panel-error" style={{ marginTop: "12px" }}>
+                {state.failureReason}
+              </p>
+            )}
+          </section>
+        )}
+
+        {activeTab === "pasos" && (
+          <section class="workflow-section">
+            <h3>{t.workflows.stepsTitle}</h3>
+            {!steps || steps.length === 0 ? (
+              <p class="detail-muted">{t.workflows.noStepsYet}</p>
+            ) : (
+              <div class="steps-table-wrap">
+                <table class="steps-table steps-table--author">
+                  <thead>
+                    <tr>
+                      <th class="steps-th">{t.workflows.stepColumnName}</th>
+                      <th class="steps-th">{t.workflows.stepColumnStatus}</th>
+                      <th class="steps-th">{t.workflows.stepColumnDetail}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {steps.map((s) => (
+                      <tr key={s.id} class="steps-tr">
+                        <td class="steps-td">{s.id}</td>
+                        <td class="steps-td">
+                          <span class={`step-status step-status--cell status-${s.status}`}>
+                            {friendlyStatus(s.status, locale)}
+                          </span>
+                        </td>
+                        <td class="steps-td">{stepDetail(s)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "tecnico" && (
+          <section class="workflow-section">
+            <div class="workflow-detail-header" style={{ marginBottom: "12px" }}>
+              <button
+                type="button"
+                class="workflow-filter-btn"
+                onClick={() => {
+                  const payload = {
+                    state,
+                    events: events ?? [],
+                    steps: steps ?? [],
+                    exportedAt: new Date().toISOString(),
+                  };
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+                  const a = document.createElement("a");
+                  const safeId = `${state.id}-${state.runId}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `ftn-run-${safeId}.json`;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                }}
+              >
+                {t.workflows.exportJson}
+              </button>
+            </div>
+            <p class="detail-muted">
+              {t.workflows.internalIds}: <code>{state.id}</code> / <code>{state.runId}</code>
+            </p>
             <ul class="detail-list">
               <li>
                 {t.workflows.version}: {state.version}
@@ -172,74 +229,14 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
                 {t.workflows.diagnostics}: pendientes=
                 {state.pendingActivities.length + state.pendingTimers.length + (state.pendingSignalWaits?.length ?? 0)}
                 {" · "}
-                retries={(events ?? []).filter((e) => e.type === "RetryAttemptStarted").length}
+                {t.workflows.retries}={(events ?? []).filter((e) => e.type === "RetryAttemptStarted").length}
               </li>
               {events && events.length > 0 && (
                 <li>
                   {t.workflows.lastEvent}: {events[events.length - 1]!.type}
                 </li>
               )}
-              {state.result !== undefined && (
-                <li>Resultado: <code class="inline-code">{payloadSummary(state.result)}</code></li>
-              )}
             </ul>
-            <h3>{t.workflows.pendingActivities}</h3>
-            {state.pendingActivities.length === 0 ? (
-              <p class="detail-muted">{t.workflows.noPendingActivities}</p>
-            ) : (
-              <ul class="detail-list">
-                {state.pendingActivities.map((a) => (
-                <li key={a.id}>
-                  <strong>{a.name}</strong> (id: {a.id}
-                  {a.attempt != null ? ` · intento ${a.attempt}` : ""})
-                  — input: {payloadSummary(a.input)}
-                </li>
-              ))}
-              </ul>
-            )}
-            <h3>{t.workflows.completedActivities}</h3>
-            {state.completedActivities.length === 0 ? (
-              <p class="detail-muted">{t.workflows.noCompletedActivities}</p>
-            ) : (
-              <ul class="detail-list">
-                {state.completedActivities.map((a) => (
-                <li key={a.id}>
-                  <strong>{a.name}</strong> (id: {a.id}
-                  {a.attempt != null ? ` · intento ${a.attempt}` : ""})
-                  — result: {payloadSummary(a.result)}
-                </li>
-              ))}
-              </ul>
-            )}
-            <h3>{t.workflows.pendingTimers}</h3>
-            {state.pendingTimers.length === 0 ? (
-              <p class="detail-muted">{t.workflows.noPendingTimers}</p>
-            ) : (
-              <ul class="detail-list">
-                {state.pendingTimers.map((t, i) => (
-                  <li key={i}>
-                    {t.workflows.wakeAt}: {t.wakeAt}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div class="workflow-section">
-              <button
-                type="button"
-                class="btn-toggle-json"
-                onClick={() => setShowStateJson((v) => !v)}
-              >
-                {showStateJson ? t.workflows.hideJson : t.workflows.showJson}
-              </button>
-              {showStateJson && (
-                <pre class="state-json-block">{JSON.stringify(state, null, 2)}</pre>
-              )}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "eventos" && (
-          <section class="workflow-section">
             <h3>{t.workflows.eventsTitle}</h3>
             {sortedEvents.length === 0 ? (
               <p class="detail-muted">{t.workflows.noEventsYet}</p>
@@ -279,56 +276,18 @@ export function WorkflowDetail({ selected, state, events, steps, loading, error,
                 })}
               </ul>
             )}
-          </section>
-        )}
-
-{activeTab === "steps" && (
-          <section class="workflow-section">
-            <h3>{t.workflows.stepsTitle}</h3>
-            {!steps || steps.length === 0 ? (
-              <p class="detail-muted">{t.workflows.noStepsYet}</p>
-            ) : (
-              <div class="steps-table-wrap">
-                <table class="steps-table">
-                  <thead>
-                    <tr>
-                      <th class="steps-th steps-th--id">Id</th>
-                      <th class="steps-th steps-th--kind">Kind</th>
-                      <th class="steps-th steps-th--status">Status</th>
-                      <th class="steps-th steps-th--activity">Activity</th>
-                      <th class="steps-th steps-th--wake">Wake at</th>
-                      <th class="steps-th steps-th--branch">Branch</th>
-                      <th class="steps-th steps-th--attempts">Attempts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {steps.map((s) => (
-                      <tr key={s.id} class="steps-tr">
-                        <td class="steps-td steps-td--id" title={s.id}>
-                          <code class="steps-id">{s.id}</code>
-                        </td>
-                        <td class="steps-td steps-td--kind">{s.kind}</td>
-                        <td class="steps-td steps-td--status">
-                          <span class={`step-status step-status--cell status-${s.status}`}>
-                            {s.status}
-                          </span>
-                        </td>
-                        <td class="steps-td steps-td--activity">
-                          {s.activityName ?? (s.activityId ? <code class="steps-activity-id">{s.activityId}</code> : "—")}
-                        </td>
-                        <td class="steps-td steps-td--wake">{s.wakeAt ?? "—"}</td>
-                        <td class="steps-td steps-td--branch">{s.branchChosen ?? "—"}</td>
-                        <td class="steps-td steps-td--attempts">
-                          {s.attempts != null
-                            ? `${s.attempts}${s.maxAttempts != null ? ` / ${s.maxAttempts}` : ""}`
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <div class="workflow-section">
+              <button
+                type="button"
+                class="btn-toggle-json"
+                onClick={() => setShowStateJson((v) => !v)}
+              >
+                {showStateJson ? t.workflows.hideJson : t.workflows.showJson}
+              </button>
+              {showStateJson && (
+                <pre class="state-json-block">{JSON.stringify(state, null, 2)}</pre>
+              )}
+            </div>
           </section>
         )}
       </div>
