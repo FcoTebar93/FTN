@@ -32,7 +32,12 @@ export async function tryPaymentsRoutes(
     if (!parsedResult.ok) return true;
     try {
       const { successUrl, cancelUrl, customerEmail, currency, lineItems, metadata } = parsedResult.value;
-      const key = ctx.stripeSecretKey;
+      const workflowId = metadata?.workflowId;
+      const runId = metadata?.runId;
+      let key = ctx.stripeSecretKey;
+      if (workflowId && runId && ctx.resolveStripeSecretKeyForRun) {
+        key = (await ctx.resolveStripeSecretKeyForRun(workflowId, runId)) ?? key;
+      }
       if (!key) {
         sendError(res, 500, "STRIPE_SECRET_KEY not configured");
         return true;

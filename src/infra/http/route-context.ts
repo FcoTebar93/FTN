@@ -37,6 +37,15 @@ export interface FtnAppRouteContext {
   tenantId?: string;
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
+  resolveStripeSecretKeyForRun?: (workflowId: string, runId: string) => Promise<string | undefined>;
+  googleSheetsOAuth?: {
+    enabled: boolean;
+    clientId?: string;
+    clientSecret?: string;
+    redirectUri?: string;
+    frontendBaseUrl: string;
+    stateSigningSecret?: string;
+  };
   getIdempotentWorkflowStart: (
     key: string
   ) =>
