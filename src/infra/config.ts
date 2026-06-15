@@ -63,6 +63,10 @@ export interface AppConfig {
   ftnGoogleSheetsDisabled: boolean;
   googleSheetsServiceAccountJson?: string;
   googleSheetsImpersonateEmail?: string;
+  googleSheetsOauthClientId?: string;
+  googleSheetsOauthClientSecret?: string;
+  googleSheetsOauthRedirectUri?: string;
+  frontendBaseUrl: string;
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
   sendgridApiKey?: string;
@@ -86,6 +90,7 @@ export interface AppConfig {
   vaultPathPrefix: string;
   vaultTimeoutMs: number;
   vaultMigrateLegacy: boolean;
+  seedUserCredentialsFromEnv: boolean;
   logFormatJson: boolean;
   otelDisabled: boolean;
   otelServiceName: string;
@@ -127,6 +132,10 @@ export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
     ftnGoogleSheetsDisabled: parseBoolean(env.FTN_GOOGLE_SHEETS_DISABLED),
     googleSheetsServiceAccountJson: toTrimmed(env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON),
     googleSheetsImpersonateEmail: toTrimmed(env.GOOGLE_SHEETS_IMPERSONATE_EMAIL),
+    googleSheetsOauthClientId: toTrimmed(env.GOOGLE_SHEETS_OAUTH_CLIENT_ID),
+    googleSheetsOauthClientSecret: toTrimmed(env.GOOGLE_SHEETS_OAUTH_CLIENT_SECRET),
+    googleSheetsOauthRedirectUri: toTrimmed(env.GOOGLE_SHEETS_OAUTH_REDIRECT_URI),
+    frontendBaseUrl: toTrimmed(env.FRONTEND_BASE_URL) ?? "http://localhost:5173",
     stripeSecretKey: toTrimmed(env.STRIPE_SECRET_KEY),
     stripeWebhookSecret: toTrimmed(env.STRIPE_WEBHOOK_SECRET),
     sendgridApiKey: toTrimmed(env.SENDGRID_API_KEY),
@@ -150,6 +159,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv): AppConfig {
     vaultPathPrefix: toTrimmed(env.FTN_VAULT_PATH_PREFIX) ?? "ftn/credentials",
     vaultTimeoutMs: parseIntMin(env.FTN_VAULT_TIMEOUT_MS, 5000, 500),
     vaultMigrateLegacy: parseBoolean(env.FTN_VAULT_MIGRATE_LEGACY),
+    seedUserCredentialsFromEnv: env.FTN_SEED_USER_CREDENTIALS_FROM_ENV !== "0",
     logFormatJson: (env.LOG_FORMAT ?? "").trim() === "json",
     otelDisabled: parseBoolean(env.FTN_OTEL_DISABLED),
     otelServiceName: toTrimmed(env.OTEL_SERVICE_NAME) ?? "ftn-workflow-engine",

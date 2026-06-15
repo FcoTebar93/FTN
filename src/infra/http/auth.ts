@@ -291,6 +291,13 @@ export function requiredScopesForRoute(method: string, pathWithoutQuery: string)
     return [FTN_SCOPES.credentialsRead];
   }
 
+  if (p === "/integrations/google-sheets/oauth/start" && method === "GET") {
+    return [FTN_SCOPES.credentialsWrite];
+  }
+  if (p === "/integrations/google-sheets/oauth" && method === "DELETE") {
+    return [FTN_SCOPES.credentialsWrite];
+  }
+
   if (p.startsWith("/workflows")) {
     if (method === "POST" && p.endsWith("/signals")) {
       return [FTN_SCOPES.workflowsWrite];

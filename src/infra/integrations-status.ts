@@ -170,18 +170,26 @@ export async function buildIntegrationsStatusForSubject(
     str(obj(credGoogleSheets?.secrets).clientEmail) ?? str(obj(credGoogleSheets?.secrets).client_email);
   const googlePrivateKey =
     str(obj(credGoogleSheets?.secrets).privateKey) ?? str(obj(credGoogleSheets?.secrets).private_key);
+  const googleRefreshCred =
+    str(obj(credGoogleSheets?.secrets).refreshToken) ?? str(obj(credGoogleSheets?.secrets).refresh_token);
+  const googleOauthClientId = str(env.GOOGLE_SHEETS_OAUTH_CLIENT_ID);
+  const googleOauthClientSecret = str(env.GOOGLE_SHEETS_OAUTH_CLIENT_SECRET);
+  const googleOauthServerReady = Boolean(googleOauthClientId && googleOauthClientSecret);
   const googleSaEnv = str(env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON);
-  const googleSheetsFromCred = Boolean(googleSaCred || (googleClientEmail && googlePrivateKey));
+  const googleSheetsFromOauthCred = Boolean(googleRefreshCred && googleOauthServerReady);
+  const googleSheetsFromSaCred = Boolean(googleSaCred || (googleClientEmail && googlePrivateKey));
   const googleSheetsFromEnv = Boolean(googleSaEnv);
-  const googleSheetsConfigured = googleSheetsFromCred || googleSheetsFromEnv;
-  const googleSheetsSource: "credentials" | "env" | "none" = googleSheetsFromCred
+  const googleSheetsConfigured = googleSheetsFromOauthCred || googleSheetsFromSaCred || googleSheetsFromEnv;
+  const googleSheetsSource: "credentials" | "env" | "none" = googleSheetsFromOauthCred || googleSheetsFromSaCred
     ? "credentials"
     : googleSheetsFromEnv
       ? "env"
       : "none";
   const googleSheetsDetails = googleSheetsConfigured
     ? undefined
-    : "Configura credencial google_sheets (secrets.serviceAccountJson o clientEmail+privateKey) o GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON.";
+    : googleOauthServerReady
+      ? "Conecta tu cuenta de Google desde Credenciales o configura serviceAccountJson / GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON."
+      : "Conecta Google desde Credenciales (OAuth) o configura GOOGLE_SHEETS_OAUTH_CLIENT_ID/SECRET en el servidor.";
 
   return [
     {

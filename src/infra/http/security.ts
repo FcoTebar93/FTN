@@ -88,6 +88,9 @@ export function isPublicPath(method: string, pathWithoutQuery: string): boolean 
   if (method === "POST" && pathWithoutQuery === "/auth/refresh") {
     return true;
   }
+  if (method === "GET" && pathWithoutQuery === "/integrations/google-sheets/oauth/callback") {
+    return true;
+  }
   // Checkout público: enlace /pagar del email (workflowId + runId en metadata) sin sesión FTN.
   if (method === "POST" && pathWithoutQuery === "/pay/checkout") {
     return true;

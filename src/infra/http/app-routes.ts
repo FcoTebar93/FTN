@@ -8,6 +8,7 @@ import { tryAuthAndAuditRoutes } from "./routes/auth";
 import { trySystemRoutes } from "./routes/system";
 import { tryDesignerReadRoutes, tryDesignerWriteRoutes } from "./routes/designer";
 import { tryCredentialsRoutes } from "./routes/credentials";
+import { tryGoogleSheetsOAuthRoutes } from "./routes/google-sheets-oauth";
 import { tryWorkflowsRoutes } from "./routes/workflows";
 import { tryPaymentsRoutes } from "./routes/payments";
 import type { FtnAppRouteContext } from "./route-context";
@@ -28,6 +29,7 @@ export async function handleAppRoutes(
   if (await trySystemRoutes(ctx, req, res, rawPath)) return;
   if (await tryDesignerReadRoutes(ctx, req, res, rawPath)) return;
   if (await tryCredentialsRoutes(ctx, req, res, rawPath)) return;
+  if (await tryGoogleSheetsOAuthRoutes(ctx, req, res, rawPath)) return;
   if (await tryDesignerWriteRoutes(ctx, req, res, rawPath)) return;
   if (await tryWorkflowsRoutes(ctx, req, res, rawPath)) return;
   if (await tryPaymentsRoutes(ctx, req, res, rawPath)) return;

@@ -72,6 +72,15 @@ interface BootstrapHttpServerInput {
   acknowledgeDeadLetter: (id: string) => { ok: true } | { ok: false; error: string };
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
+  resolveStripeSecretKeyForRun?: (workflowId: string, runId: string) => Promise<string | undefined>;
+  googleSheetsOAuth?: {
+    enabled: boolean;
+    clientId?: string;
+    clientSecret?: string;
+    redirectUri?: string;
+    frontendBaseUrl: string;
+    stateSigningSecret?: string;
+  };
   listWorkflowsPublic: () => WorkflowPublicDescriptor[];
   getWorkflowPublicDescriptor: (name: string) => WorkflowPublicDescriptor | undefined;
   log: Logger;
@@ -191,6 +200,8 @@ export function bootstrapHttpServer(input: BootstrapHttpServerInput): http.Serve
               tenantId,
               stripeSecretKey: input.stripeSecretKey,
               stripeWebhookSecret: input.stripeWebhookSecret,
+              resolveStripeSecretKeyForRun: input.resolveStripeSecretKeyForRun,
+              googleSheetsOAuth: input.googleSheetsOAuth,
               getIdempotentWorkflowStart: input.getIdempotentWorkflowStart,
               saveIdempotentWorkflowStart: input.saveIdempotentWorkflowStart,
               listDeadLetters: input.listDeadLetters,

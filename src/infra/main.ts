@@ -14,13 +14,16 @@ import { buildSecretStore, configureSecretStore } from "./secret-store";
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
 import { configureDesignerTemplateStore, loadAllTemplatesFromDatabase } from "../app/designer-template-store";
 import { configureCredentialsStore, getCredential, migrateLegacyCredentialSecretsToVault } from "../app/credentials";
+import { seedUserCredentialsFromEnv } from "../app/seed-user-credentials-from-env";
+import { configureIntegrationsRuntime } from "../modules/integrations/runtime";
+import { buildIntegrationsConfig, buildIntegrationsConfigForSubject } from "./bootstrap/integrations";
+import { resolveStripeSecretKeyForRun } from "../app/resolve-credentials-for-run";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
 import { initFtnTelemetry } from "./telemetry";
 import { createWorkflowStartService } from "./workflow-start-service";
 import { bootstrapPersistence } from "./bootstrap/persistence";
 import { bootstrapTaskQueue } from "./bootstrap/task-queue";
-import { buildIntegrationsConfig } from "./bootstrap/integrations";
 import { bootstrapWorkers } from "./bootstrap/workers";
 import { bootstrapHttpServer } from "./bootstrap/http";
 import { loadAppConfig } from "./config";
@@ -90,7 +93,9 @@ async function main(): Promise<void> {
   });
 
   const systemSubject = config.systemSubject;
-  const integrationsConfig = await buildIntegrationsConfig({ config, pool, redis, redisUrl });
+  const integrationsBootstrapInput = { config, pool, redis, redisUrl };
+  configureIntegrationsRuntime((subject) => buildIntegrationsConfigForSubject(subject, integrationsBootstrapInput));
+  const integrationsConfig = await buildIntegrationsConfig(integrationsBootstrapInput);
 
   const activities = new InMemoryActivityRegistry();
   registerIntegrations(activities, integrationsConfig);
@@ -197,6 +202,16 @@ async function main(): Promise<void> {
           log.info("ftn.auth.defaultUser.created", { username: defaultUsername });
         }
       }
+      if (config.seedUserCredentialsFromEnv && pool) {
+        try {
+          const seedResult = await seedUserCredentialsFromEnv(defaultUsername, config);
+          if (seedResult.seeded.length > 0) {
+            log.info("ftn.credentials.seededFromEnv", { ...seedResult });
+          }
+        } catch (e) {
+          log.error("ftn.credentials.seedFromEnv.failed", { err: String(e), subject: defaultUsername });
+        }
+      }
     } else {
       log.error("ftn.auth.defaultUser.invalidConfig", {
         username: defaultUsernameRaw,
@@ -204,6 +219,14 @@ async function main(): Promise<void> {
       });
     }
   }
+
+  const googleSheetsOauthRedirectUri =
+    config.googleSheetsOauthRedirectUri ?? `http://localhost:${config.port}/integrations/google-sheets/oauth/callback`;
+  const googleSheetsOAuthStateSecret =
+    apiSecurity.jwtSecret ?? config.credentialsEncryptionKey ?? "ftn-dev-google-oauth-state";
+  const googleSheetsOAuthEnabled = Boolean(
+    config.googleSheetsOauthClientId && config.googleSheetsOauthClientSecret
+  );
 
   const server = bootstrapHttpServer({
     pool,
@@ -227,6 +250,16 @@ async function main(): Promise<void> {
     acknowledgeDeadLetter,
     stripeSecretKey: config.stripeSecretKey,
     stripeWebhookSecret: config.stripeWebhookSecret,
+    resolveStripeSecretKeyForRun: async (workflowId: string, runId: string) =>
+      resolveStripeSecretKeyForRun(eventStore, workflowId, runId, integrationsBootstrapInput, systemSubject),
+    googleSheetsOAuth: {
+      enabled: googleSheetsOAuthEnabled,
+      clientId: config.googleSheetsOauthClientId,
+      clientSecret: config.googleSheetsOauthClientSecret,
+      redirectUri: googleSheetsOauthRedirectUri,
+      frontendBaseUrl: config.frontendBaseUrl,
+      stateSigningSecret: googleSheetsOAuthStateSecret,
+    },
     listWorkflowsPublic: () =>
       listWorkflows().map((w) => ({
         name: w.name,
