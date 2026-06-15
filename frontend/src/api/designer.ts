@@ -1,7 +1,33 @@
 import { fetchJson, postJson, putJson } from "./client";
 import type { DesignerKind, ActivityCatalogItem } from "./types";
-import type { DesignerWorkflowSummary, DesignerStoredWorkflow } from "./types";
+import type { DesignerWorkflowSummary, DesignerStoredWorkflow, DesignerTemplateSummary, DesignerTemplateRecord } from "./types";
 import type { IntegrationStatusItem } from "./types";
+
+export function getDesignerTemplates(): Promise<DesignerTemplateSummary[]> {
+  return fetchJson<DesignerTemplateSummary[]>("/designer/templates");
+}
+
+export function getDesignerTemplate(id: string): Promise<DesignerTemplateRecord> {
+  return fetchJson<DesignerTemplateRecord>(`/designer/templates/${encodeURIComponent(id)}`);
+}
+
+export async function updateDesignerTemplate(
+  id: string,
+  body: { payload: DesignerStoredWorkflow; label?: string; description?: string }
+): Promise<void> {
+  await putJson(`/designer/templates/${encodeURIComponent(id)}`, body);
+}
+
+export async function restoreDesignerTemplate(id: string): Promise<void> {
+  await postJson(`/designer/templates/${encodeURIComponent(id)}/restore`, {});
+}
+
+export async function createWorkflowFromTemplate(
+  templateId: string,
+  body: { id: string; displayName?: string }
+): Promise<{ id: string }> {
+  return postJson(`/designer/templates/${encodeURIComponent(templateId)}/create-workflow`, body);
+}
 
 export function getDesignerWorkflows(): Promise<DesignerWorkflowSummary[]> {
   return fetchJson<DesignerWorkflowSummary[]>("/designer/workflows");

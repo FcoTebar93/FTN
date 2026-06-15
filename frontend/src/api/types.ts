@@ -139,6 +139,20 @@ export interface DesignerWorkflowSummary {
   lastScheduledError?: string;
 }
 
+export interface DesignerTemplateSummary {
+  id: string;
+  label: string;
+  description: string;
+  sourceTemplateId: string | null;
+  isCustom: boolean;
+  updatedAt?: string;
+  requiredActivities?: string[];
+}
+
+export interface DesignerTemplateRecord extends DesignerTemplateSummary {
+  payload: DesignerStoredWorkflow;
+}
+
 export interface DesignerStoredWorkflow extends DesignerWorkflowSummary {
   inputSchema?: JsonSchema;
   resultSchema?: JsonSchema;
