@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { JWT } from "google-auth-library";
+import { JWT, OAuth2Client } from "google-auth-library";
 import type { sheets_v4 } from "googleapis";
 import type {
   AppendRowsInput,
@@ -28,14 +28,22 @@ import {
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
-export function createGoogleSheetsClient(auth: GoogleSheetsAuthConfig): GoogleSheetsClient {
-  const jwt = new JWT({
+function createSheetsAuthClient(auth: GoogleSheetsAuthConfig): JWT | OAuth2Client {
+  if (auth.kind === "oauth2") {
+    const oauth2 = new OAuth2Client(auth.clientId, auth.clientSecret, auth.redirectUri);
+    oauth2.setCredentials({ refresh_token: auth.refreshToken });
+    return oauth2;
+  }
+  return new JWT({
     email: auth.serviceAccount.client_email,
     key: auth.serviceAccount.private_key,
     scopes: [SHEETS_SCOPE],
     subject: auth.impersonateEmail,
   });
-  const api = google.sheets({ version: "v4", auth: jwt });
+}
+
+export function createGoogleSheetsClient(auth: GoogleSheetsAuthConfig): GoogleSheetsClient {
+  const api = google.sheets({ version: "v4", auth: createSheetsAuthClient(auth) });
   return new GoogleSheetsApiClient(api);
 }
 

@@ -1,4 +1,9 @@
-import type { GoogleServiceAccountCredentials } from "./types";
+import type {
+  GoogleServiceAccountCredentials,
+  GoogleSheetsAuthConfig,
+  GoogleSheetsOAuthAuthConfig,
+  GoogleSheetsServiceAccountAuthConfig,
+} from "./types";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -68,4 +73,64 @@ export function resolveServiceAccountFromSecrets(secrets: Record<string, unknown
   }
 
   return undefined;
+}
+
+export function resolveOAuthRefreshTokenFromSecrets(secrets: Record<string, unknown>): string | undefined {
+  const token =
+    (typeof secrets.refreshToken === "string" && secrets.refreshToken.trim()) ||
+    (typeof secrets.refresh_token === "string" && secrets.refresh_token.trim());
+  return token || undefined;
+}
+
+export interface BuildGoogleSheetsAuthInput {
+  credentialSecrets?: Record<string, unknown>;
+  credentialConfig?: Record<string, unknown>;
+  serviceAccountJsonEnv?: string;
+  impersonateEmailEnv?: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthRedirectUri?: string;
+}
+
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+export function buildGoogleSheetsAuthConfig(input: BuildGoogleSheetsAuthInput): GoogleSheetsAuthConfig | undefined {
+  const secrets = input.credentialSecrets ?? {};
+  const config = input.credentialConfig ?? {};
+  const refreshToken = resolveOAuthRefreshTokenFromSecrets(secrets);
+  const authType = str(config.authType);
+
+  if (
+    refreshToken &&
+    input.oauthClientId &&
+    input.oauthClientSecret &&
+    input.oauthRedirectUri &&
+    (authType === "oauth2" || !resolveServiceAccountFromSecrets(secrets))
+  ) {
+    return {
+      kind: "oauth2",
+      clientId: input.oauthClientId,
+      clientSecret: input.oauthClientSecret,
+      redirectUri: input.oauthRedirectUri,
+      refreshToken,
+    } satisfies GoogleSheetsOAuthAuthConfig;
+  }
+
+  const serviceAccountFromCredential = resolveServiceAccountFromSecrets(secrets);
+  const serviceAccountFromEnv = input.serviceAccountJsonEnv
+    ? resolveServiceAccountFromSecrets({ serviceAccountJson: input.serviceAccountJsonEnv })
+    : undefined;
+  const serviceAccount = serviceAccountFromCredential ?? serviceAccountFromEnv;
+  if (!serviceAccount) {
+    return undefined;
+  }
+
+  const impersonateEmail =
+    str(config.impersonateEmail) ?? str(config.delegatedUser) ?? input.impersonateEmailEnv;
+
+  return {
+    kind: "service_account",
+    serviceAccount,
+    ...(impersonateEmail ? { impersonateEmail } : {}),
+  } satisfies GoogleSheetsServiceAccountAuthConfig;
 }

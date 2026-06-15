@@ -80,6 +80,9 @@ export async function tryAuthAndAuditRoutes(
       token_type: "Bearer",
       expires_in: expiresIn,
     };
+    if (subjectForAudit) {
+      bodyOut.integrations_status = await ctx.getIntegrationsStatusForSubject(subjectForAudit);
+    }
     if (ctx.pool && ctx.apiSecurity.jwtSecret && subjectForAudit) {
       const refreshRaw = newRefreshTokenRaw();
       const refreshExpiresAt = new Date(Date.now() + ctx.refreshTtlSeconds * 1000);
@@ -136,6 +139,7 @@ export async function tryAuthAndAuditRoutes(
       access_token: token,
       token_type: "Bearer",
       expires_in: expiresIn,
+      integrations_status: await ctx.getIntegrationsStatusForSubject(normalized),
     };
     if (ctx.apiSecurity.jwtSecret) {
       const refreshRaw = newRefreshTokenRaw();

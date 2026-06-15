@@ -5,10 +5,21 @@ export interface GoogleServiceAccountCredentials {
   private_key: string;
 }
 
-export interface GoogleSheetsAuthConfig {
+export interface GoogleSheetsServiceAccountAuthConfig {
+  kind: "service_account";
   serviceAccount: GoogleServiceAccountCredentials;
   impersonateEmail?: string;
 }
+
+export interface GoogleSheetsOAuthAuthConfig {
+  kind: "oauth2";
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  refreshToken: string;
+}
+
+export type GoogleSheetsAuthConfig = GoogleSheetsServiceAccountAuthConfig | GoogleSheetsOAuthAuthConfig;
 
 export interface SpreadsheetTarget {
   spreadsheetId: string;
