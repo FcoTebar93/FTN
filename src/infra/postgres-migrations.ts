@@ -246,6 +246,28 @@ ALTER TABLE ftn_credentials
 CREATE INDEX IF NOT EXISTS ftn_credentials_secret_backend ON ftn_credentials (secret_backend);
 `,
   },
+  {
+    version: 12,
+    name: "designer_templates_per_subject",
+    sql: `
+CREATE TABLE IF NOT EXISTS ftn_designer_templates (
+  subject TEXT NOT NULL,
+  id TEXT NOT NULL,
+  source_template_id TEXT NULL,
+  is_custom BOOLEAN NOT NULL DEFAULT FALSE,
+  label TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  payload JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (subject, id)
+);
+
+CREATE INDEX IF NOT EXISTS ftn_designer_templates_subject ON ftn_designer_templates (subject, updated_at DESC);
+
+COMMENT ON TABLE ftn_designer_templates IS
+  'Plantillas de workflow por usuario; copias editables de las plantillas del sistema.';
+`,
+  },
 ];
 
 export async function runPostgresMigrations(pool: Pool): Promise<void> {
