@@ -16,7 +16,7 @@ export const IdentityModule: IntegrationModule = {
       return;
     }
     const defs = [
-      verifyIdentityActivityDefinition(config),
+      verifyIdentityActivityDefinition(),
       checkFraudScoreActivityDefinition(),
     ];
     registerDefinitions(registry, defs);
