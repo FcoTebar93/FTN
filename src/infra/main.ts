@@ -12,6 +12,7 @@ import { configureCredentialsEncryptionKey } from "./credentials";
 import { buildSecretStore, configureSecretStore } from "./secret-store";
 
 import { configureDesignerStore, loadAllFromDatabase, listSchedulerRows, recordScheduledFailure, recordScheduledRun } from "../app/designer-store";
+import { configureDesignerTemplateStore, loadAllTemplatesFromDatabase } from "../app/designer-template-store";
 import { configureCredentialsStore, getCredential, migrateLegacyCredentialSecretsToVault } from "../app/credentials";
 import { createLogger, type Logger } from "./logger";
 import { buildIntegrationsStatusForSubject } from "./integrations-status";
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
   });
 
   configureDesignerStore(pool);
+  configureDesignerTemplateStore(pool);
   configureCredentialsStore(pool);
   if (config.secretStoreBackend === "vault" && config.vaultMigrateLegacy) {
     const migratedCount = await migrateLegacyCredentialSecretsToVault();
@@ -94,6 +96,7 @@ async function main(): Promise<void> {
   registerIntegrations(activities, integrationsConfig);
 
   await loadAllFromDatabase();
+  await loadAllTemplatesFromDatabase();
 
   const {
     runtime,

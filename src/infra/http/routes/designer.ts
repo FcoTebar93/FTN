@@ -7,6 +7,14 @@ import {
   listStoredWorkflows,
   upsertStoredWorkflow,
 } from "../../../app/designer-store";
+import {
+  getUserTemplate,
+  listUserTemplates,
+  restoreUserTemplate,
+  upsertUserTemplate,
+  workflowFromTemplate,
+} from "../../../app/designer-template-store";
+import { getSystemTemplate } from "../../../app/system-templates";
 import { normalizeStoredWorkflow, validateSchedule } from "../../../app/designer-schedule";
 import { validateDesignerWorkflow } from "../../../app/designer-validate";
 import { DESIGNER_KINDS } from "../../../app/designer-kinds";
@@ -35,6 +43,34 @@ export async function tryDesignerReadRoutes(
   if (req.method === "GET" && (req.url === "/designer/workflows" || req.url?.startsWith("/designer/workflows?"))) {
     const items = await listStoredWorkflows(ctx.requestSubject);
     sendJson(res, 200, items);
+    return true;
+  }
+
+  if (req.method === "GET" && (req.url === "/designer/templates" || req.url?.startsWith("/designer/templates?"))) {
+    const items = await listUserTemplates(ctx.requestSubject);
+    const enriched = items.map((item) => ({
+      ...item,
+      requiredActivities:
+        getSystemTemplate(item.sourceTemplateId ?? item.id)?.requiredActivities ?? [],
+    }));
+    sendJson(res, 200, enriched);
+    return true;
+  }
+
+  if (req.method === "GET" && req.url?.startsWith("/designer/templates/")) {
+    const pathOnly = getPathname(req.url);
+    const parts = getPathParams(pathOnly, 4);
+    if (!parts) {
+      sendError(res, 400, "Expected /designer/templates/:id");
+      return true;
+    }
+    const id = decodeURIComponent(parts[3]);
+    const tpl = await getUserTemplate(ctx.requestSubject, id);
+    if (!tpl) {
+      sendError(res, 404, "Designer template not found");
+      return true;
+    }
+    sendJson(res, 200, tpl);
     return true;
   }
 
@@ -198,6 +234,104 @@ export async function tryDesignerWriteRoutes(
     } catch (e) {
       sendError(res, 400, (e as Error).message);
     }
+    return true;
+  }
+
+  if (req.method === "PUT" && req.url?.startsWith("/designer/templates/")) {
+    const pathOnly = getPathname(req.url);
+    const parts = getPathParams(pathOnly, 4);
+    if (!parts) {
+      sendError(res, 400, "Expected /designer/templates/:id");
+      return true;
+    }
+    const id = decodeURIComponent(parts[3]);
+    const parsedResult = await readJsonBodyCapped<{
+      payload: StoredWorkflow;
+      label?: string;
+      description?: string;
+    }>(req, res, ctx.apiSecurity.maxBodyBytes, { invalidJsonMessage: "Invalid JSON" });
+    if (!parsedResult.ok) return true;
+    const { payload, label, description } = parsedResult.value;
+    if (!payload?.displayName || !payload.steps || !payload.entryStepId) {
+      sendError(res, 400, "Invalid template payload");
+      return true;
+    }
+    const normalized = normalizeStoredWorkflow({ ...payload, id });
+    const schedErrTpl = validateSchedule(normalized.schedule ?? { type: "instant" });
+    if (schedErrTpl) {
+      sendError(res, 400, schedErrTpl);
+      return true;
+    }
+    const graphErrTpl = validateDesignerWorkflow(normalized);
+    if (graphErrTpl) {
+      sendError(res, 400, graphErrTpl);
+      return true;
+    }
+    const saved = await upsertUserTemplate(ctx.requestSubject, id, normalized, { label, description });
+    sendJson(res, 200, { ok: true, id: saved.id, isCustom: saved.isCustom });
+    return true;
+  }
+
+  if (req.method === "POST" && rawPath.startsWith("/designer/templates/") && rawPath.endsWith("/restore")) {
+    const parts = rawPath.split("/").filter(Boolean);
+    if (parts.length !== 4 || parts[0] !== "designer" || parts[1] !== "templates" || parts[3] !== "restore") {
+      sendError(res, 400, "Expected POST /designer/templates/:id/restore");
+      return true;
+    }
+    const id = decodeURIComponent(parts[2]);
+    const restored = await restoreUserTemplate(ctx.requestSubject, id);
+    if (!restored) {
+      sendError(res, 404, "System template not found");
+      return true;
+    }
+    sendJson(res, 200, { ok: true, id: restored.id, isCustom: false });
+    return true;
+  }
+
+  if (req.method === "POST" && rawPath.startsWith("/designer/templates/") && rawPath.endsWith("/create-workflow")) {
+    const parts = rawPath.split("/").filter(Boolean);
+    if (parts.length !== 4 || parts[0] !== "designer" || parts[1] !== "templates" || parts[3] !== "create-workflow") {
+      sendError(res, 400, "Expected POST /designer/templates/:id/create-workflow");
+      return true;
+    }
+    const templateId = decodeURIComponent(parts[2]);
+    const tpl = await getUserTemplate(ctx.requestSubject, templateId);
+    if (!tpl) {
+      sendError(res, 404, "Designer template not found");
+      return true;
+    }
+    const bodyResult = await readJsonBodyCapped<{ id?: string; displayName?: string }>(
+      req,
+      res,
+      ctx.apiSecurity.maxBodyBytes,
+      { emptyAs: {}, invalidJsonMessage: "Invalid JSON" }
+    );
+    if (!bodyResult.ok) return true;
+    const newId = bodyResult.value.id?.trim();
+    if (!newId) {
+      sendError(res, 400, "Field 'id' is required");
+      return true;
+    }
+    if ((await getStoredWorkflow(ctx.requestSubject, newId)) !== undefined) {
+      sendError(res, 409, `StoredWorkflow "${newId}" already exists`);
+      return true;
+    }
+    const wf = workflowFromTemplate(tpl.payload, {
+      id: newId,
+      displayName: bodyResult.value.displayName ?? tpl.label,
+    });
+    const schedErrWf = validateSchedule(wf.schedule ?? { type: "instant" });
+    if (schedErrWf) {
+      sendError(res, 400, schedErrWf);
+      return true;
+    }
+    const graphErrWf = validateDesignerWorkflow(wf);
+    if (graphErrWf) {
+      sendError(res, 400, graphErrWf);
+      return true;
+    }
+    await upsertStoredWorkflow(ctx.requestSubject, wf);
+    sendJson(res, 201, { ok: true, id: wf.id, version: wf.version });
     return true;
   }
 
