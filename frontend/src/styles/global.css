@@ -895,6 +895,29 @@
     text-decoration: underline;
     font-size: 0.85rem;
   }
+  .google-sheets-crud-quick {
+    margin: 12px 0 16px;
+    padding: 12px;
+    border-radius: var(--radius-md, 8px);
+    border: 1px dashed var(--border-subtle);
+    background: #f8fafc;
+  }
+  .google-sheets-crud-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .workflow-filter-btn-secondary {
+    background: #fff;
+    font-size: 0.85rem;
+  }
+  .google-sheets-step-input textarea {
+    width: 100%;
+    min-height: 120px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+  }
   .integration-status {
     margin: 10px 0 12px;
     padding: 10px;

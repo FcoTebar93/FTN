@@ -18,6 +18,14 @@ import { TIMEZONES, TIMEZONE_LABELS, WEEKDAY_LABELS } from "./constants";
 import { buildDefaultInputFromSchema, formatHM, parseHM, scheduleSummary } from "./helpers";
 import { slugifyProcessName, uniqueProcessId } from "./slug";
 import { STEP_BLOCK_OPTIONS, stepDisplayLabel } from "./step-labels";
+import { GoogleSheetsStepInput } from "./GoogleSheetsStepInput";
+import {
+  GOOGLE_SHEETS_ACTIVITIES,
+  GOOGLE_SHEETS_CRUD_PRESETS,
+  GOOGLE_SHEETS_MODULE,
+  defaultGoogleSheetsInput,
+  isGoogleSheetsActivity,
+} from "./google-sheets-activities";
 import { credentialsPathForIntegration } from "../credentials/providerSchemas";
 import { useUiText } from "../../i18n";
 import type { DesignerTemplateSummary } from "../../api/types";
@@ -301,6 +309,32 @@ export function DesignerPage() {
       entryStepId: prev.entryStepId || newId,
     }));
   }
+
+  function handleAddGoogleSheetsStep(preset: keyof typeof GOOGLE_SHEETS_ACTIVITIES) {
+    if (!current) return;
+    const activityName = GOOGLE_SHEETS_ACTIVITIES[preset];
+    const newId = `step-${current.steps.length + 1}`;
+    const gs = t.designer.googleSheets;
+    const stepName = gs[`${preset}Step` as keyof typeof gs] as string;
+    const newStep: DesignerWorkflowStep = {
+      id: newId,
+      kind: "activity",
+      name: stepName,
+      activityName,
+      integrationModule: GOOGLE_SHEETS_MODULE,
+      input: defaultGoogleSheetsInput(activityName),
+      next: null,
+    } as any;
+    updateCurrent((prev) => ({
+      ...prev,
+      steps: [...prev.steps, newStep],
+      entryStepId: prev.entryStepId || newId,
+    }));
+  }
+
+  const googleSheetsConfigured = integrationsStatus.some(
+    (s) => s.key === GOOGLE_SHEETS_MODULE && s.configured
+  );
 
   function handleRemoveStep(id: string) {
     if (!current) return;
@@ -831,6 +865,23 @@ export function DesignerPage() {
                   <button type="button" class="workflow-filter-btn" onClick={handleAddStep}>
                     {t.designer.addStep}
                   </button>
+                  {googleSheetsConfigured ? (
+                    <div class="google-sheets-crud-quick">
+                      <p class="detail-muted">{t.designer.googleSheets.crudQuickAdd}</p>
+                      <div class="google-sheets-crud-quick-actions">
+                        {GOOGLE_SHEETS_CRUD_PRESETS.map((item) => (
+                          <button
+                            type="button"
+                            key={item.preset}
+                            class="workflow-filter-btn workflow-filter-btn-secondary"
+                            onClick={() => handleAddGoogleSheetsStep(item.preset)}
+                          >
+                            + {t.designer.googleSheets[item.labelKey]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {current.steps.length === 0 ? (
                     <p class="detail-muted">{t.designer.needAtLeastOneStep}</p>
                   ) : (
@@ -934,8 +985,13 @@ export function DesignerPage() {
                                   onInput={(e) => {
                                     const activityName = (e.target as HTMLSelectElement).value;
                                     const activity = activities.find((a) => a.name === activityName);
-                                    const defaults = buildDefaultInputFromSchema(activity?.inputSchema);
+                                    const defaults = isGoogleSheetsActivity(activityName)
+                                      ? defaultGoogleSheetsInput(activityName)
+                                      : buildDefaultInputFromSchema(activity?.inputSchema);
                                     handleStepFieldChange(step.id, "activityName", activityName);
+                                    if (activity?.module) {
+                                      handleStepFieldChange(step.id, "integrationModule", activity.module);
+                                    }
                                     handleStepFieldChange(step.id, "input", {
                                       ...defaults,
                                       ...((step as any).input ?? {}),
@@ -968,7 +1024,14 @@ export function DesignerPage() {
 
                               <div class="form-row">
                                 <label>{t.designer.parameters}</label>
-                                {schema && schema.type === "object" && (schema as any).properties ? (
+                                {isGoogleSheetsActivity((step as any).activityName) ? (
+                                  <GoogleSheetsStepInput
+                                    activityName={(step as any).activityName}
+                                    input={((step as any).input ?? {}) as Record<string, unknown>}
+                                    onChange={(next) => handleStepFieldChange(step.id, "input", next)}
+                                    labels={t.designer.googleSheets}
+                                  />
+                                ) : schema && schema.type === "object" && (schema as any).properties ? (
                                   <div class="dynamic-fields">
                                     {Object.entries((schema as any).properties).map(
                                       ([propName, propSchema]: [string, any]
